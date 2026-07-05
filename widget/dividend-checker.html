@@ -1,0 +1,294 @@
+<!-- ============================================================
+  配当金推移チェッカー ウィジェット
+  WordPressの「カスタムHTML」ブロックにこのファイルの中身を
+  そのまま貼り付けて使用してください。
+
+  事前準備: 下の DATA_URL を、実際にデータをホストしたURL
+  (例: jsDelivrのGitHub CDN URL)に書き換えてください。
+============================================================ -->
+<div id="dvc-root" class="dvc-root">
+  <div class="dvc-search-box">
+    <input
+      id="dvc-search"
+      type="text"
+      class="dvc-search-input"
+      placeholder="銘柄コードまたは銘柄名で検索(例: 7203、トヨタ)"
+      autocomplete="off"
+    />
+    <div id="dvc-suggest" class="dvc-suggest"></div>
+  </div>
+
+  <div id="dvc-detail" class="dvc-detail" style="display:none;"></div>
+
+  <div class="dvc-ranking">
+    <div class="dvc-ranking-head">
+      <h3>配当利回り・増配年数ランキング</h3>
+      <div class="dvc-ranking-controls">
+        <label>並び替え:
+          <select id="dvc-sort">
+            <option value="yield">配当利回り(高い順)</option>
+            <option value="streakIncrease">連続増配年数(長い順)</option>
+            <option value="streakNonDecrease">連続非減配年数(長い順)</option>
+            <option value="cagr5">5年平均増配率(高い順)</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div id="dvc-table-wrap" class="dvc-table-wrap">読み込み中...</div>
+    <div id="dvc-updated" class="dvc-updated"></div>
+  </div>
+</div>
+
+<style>
+  .dvc-root {
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    color: #2b2b2b;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .dvc-search-box { position: relative; margin-bottom: 24px; }
+  .dvc-search-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    font-size: 16px;
+    border: 2px solid #d8dee4;
+    border-radius: 8px;
+    outline: none;
+  }
+  .dvc-search-input:focus { border-color: #3b82f6; }
+  .dvc-suggest {
+    position: absolute;
+    z-index: 20;
+    left: 0; right: 0;
+    background: #fff;
+    border: 1px solid #d8dee4;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    max-height: 320px;
+    overflow-y: auto;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+  }
+  .dvc-suggest-item { padding: 10px 14px; cursor: pointer; display:flex; justify-content: space-between; }
+  .dvc-suggest-item:hover { background: #f2f6ff; }
+  .dvc-suggest-code { color: #6b7280; font-size: 13px; }
+
+  .dvc-detail {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 28px;
+    background: #fafbfc;
+  }
+  .dvc-detail-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+  .dvc-detail-head h2 { margin: 0; font-size: 20px; }
+  .dvc-detail-code { color: #6b7280; font-size: 14px; }
+  .dvc-detail-meta { color: #6b7280; font-size: 13px; margin-top: 4px; }
+
+  .dvc-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+    margin: 16px 0;
+  }
+  .dvc-stat {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .dvc-stat .label { font-size: 12px; color: #6b7280; }
+  .dvc-stat .value { font-size: 18px; font-weight: 700; margin-top: 4px; }
+
+  .dvc-chart-wrap { margin-top: 20px; overflow-x: auto; }
+  .dvc-bar-label { font-size: 11px; fill: #6b7280; }
+  .dvc-bar-value { font-size: 11px; fill: #2b2b2b; }
+
+  .dvc-ranking-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+  .dvc-ranking-head h3 { margin: 0; }
+  .dvc-ranking-controls select { padding: 6px 8px; border-radius: 6px; border: 1px solid #d8dee4; }
+
+  .dvc-table-wrap { overflow-x: auto; margin-top: 12px; }
+  table.dvc-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.dvc-table th, table.dvc-table td { padding: 8px 10px; border-bottom: 1px solid #eef1f4; text-align: right; }
+  table.dvc-table th:nth-child(1), table.dvc-table td:nth-child(1) { text-align: left; }
+  table.dvc-table th:nth-child(2), table.dvc-table td:nth-child(2) { text-align: left; }
+  table.dvc-table thead th { color: #6b7280; font-weight: 600; font-size: 12px; }
+  table.dvc-table tbody tr:hover { background: #f8fafc; cursor: pointer; }
+  .dvc-updated { font-size: 12px; color: #9ca3af; margin-top: 10px; text-align: right; }
+</style>
+
+<script>
+(function () {
+  // ここをデータホスト先のURLに書き換える(例: jsDelivr経由のGitHub raw URL)
+  var DATA_URL = "https://cdn.jsdelivr.net/gh/sayonnsann/pharmacistlife-dividend-data@main/data/dividends.json";
+
+  var state = { data: [], byCode: {} };
+
+  function fmtYen(v) {
+    if (v === null || v === undefined) return "-";
+    return v.toLocaleString("ja-JP") + "円";
+  }
+  function fmtPct(v) {
+    if (v === null || v === undefined) return "-";
+    return v.toFixed(2) + "%";
+  }
+  function fmtYears(v) {
+    if (!v) return "0年";
+    return v + "年";
+  }
+
+  function renderSuggest(query) {
+    var box = document.getElementById("dvc-suggest");
+    if (!query) { box.innerHTML = ""; box.style.display = "none"; return; }
+    var q = query.trim().toLowerCase();
+    var matches = state.data.filter(function (r) {
+      return r.code.indexOf(q) === 0 || (r.name && r.name.toLowerCase().indexOf(q) !== -1);
+    }).slice(0, 20);
+
+    if (matches.length === 0) {
+      box.innerHTML = '<div class="dvc-suggest-item">該当する銘柄が見つかりません</div>';
+      box.style.display = "block";
+      return;
+    }
+    box.innerHTML = matches.map(function (r) {
+      return '<div class="dvc-suggest-item" data-code="' + r.code + '">' +
+        '<span>' + r.name + '</span><span class="dvc-suggest-code">' + r.code + '</span></div>';
+    }).join("");
+    box.style.display = "block";
+
+    Array.prototype.forEach.call(box.querySelectorAll(".dvc-suggest-item[data-code]"), function (el) {
+      el.addEventListener("click", function () {
+        showDetail(el.getAttribute("data-code"));
+        box.style.display = "none";
+        document.getElementById("dvc-search").value = "";
+      });
+    });
+  }
+
+  function buildBarChart(annual) {
+    var years = Object.keys(annual).sort();
+    if (years.length === 0) return "<p>配当データがありません</p>";
+    var values = years.map(function (y) { return annual[y]; });
+    var max = Math.max.apply(null, values) * 1.15 || 1;
+
+    var barW = 34, gap = 10, chartH = 200, leftPad = 4;
+    var w = years.length * (barW + gap) + leftPad;
+    var h = chartH + 40;
+
+    var bars = years.map(function (y, i) {
+      var v = annual[y];
+      var barH = (v / max) * chartH;
+      var x = leftPad + i * (barW + gap);
+      var yTop = chartH - barH;
+      return (
+        '<rect x="' + x + '" y="' + yTop + '" width="' + barW + '" height="' + barH + '" rx="3" fill="#3b82f6"></rect>' +
+        '<text class="dvc-bar-value" x="' + (x + barW / 2) + '" y="' + (yTop - 6) + '" text-anchor="middle">' + v + '</text>' +
+        '<text class="dvc-bar-label" x="' + (x + barW / 2) + '" y="' + (chartH + 16) + '" text-anchor="middle">' + y.slice(2) + '</text>'
+      );
+    }).join("");
+
+    return '<div class="dvc-chart-wrap"><svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' + bars + '</svg></div>';
+  }
+
+  function showDetail(code) {
+    var r = state.byCode[code];
+    var panel = document.getElementById("dvc-detail");
+    if (!r) { panel.style.display = "none"; return; }
+
+    panel.style.display = "block";
+    panel.innerHTML =
+      '<div class="dvc-detail-head"><h2>' + r.name + '</h2><span class="dvc-detail-code">' + r.code + '</span></div>' +
+      '<div class="dvc-detail-meta">' + (r.market || "") + " / " + (r.sector || "") + '</div>' +
+      '<div class="dvc-stat-grid">' +
+        stat("株価", r.price ? r.price.toLocaleString("ja-JP") + "円" : "-") +
+        stat("配当利回り", fmtPct(r.dividendYield)) +
+        stat("連続増配年数", fmtYears(r.streakIncrease)) +
+        stat("連続非減配年数", fmtYears(r.streakNonDecrease)) +
+        stat("3年平均増配率", fmtPct(r.cagr3)) +
+        stat("5年平均増配率", fmtPct(r.cagr5)) +
+        stat("10年平均増配率", fmtPct(r.cagr10)) +
+      '</div>' +
+      '<h4>年別配当金推移(1株あたり・円)</h4>' +
+      buildBarChart(r.annual || {});
+
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function stat(label, value) {
+    return '<div class="dvc-stat"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>';
+  }
+
+  function sortKeyFn(key) {
+    return function (r) {
+      var v = r[key];
+      return (v === null || v === undefined) ? -Infinity : v;
+    };
+  }
+
+  function renderTable() {
+    var sortSel = document.getElementById("dvc-sort").value;
+    var keyMap = { yield: "dividendYield", streakIncrease: "streakIncrease", streakNonDecrease: "streakNonDecrease", cagr5: "cagr5" };
+    var key = keyMap[sortSel] || "dividendYield";
+    var getVal = sortKeyFn(key);
+
+    var rows = state.data
+      .filter(function (r) { return r[key] !== null && r[key] !== undefined; })
+      .sort(function (a, b) { return getVal(b) - getVal(a); })
+      .slice(0, 50);
+
+    var html = '<table class="dvc-table"><thead><tr>' +
+      '<th>銘柄名</th><th>コード</th><th>利回り</th><th>連続増配</th><th>連続非減配</th><th>5年増配率</th>' +
+      '</tr></thead><tbody>';
+
+    rows.forEach(function (r) {
+      html += '<tr data-code="' + r.code + '">' +
+        '<td>' + r.name + '</td>' +
+        '<td>' + r.code + '</td>' +
+        '<td>' + fmtPct(r.dividendYield) + '</td>' +
+        '<td>' + fmtYears(r.streakIncrease) + '</td>' +
+        '<td>' + fmtYears(r.streakNonDecrease) + '</td>' +
+        '<td>' + fmtPct(r.cagr5) + '</td>' +
+        '</tr>';
+    });
+    html += '</tbody></table>';
+
+    var wrap = document.getElementById("dvc-table-wrap");
+    wrap.innerHTML = html;
+    Array.prototype.forEach.call(wrap.querySelectorAll("tr[data-code]"), function (tr) {
+      tr.addEventListener("click", function () { showDetail(tr.getAttribute("data-code")); });
+    });
+  }
+
+  function init(data) {
+    state.data = data;
+    state.byCode = {};
+    data.forEach(function (r) { state.byCode[r.code] = r; });
+
+    renderTable();
+
+    var updatedEl = document.getElementById("dvc-updated");
+    updatedEl.textContent = "掲載銘柄数: " + data.length + "件";
+
+    document.getElementById("dvc-search").addEventListener("input", function (e) {
+      renderSuggest(e.target.value);
+    });
+    document.addEventListener("click", function (e) {
+      if (!e.target.closest("#dvc-search") && !e.target.closest("#dvc-suggest")) {
+        document.getElementById("dvc-suggest").style.display = "none";
+      }
+    });
+    document.getElementById("dvc-sort").addEventListener("change", renderTable);
+  }
+
+  fetch(DATA_URL)
+    .then(function (res) { return res.json(); })
+    .then(init)
+    .catch(function (err) {
+      document.getElementById("dvc-table-wrap").innerHTML =
+        '<p style="color:#c00;">データの読み込みに失敗しました。DATA_URLの設定をご確認ください。</p>';
+      console.error(err);
+    });
+})();
+</script>

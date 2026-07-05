@@ -2,8 +2,11 @@
 JPXの東証上場銘柄一覧(data_j.xls)をダウンロードし、
 配当チェッカー対象となる内国普通株式のみを抽出してtickers.jsonを生成する。
 
+sector には証券コード協議会の33業種区分を入れる(ページの業種フィルタ用)。
+17業種区分(集約版)も sector17 として保持し、将来切り替えたくなった時に使えるようにする。
+
 実行: python3 build_master.py
-出力: ../data/tickers.json  [{code, name, market}, ...]
+出力: ../data/tickers.json  [{code, name, market, sector, sector17}, ...]
 """
 import json
 import subprocess
@@ -43,7 +46,8 @@ def build_tickers_json():
                 "code": code,
                 "name": str(row["銘柄名"]).strip(),
                 "market": str(row["市場・商品区分"]).strip(),
-                "sector": str(row["17業種区分"]).strip(),
+                "sector": str(row["33業種区分"]).strip(),
+                "sector17": str(row["17業種区分"]).strip(),
             }
         )
 

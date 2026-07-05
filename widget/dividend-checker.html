@@ -22,18 +22,16 @@
 
   <div class="dvc-ranking">
     <div class="dvc-ranking-head">
-      <h3>配当利回り・増配年数ランキング</h3>
+      <h3>増配年数ランキング</h3>
       <div class="dvc-ranking-controls">
-        <label>並び替え:
-          <select id="dvc-sort">
-            <option value="yield">配当利回り(高い順)</option>
-            <option value="streakIncrease">連続増配年数(長い順)</option>
-            <option value="streakNonDecrease">連続非減配年数(長い順)</option>
-            <option value="cagr5">5年平均増配率(高い順)</option>
+        <label>業種で絞り込み:
+          <select id="dvc-sector-filter">
+            <option value="">すべての業種</option>
           </select>
         </label>
       </div>
     </div>
+    <p class="dvc-sort-hint">見出し(連続増配・連続非減配・5年増配率)をクリックすると並び替えできます。複数クリックすると①②③の優先順位で多段ソートされ、同じ見出しの再クリックで昇順／降順が切り替わります。</p>
     <div id="dvc-table-wrap" class="dvc-table-wrap">読み込み中...</div>
     <div id="dvc-updated" class="dvc-updated"></div>
   </div>
@@ -104,6 +102,19 @@
   .dvc-chart-wrap { margin-top: 20px; overflow-x: auto; }
   .dvc-bar-label { font-size: 11px; fill: #6b7280; }
   .dvc-bar-value { font-size: 11px; fill: #2b2b2b; }
+  .dvc-growth-label { font-size: 10px; }
+  .dvc-growth-pos { fill: #16a34a; }
+  .dvc-growth-neg { fill: #dc2626; }
+  .dvc-payout-label { font-size: 10px; fill: #b45309; }
+  .dvc-chart-legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: #6b7280; margin-top: 8px; }
+  .dvc-chart-legend span { display: flex; align-items: center; gap: 6px; }
+  .dvc-legend-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 2px; }
+  .dvc-legend-swatch.dvc-legend-line { width: 14px; height: 2px; border-radius: 0; }
+  .dvc-legend-text { font-style: normal; font-weight: 700; }
+  .dvc-links { margin-top: 18px; padding-top: 14px; border-top: 1px dashed #e2e8f0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .dvc-links-label { font-size: 13px; color: #6b7280; }
+  .dvc-link { display: inline-block; font-size: 13px; padding: 6px 12px; border: 1px solid #3b82f6; border-radius: 6px; color: #3b82f6; text-decoration: none; }
+  .dvc-link:hover { background: #3b82f6; color: #fff; }
 
   .dvc-ranking-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
   .dvc-ranking-head h3 { margin: 0; }
@@ -114,7 +125,20 @@
   table.dvc-table th, table.dvc-table td { padding: 8px 10px; border-bottom: 1px solid #eef1f4; text-align: right; }
   table.dvc-table th:nth-child(1), table.dvc-table td:nth-child(1) { text-align: left; }
   table.dvc-table th:nth-child(2), table.dvc-table td:nth-child(2) { text-align: left; }
+  table.dvc-table th:nth-child(3), table.dvc-table td:nth-child(3) { text-align: left; }
   table.dvc-table thead th { color: #6b7280; font-weight: 600; font-size: 12px; }
+  table.dvc-table th.dvc-sortable {
+    cursor: pointer;
+    white-space: nowrap;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+  }
+  table.dvc-table th.dvc-sortable:hover { color: #3b82f6; }
+  table.dvc-table th.dvc-sortable:focus { outline: 2px solid #3b82f6; outline-offset: -2px; }
   table.dvc-table tbody tr:hover { background: #f8fafc; cursor: pointer; }
   .dvc-updated { font-size: 12px; color: #9ca3af; margin-top: 10px; text-align: right; }
 </style>
@@ -124,7 +148,20 @@
   // ここをデータホスト先のURLに書き換える(例: jsDelivr経由のGitHub raw URL)
   var DATA_URL = "https://cdn.jsdelivr.net/gh/sayonnsann/pharmacistlife-dividend-data@main/data/dividends.json";
 
-  var state = { data: [], byCode: {} };
+  var state = {
+    data: [],
+    byCode: {},
+    sectorFilter: "",
+    sortKeys: [{ key: "streakIncrease", dir: "desc" }]
+  };
+
+  // ソート可能な列の定義(表示ラベルとキー)
+  var SORTABLE_COLUMNS = [
+    { key: "streakIncrease", label: "連続増配" },
+    { key: "streakNonDecrease", label: "連続非減配" },
+    { key: "cagr5", label: "5年増配率" }
+  ];
+  var RANK_MARKS = ["①", "②", "③"];
 
   function fmtYen(v) {
     if (v === null || v === undefined) return "-";
@@ -167,29 +204,80 @@
     });
   }
 
-  function buildBarChart(annual) {
+  function yoyGrowthByYear(annual, years) {
+    var growth = {};
+    years.forEach(function (y, i) {
+      if (i === 0) return;
+      var prev = annual[years[i - 1]];
+      var cur = annual[y];
+      if (prev > 0) growth[y] = ((cur - prev) / prev) * 100;
+    });
+    return growth;
+  }
+
+  function buildBarChart(annual, payoutRatio) {
     var years = Object.keys(annual).sort();
     if (years.length === 0) return "<p>配当データがありません</p>";
+    payoutRatio = payoutRatio || {};
+    var growth = yoyGrowthByYear(annual, years);
+
     var values = years.map(function (y) { return annual[y]; });
     var max = Math.max.apply(null, values) * 1.15 || 1;
 
-    var barW = 34, gap = 10, chartH = 200, leftPad = 4;
-    var w = years.length * (barW + gap) + leftPad;
-    var h = chartH + 40;
+    var payoutYears = years.filter(function (y) { return payoutRatio[y] !== undefined && payoutRatio[y] !== null; });
+    var payoutValues = payoutYears.map(function (y) { return payoutRatio[y]; });
+    var payoutMax = Math.max(100, Math.max.apply(null, payoutValues.concat([0])) * 1.15);
 
+    var barW = 34, gap = 10, chartH = 200, leftPad = 4, topPad = 26;
+    var w = years.length * (barW + gap) + leftPad;
+    var h = chartH + topPad + 56;
+
+    var xCenter = {};
     var bars = years.map(function (y, i) {
       var v = annual[y];
       var barH = (v / max) * chartH;
       var x = leftPad + i * (barW + gap);
-      var yTop = chartH - barH;
+      var yTop = topPad + chartH - barH;
+      xCenter[y] = x + barW / 2;
+
+      var g = growth[y];
+      var growthLabel = "";
+      if (g !== undefined) {
+        var cls = g >= 0 ? "dvc-growth-pos" : "dvc-growth-neg";
+        var sign = g >= 0 ? "+" : "";
+        growthLabel = '<text class="dvc-growth-label ' + cls + '" x="' + (x + barW / 2) + '" y="' + (topPad + chartH - barH - 18) + '" text-anchor="middle">' + sign + g.toFixed(0) + '%</text>';
+      }
+
       return (
         '<rect x="' + x + '" y="' + yTop + '" width="' + barW + '" height="' + barH + '" rx="3" fill="#3b82f6"></rect>' +
-        '<text class="dvc-bar-value" x="' + (x + barW / 2) + '" y="' + (yTop - 6) + '" text-anchor="middle">' + v + '</text>' +
-        '<text class="dvc-bar-label" x="' + (x + barW / 2) + '" y="' + (chartH + 16) + '" text-anchor="middle">' + y.slice(2) + '</text>'
+        growthLabel +
+        '<text class="dvc-bar-value" x="' + (x + barW / 2) + '" y="' + (yTop - 4) + '" text-anchor="middle">' + v + '</text>' +
+        '<text class="dvc-bar-label" x="' + (x + barW / 2) + '" y="' + (topPad + chartH + 16) + '" text-anchor="middle">' + y.slice(2) + '</text>'
       );
     }).join("");
 
-    return '<div class="dvc-chart-wrap"><svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' + bars + '</svg></div>';
+    var payoutLine = "";
+    if (payoutYears.length > 0) {
+      var points = payoutYears.map(function (y) {
+        var py = topPad + chartH - (payoutRatio[y] / payoutMax) * chartH;
+        return xCenter[y] + "," + py;
+      }).join(" ");
+      var dots = payoutYears.map(function (y) {
+        var py = topPad + chartH - (payoutRatio[y] / payoutMax) * chartH;
+        return '<circle cx="' + xCenter[y] + '" cy="' + py + '" r="3" fill="#f59e0b"></circle>' +
+          '<text class="dvc-payout-label" x="' + xCenter[y] + '" y="' + (py - 8) + '" text-anchor="middle">' + payoutRatio[y].toFixed(0) + '%</text>';
+      }).join("");
+      payoutLine = '<polyline points="' + points + '" fill="none" stroke="#f59e0b" stroke-width="2"></polyline>' + dots;
+    }
+
+    var legend =
+      '<div class="dvc-chart-legend">' +
+        '<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>年間配当金(円、棒グラフ)</span>' +
+        '<span><i class="dvc-legend-swatch dvc-legend-line" style="background:#f59e0b"></i>配当性向(%、直近数年のみ)</span>' +
+        '<span><i class="dvc-legend-text dvc-growth-pos">+12%</i>のような数字は前年比の増配率</span>' +
+      '</div>';
+
+    return '<div class="dvc-chart-wrap"><svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '">' + bars + payoutLine + '</svg></div>' + legend;
   }
 
   function showDetail(code) {
@@ -202,8 +290,7 @@
       '<div class="dvc-detail-head"><h2>' + r.name + '</h2><span class="dvc-detail-code">' + r.code + '</span></div>' +
       '<div class="dvc-detail-meta">' + (r.market || "") + " / " + (r.sector || "") + '</div>' +
       '<div class="dvc-stat-grid">' +
-        stat("株価", r.price ? r.price.toLocaleString("ja-JP") + "円" : "-") +
-        stat("配当利回り", fmtPct(r.dividendYield)) +
+        stat("株価(データ取得時点)", r.price ? r.price.toLocaleString("ja-JP") + "円" : "-") +
         stat("連続増配年数", fmtYears(r.streakIncrease)) +
         stat("連続非減配年数", fmtYears(r.streakNonDecrease)) +
         stat("3年平均増配率", fmtPct(r.cagr3)) +
@@ -211,42 +298,100 @@
         stat("10年平均増配率", fmtPct(r.cagr10)) +
       '</div>' +
       '<h4>年別配当金推移(1株あたり・円)</h4>' +
-      buildBarChart(r.annual || {});
+      buildBarChart(r.annual || {}, r.payoutRatio || {}) +
+      buildExternalLinks(r.code);
 
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function buildExternalLinks(code) {
+    var irbank = "https://irbank.net/" + code;
+    var yahoo = "https://finance.yahoo.co.jp/quote/" + code + ".T";
+    return '<div class="dvc-links">' +
+      '<span class="dvc-links-label">この銘柄をもっと調べる:</span>' +
+      '<a class="dvc-link" href="' + irbank + '" target="_blank" rel="noopener nofollow">IR BANK(業績・財務)</a>' +
+      '<a class="dvc-link" href="' + yahoo + '" target="_blank" rel="noopener nofollow">Yahoo!ファイナンス(株価)</a>' +
+      '</div>';
   }
 
   function stat(label, value) {
     return '<div class="dvc-stat"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>';
   }
 
-  function sortKeyFn(key) {
-    return function (r) {
-      var v = r[key];
-      return (v === null || v === undefined) ? -Infinity : v;
-    };
+  // 多段ソート用の比較関数。state.sortKeys を優先順に見て比較する。
+  // null/undefined の値は昇順・降順に関わらず常に最後に沈める。
+  function compareRows(a, b) {
+    for (var i = 0; i < state.sortKeys.length; i++) {
+      var sk = state.sortKeys[i];
+      var av = a[sk.key];
+      var bv = b[sk.key];
+      var aNull = (av === null || av === undefined);
+      var bNull = (bv === null || bv === undefined);
+
+      if (aNull && bNull) continue;
+      if (aNull) return 1;   // a を常に後ろへ
+      if (bNull) return -1;  // b を常に後ろへ
+
+      if (av < bv) return sk.dir === "asc" ? -1 : 1;
+      if (av > bv) return sk.dir === "asc" ? 1 : -1;
+    }
+    return 0;
+  }
+
+  // ヘッダークリック/キー操作時のソート状態更新
+  function toggleSort(key) {
+    var found = null;
+    for (var i = 0; i < state.sortKeys.length; i++) {
+      if (state.sortKeys[i].key === key) { found = state.sortKeys[i]; break; }
+    }
+    if (found) {
+      // 既存キーは方向のみトグル(優先順位=位置は変えない)
+      found.dir = found.dir === "asc" ? "desc" : "asc";
+    } else {
+      // 新規キーは先頭に追加(初回は降順)
+      state.sortKeys.unshift({ key: key, dir: "desc" });
+      if (state.sortKeys.length > 3) state.sortKeys.pop();
+    }
+    renderTable();
+  }
+
+  // 指定キーの現在のソート状態(優先順位番号・方向矢印)を見出しに付与
+  function sortIndicator(key) {
+    for (var i = 0; i < state.sortKeys.length; i++) {
+      if (state.sortKeys[i].key === key) {
+        var arrow = state.sortKeys[i].dir === "asc" ? "▲" : "▼";
+        return " " + arrow + RANK_MARKS[i];
+      }
+    }
+    return "";
+  }
+
+  function buildHeadCell(col) {
+    return '<th class="dvc-sortable" data-sort-key="' + col.key + '" tabindex="0" role="button">' +
+      col.label + sortIndicator(col.key) + '</th>';
   }
 
   function renderTable() {
-    var sortSel = document.getElementById("dvc-sort").value;
-    var keyMap = { yield: "dividendYield", streakIncrease: "streakIncrease", streakNonDecrease: "streakNonDecrease", cagr5: "cagr5" };
-    var key = keyMap[sortSel] || "dividendYield";
-    var getVal = sortKeyFn(key);
-
     var rows = state.data
-      .filter(function (r) { return r[key] !== null && r[key] !== undefined; })
-      .sort(function (a, b) { return getVal(b) - getVal(a); })
+      .filter(function (r) {
+        if (!state.sectorFilter) return true;
+        return r.sector === state.sectorFilter;
+      })
+      .sort(compareRows)
       .slice(0, 50);
 
     var html = '<table class="dvc-table"><thead><tr>' +
-      '<th>銘柄名</th><th>コード</th><th>利回り</th><th>連続増配</th><th>連続非減配</th><th>5年増配率</th>' +
+      '<th>銘柄名</th><th>コード</th><th>業種</th>' +
+      buildHeadCell(SORTABLE_COLUMNS[0]) +
+      buildHeadCell(SORTABLE_COLUMNS[1]) +
+      buildHeadCell(SORTABLE_COLUMNS[2]) +
       '</tr></thead><tbody>';
 
     rows.forEach(function (r) {
       html += '<tr data-code="' + r.code + '">' +
         '<td>' + r.name + '</td>' +
         '<td>' + r.code + '</td>' +
-        '<td>' + fmtPct(r.dividendYield) + '</td>' +
+        '<td>' + (r.sector || "-") + '</td>' +
         '<td>' + fmtYears(r.streakIncrease) + '</td>' +
         '<td>' + fmtYears(r.streakNonDecrease) + '</td>' +
         '<td>' + fmtPct(r.cagr5) + '</td>' +
@@ -259,6 +404,37 @@
     Array.prototype.forEach.call(wrap.querySelectorAll("tr[data-code]"), function (tr) {
       tr.addEventListener("click", function () { showDetail(tr.getAttribute("data-code")); });
     });
+    Array.prototype.forEach.call(wrap.querySelectorAll("th[data-sort-key]"), function (th) {
+      var key = th.getAttribute("data-sort-key");
+      th.addEventListener("click", function () { toggleSort(key); });
+      th.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " " || e.key === "Spacebar" || e.keyCode === 13 || e.keyCode === 32) {
+          e.preventDefault();
+          toggleSort(key);
+        }
+      });
+    });
+  }
+
+  // state.data から業種の選択肢を重複なく・五十音順で生成
+  function populateSectorFilter() {
+    var sel = document.getElementById("dvc-sector-filter");
+    var seen = {};
+    var sectors = [];
+    state.data.forEach(function (r) {
+      var s = r.sector;
+      if (s === null || s === undefined || s === "") return;
+      if (seen[s]) return;
+      seen[s] = true;
+      sectors.push(s);
+    });
+    sectors.sort(function (a, b) { return a.localeCompare(b, "ja"); });
+
+    var html = '<option value="">すべての業種</option>';
+    sectors.forEach(function (s) {
+      html += '<option value="' + s + '">' + s + '</option>';
+    });
+    sel.innerHTML = html;
   }
 
   function init(data) {
@@ -266,6 +442,7 @@
     state.byCode = {};
     data.forEach(function (r) { state.byCode[r.code] = r; });
 
+    populateSectorFilter();
     renderTable();
 
     var updatedEl = document.getElementById("dvc-updated");
@@ -279,7 +456,10 @@
         document.getElementById("dvc-suggest").style.display = "none";
       }
     });
-    document.getElementById("dvc-sort").addEventListener("change", renderTable);
+    document.getElementById("dvc-sector-filter").addEventListener("change", function (e) {
+      state.sectorFilter = e.target.value;
+      renderTable();
+    });
   }
 
   fetch(DATA_URL)

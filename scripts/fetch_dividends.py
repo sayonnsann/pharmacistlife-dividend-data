@@ -95,6 +95,7 @@ def main():
                 "name": t["name"],
                 "market": t["market"],
                 "sector": t.get("sector"),
+                "sector17": t.get("sector17"),
                 **div_data,
             }
             print(f"[{i}/{total}] {code} {t['name']} OK ({len(div_data['annual'])}年分)")

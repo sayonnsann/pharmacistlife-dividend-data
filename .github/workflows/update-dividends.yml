@@ -1,0 +1,60 @@
+name: 配当データの自動更新
+
+# 実行タイミング:
+#   - 毎週月曜の早朝(日本時間 6:00 ≒ 日曜 21:00 UTC)に自動実行
+#   - GitHubの Actions 画面から手動でも実行できる(workflow_dispatch)
+on:
+  schedule:
+    - cron: "0 21 * * 0"
+  workflow_dispatch: {}
+
+# ワークフローがリポジトリへ commit/push できるように書き込み権限を付与
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    # 全銘柄取得は1〜2時間かかるため、余裕をもって上限を設定
+    timeout-minutes: 240
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Python をセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 依存ライブラリをインストール
+        run: pip install -r scripts/requirements.txt
+
+      - name: 銘柄マスタを最新化
+        working-directory: scripts
+        run: python build_master.py
+
+      - name: 全銘柄の配当データを再取得
+        working-directory: scripts
+        run: python fetch_dividends.py --reset
+
+      - name: 変更があれば commit して push
+        id: commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/tickers.json data/dividends.json
+          if git diff --cached --quiet; then
+            echo "変更なし。commit をスキップします。"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git commit -m "配当データ自動更新 ($(date -u '+%Y-%m-%d'))"
+            git push
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: jsDelivr のキャッシュを更新
+        if: steps.commit.outputs.changed == 'true'
+        run: |
+          curl -s "https://purge.jsdelivr.net/gh/sayonnsann/pharmacistlife-dividend-data@main/data/dividends.json" || true
+          curl -s "https://purge.jsdelivr.net/gh/sayonnsann/pharmacistlife-dividend-data@main/data/tickers.json" || true

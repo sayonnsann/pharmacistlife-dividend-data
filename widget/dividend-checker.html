@@ -31,7 +31,7 @@
         </label>
       </div>
     </div>
-    <p class="dvc-sort-hint">見出し(連続増配・連続非減配・5年増配率)をクリックすると並び替えできます。複数クリックすると①②③の優先順位で多段ソートされ、同じ見出しの再クリックで昇順／降順が切り替わります。</p>
+    <p class="dvc-sort-hint">見出し(連続増配・連続非減配・5年増配率)をクリックすると、その項目で並び替えできます。同じ見出しの再クリックで昇順／降順が切り替わります。</p>
     <div id="dvc-table-wrap" class="dvc-table-wrap">読み込み中...</div>
     <div id="dvc-updated" class="dvc-updated"></div>
   </div>
@@ -152,7 +152,7 @@
     data: [],
     byCode: {},
     sectorFilter: "",
-    sortKeys: [{ key: "streakIncrease", dir: "desc" }]
+    sort: { key: "streakIncrease", dir: "desc" }
   };
 
   // ソート可能な列の定義(表示ラベルとキー)
@@ -161,7 +161,6 @@
     { key: "streakNonDecrease", label: "連続非減配" },
     { key: "cagr5", label: "5年増配率" }
   ];
-  var RANK_MARKS = ["①", "②", "③"];
 
   function fmtYen(v) {
     if (v === null || v === undefined) return "-";
@@ -318,50 +317,38 @@
     return '<div class="dvc-stat"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>';
   }
 
-  // 多段ソート用の比較関数。state.sortKeys を優先順に見て比較する。
-  // null/undefined の値は昇順・降順に関わらず常に最後に沈める。
+  // 単一キーでの比較関数。null/undefined の値は昇順・降順に関わらず常に最後に沈める。
   function compareRows(a, b) {
-    for (var i = 0; i < state.sortKeys.length; i++) {
-      var sk = state.sortKeys[i];
-      var av = a[sk.key];
-      var bv = b[sk.key];
-      var aNull = (av === null || av === undefined);
-      var bNull = (bv === null || bv === undefined);
+    var key = state.sort.key;
+    var dir = state.sort.dir;
+    var av = a[key];
+    var bv = b[key];
+    var aNull = (av === null || av === undefined);
+    var bNull = (bv === null || bv === undefined);
 
-      if (aNull && bNull) continue;
-      if (aNull) return 1;   // a を常に後ろへ
-      if (bNull) return -1;  // b を常に後ろへ
+    if (aNull && bNull) return 0;
+    if (aNull) return 1;   // a を常に後ろへ
+    if (bNull) return -1;  // b を常に後ろへ
 
-      if (av < bv) return sk.dir === "asc" ? -1 : 1;
-      if (av > bv) return sk.dir === "asc" ? 1 : -1;
-    }
+    if (av < bv) return dir === "asc" ? -1 : 1;
+    if (av > bv) return dir === "asc" ? 1 : -1;
     return 0;
   }
 
-  // ヘッダークリック/キー操作時のソート状態更新
+  // ヘッダークリック/キー操作時のソート状態更新(同じ列なら昇順/降順トグル、別の列なら降順で切り替え)
   function toggleSort(key) {
-    var found = null;
-    for (var i = 0; i < state.sortKeys.length; i++) {
-      if (state.sortKeys[i].key === key) { found = state.sortKeys[i]; break; }
-    }
-    if (found) {
-      // 既存キーは方向のみトグル(優先順位=位置は変えない)
-      found.dir = found.dir === "asc" ? "desc" : "asc";
+    if (state.sort.key === key) {
+      state.sort.dir = state.sort.dir === "asc" ? "desc" : "asc";
     } else {
-      // 新規キーは先頭に追加(初回は降順)
-      state.sortKeys.unshift({ key: key, dir: "desc" });
-      if (state.sortKeys.length > 3) state.sortKeys.pop();
+      state.sort = { key: key, dir: "desc" };
     }
     renderTable();
   }
 
-  // 指定キーの現在のソート状態(優先順位番号・方向矢印)を見出しに付与
+  // 指定キーの現在のソート状態(方向矢印)を見出しに付与
   function sortIndicator(key) {
-    for (var i = 0; i < state.sortKeys.length; i++) {
-      if (state.sortKeys[i].key === key) {
-        var arrow = state.sortKeys[i].dir === "asc" ? "▲" : "▼";
-        return " " + arrow + RANK_MARKS[i];
-      }
+    if (state.sort.key === key) {
+      return state.sort.dir === "asc" ? " ▲" : " ▼";
     }
     return "";
   }

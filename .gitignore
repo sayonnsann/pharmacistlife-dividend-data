@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ビルド副産物・ログ(再生成可能)
+scripts/*_log.txt
+data/data_j.xls
+
+# OS
+.DS_Store

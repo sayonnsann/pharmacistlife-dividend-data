@@ -38,6 +38,10 @@ jobs:
         working-directory: scripts
         run: python fetch_dividends.py --reset
 
+      - name: 過去年の補完データを適用（haitoukin-checker照合済み分）
+        working-directory: scripts
+        run: python apply_haitoukin_fills.py
+
       - name: 変更があれば commit して push
         id: commit
         run: |

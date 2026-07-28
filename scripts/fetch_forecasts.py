@@ -372,6 +372,30 @@ def forecast_period(
     if explicit is not None and str(explicit).strip():
         return str(explicit).strip()[:100]
 
+    # 実応答は fiscal_year_end="2026-03-31" 形式。開示日が期末より後なら本決算で
+    # 来期予想、期中なら当期予想とみなして「YYYY年M月期(予)」を組み立てる。
+    fye = first_present(record, "fiscal_year_end", "fiscalYearEnd")
+    try:
+        fye_date = date.fromisoformat(str(fye)[:10])
+    except (TypeError, ValueError):
+        fye_date = None
+    if fye_date is not None:
+        disclosure_raw = first_present(record, "disclosure_date", "disclosureDate")
+        disclosed_after_close = False
+        if disclosure_raw:
+            from email.utils import parsedate_to_datetime
+            try:
+                disclosed = parsedate_to_datetime(str(disclosure_raw)).date()
+            except (TypeError, ValueError):
+                try:
+                    disclosed = date.fromisoformat(str(disclosure_raw)[:10])
+                except (TypeError, ValueError):
+                    disclosed = None
+            if disclosed is not None and disclosed > fye_date:
+                disclosed_after_close = True
+        target_year = fye_date.year + 1 if disclosed_after_close else fye_date.year
+        return f"{target_year}年{fye_date.month}月期(予)"
+
     year = first_present(record, "fiscal_year", "fiscalYear")
     quarter = first_present(record, "quarter")
     try:

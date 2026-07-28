@@ -8,6 +8,9 @@ venv/
 # ビルド副産物・ログ(再生成可能)
 scripts/*_log.txt
 data/data_j.xls
+forecasts_state.json
+stocks.sqlite
+stocks.sqlite.*
 
 # OS
 .DS_Store

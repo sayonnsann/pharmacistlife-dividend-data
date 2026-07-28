@@ -113,3 +113,125 @@ jsDelivrのパージAPIを利用してください。
 - 現状は先頭に検索したものだけでなくランキング表も表示(参考サイトの一覧機能を再現)
 - ご自身の保有100銘柄だけを表示する「マイポートフォリオ」タブを追加
 - 増配率の算出を「暦年」ではなく「決算期(会社ごとの配当基準日)」ベースに精緻化
+
+## サーバー版DBの日次自動更新
+
+`.github/workflows/daily-store.yml` は毎日07:00ごろ（日本時間）に、サーバー版
+配当チェッカーが読む `stocks.sqlite` を作り直します。GitHub Actions側の混雑で、
+開始時刻が数分から数十分遅れることがあります。
+
+### 全体の流れ
+
+```text
+公開データ
+  ├─ このリポジトリ
+  │    ├─ data/all_financials.json・sector_stats.json
+  │    ├─ data/dividends.json
+  │    └─ edinet/{code}.json（決算月・EDINETコード）
+  └─ kouhaitou-db（日次株価CSV）
+                 │
+                 ▼
+        GitHub Actions（毎日07:00ごろ）
+          1. ConoHaから非公開の予想stateを取得
+          2. edinetdb.jpから最大95社の予想を取得
+          3. 3,808社分のstocks.sqliteを再構築
+          4. stateとSQLiteをFTPSでConoHaへ送信
+                 │
+                 ▼
+ ConoHa WING ホームディレクトリ/data/
+  ├─ forecasts_state.json（非公開・次回の待ち行列に使用）
+  └─ stocks.sqlite（PHP APIだけが読み取り）
+```
+
+SQLiteは、まず `stocks.sqlite.new` という一時名で全体をアップロードし、アップロード
+完了後にFTPの名前変更命令で `stocks.sqlite` と差し替えます。PHPが読み取り中でも、
+途中までしか届いていないファイルを開くことはありません。予想stateも同様に一時名を
+経由します。
+
+edinetdb.jpの無料枠は1日100リクエストなので、既定では95社だけ取得して5件分を残します。
+決算発表を跨いでまだ取得していない会社を先にし、その中では優先銘柄、配当利回りの高い
+順に処理します。それ以外の会社も待ち行列を巡回するため、初回は約34日で一巡します。
+
+### GitHub Secretsの設定
+
+リポジトリのGitHub画面で `Settings` → `Secrets and variables` → `Actions` →
+`New repository secret` を開き、次の名前で1件ずつ登録します。値はワークフローや
+READMEへ直接書かないでください。
+
+| Secret名 | 入れる値 | 例・注意 |
+|---|---|---|
+| `FTP_HOST` | ConoHaのFTPサーバー名 | `ftp://`や末尾のパスを付けず、ホスト名だけ |
+| `FTP_USER` | ConoHaのFTPユーザー名 | 日次更新に使うFTPアカウント |
+| `FTP_PASS` | 上記アカウントのパスワード | GitHubにSecretとしてのみ保存 |
+| `FTP_REMOTE_DIR` | FTP接続後に見える保存先 | 通常は `/data`。末尾の `/` はあってもなくても可 |
+| `EDINETDB_API_KEY` | edinetdb.jpで発行したAPIキー | ログには出力されない |
+| `PRIORITY_CODES` | 先に更新したい銘柄コード | 任意。例: `8058,7203,9433` |
+
+ConoHa WINGでFTP情報を確認する場所は次のとおりです。
+
+1. ConoHaコントロールパネルへログインし、上部の `WING` を選びます。
+2. FTPサーバー名は `サーバー管理` → `契約情報` →
+   `メール/FTP/ネームサーバー情報` の `FTPサーバー` で確認します。
+3. FTPユーザー名は `サイト管理` → `FTP` で確認します。対象ユーザーを開くと、
+   パスワードの変更と接続許可ディレクトリの確認もできます。
+4. FTPソフトなどで一度接続し、ホームディレクトリ直下の `data` が
+   `/data` として見えることを確認します。FTPアカウントの接続許可ディレクトリを
+   `data` 自体にした場合は、接続後のルートが保存先になるため
+   `FTP_REMOTE_DIR` は `/` にします。
+
+画面の場所は
+[ConoHa WING公式「FTPソフトを設定する」](https://support.conoha.jp/w/ftpclient/)
+でも確認できます。FTPアカウントには、可能なら日次更新に必要なディレクトリだけを
+許可してください。
+
+### 初回の手動実行
+
+Secretsを保存したら、最初は自動実行を待たずに確認します。
+
+1. GitHubで `Actions` → `配当チェッカーDBの日次更新` を開きます。
+2. `Run workflow` → `Run workflow` を押します。
+3. 全ステップが緑色になり、最後に
+   `配当チェッカーDBの日次更新が完了しました。` と出ることを確認します。
+4. ConoHaの `data` ディレクトリに `forecasts_state.json` と
+   `stocks.sqlite` が作られたことを確認します。
+5. 配当チェッカーで8058などを検索し、価格が直近営業日の値になっていることを
+   確認します。
+
+初回はサーバーに予想stateがなくても正常です。空の待ち行列から開始します。
+途中で失敗した場合は成功扱いにならず、Actions画面の該当ステップが赤くなります。
+認証失敗ならFTPの3項目、ファイルが見つからない場合は `FTP_REMOTE_DIR` と接続許可
+ディレクトリを確認してください。
+
+### ローカルでの確認
+
+APIキーなしで待ち行列だけ確認できます。このモードはAPIを呼ばず、stateも作成・変更
+しません。日付を固定すると決算期の優先順位も再現できます。
+
+```bash
+python3 scripts/fetch_forecasts.py \
+  --dry-run \
+  --today 2026-05-15 \
+  --print-limit 20
+```
+
+SQLiteの構築確認には日次株価CSVへのインターネット接続が必要です。予想stateを指定
+しなければ予想列は `NULL` のまま構築されます。
+
+```bash
+python3 scripts/build_store.py --output /tmp/stocks.sqlite
+sqlite3 /tmp/stocks.sqlite \
+  "SELECT count(*) FROM stocks; SELECT code,price,forecast_yield FROM stocks WHERE code='8058';"
+```
+
+### edinetdb由来データの非公開保存方針
+
+edinetdb.jpから取得した予想値を含むファイルそのものは公開・再配布しません。
+`forecasts_state.json` と `stocks.sqlite` は、GitHub Actionsの一時ディレクトリと
+ConoHa WINGの非公開 `data` ディレクトリにだけ置かれます。配当チェッカーは
+ConoHa上のPHP APIを通して表示に必要な項目だけを返します。
+
+- どちらも `.gitignore` の対象で、リポジトリへcommit/pushする処理はありません。
+- Actions Artifactへアップロードする処理もありません。
+- ワークフローのログにはAPIキー、FTPパスワード、予想値を出力しません。
+- `data/all_financials.json`、`data/sector_stats.json`、`edinet/` はEDINET由来の
+  再配布可能な静的データであり、edinetdb.jpの予想stateとは別物です。

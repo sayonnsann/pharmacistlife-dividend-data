@@ -423,7 +423,11 @@ def parse_forecast_response(
         raise ValueError("API応答の最上位がobjectではありません")
     earnings = body.get("earnings")
     if not isinstance(earnings, list):
-        earnings = body.get("data")
+        data = body.get("data")
+        if isinstance(data, dict):
+            earnings = data.get("earnings")
+        elif isinstance(data, list):
+            earnings = data
     if not isinstance(earnings, list):
         raise ValueError("API応答にearnings/data配列がありません")
     latest = earnings[0] if earnings else {}

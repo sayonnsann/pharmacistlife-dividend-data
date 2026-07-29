@@ -112,6 +112,8 @@ jobs:
             --silent \
             --show-error \
             --user "${FTP_USER}:${FTP_PASS}" \
+            --retry 3 \
+            --retry-all-errors \
             --upload-file "$STATE_FILE" \
             "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json.new"
           curl \
@@ -125,7 +127,8 @@ jobs:
             --quote "*RNTO ${remote_dir}/forecasts_state.json.bak" \
             --quote "RNFR ${remote_dir}/forecasts_state.json.new" \
             --quote "RNTO ${remote_dir}/forecasts_state.json" \
-            "ftp://${FTP_HOST}/"
+            --head \
+            "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json"
           echo "予想stateを書き戻しました。"
 
       - name: SQLiteをFTPSへ原子的に反映
@@ -139,6 +142,8 @@ jobs:
             --silent \
             --show-error \
             --user "${FTP_USER}:${FTP_PASS}" \
+            --retry 3 \
+            --retry-all-errors \
             --upload-file "$SQLITE_FILE" \
             "ftp://${FTP_HOST}${remote_dir}/stocks.sqlite.new"
           curl \
@@ -152,7 +157,8 @@ jobs:
             --quote "*RNTO ${remote_dir}/stocks.sqlite.bak" \
             --quote "RNFR ${remote_dir}/stocks.sqlite.new" \
             --quote "RNTO ${remote_dir}/stocks.sqlite" \
-            "ftp://${FTP_HOST}/"
+            --head \
+            "ftp://${FTP_HOST}${remote_dir}/stocks.sqlite"
           echo "stocks.sqliteを原子的に差し替えました。"
 
       - name: 完了

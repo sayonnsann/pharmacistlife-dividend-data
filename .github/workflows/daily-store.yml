@@ -120,6 +120,7 @@ jobs:
             --silent \
             --show-error \
             --user "${FTP_USER}:${FTP_PASS}" \
+            --quote "*DELE ${remote_dir}/forecasts_state.json" \
             --quote "RNFR ${remote_dir}/forecasts_state.json.new" \
             --quote "RNTO ${remote_dir}/forecasts_state.json" \
             "ftp://${FTP_HOST}/"
@@ -144,6 +145,7 @@ jobs:
             --silent \
             --show-error \
             --user "${FTP_USER}:${FTP_PASS}" \
+            --quote "*DELE ${remote_dir}/stocks.sqlite" \
             --quote "RNFR ${remote_dir}/stocks.sqlite.new" \
             --quote "RNTO ${remote_dir}/stocks.sqlite" \
             "ftp://${FTP_HOST}/"

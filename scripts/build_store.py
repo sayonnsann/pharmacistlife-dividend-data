@@ -238,6 +238,12 @@ def create_database(
         dividends, "dividends", skip_nonstandard=True
     )
     daily_prices, daily_dividends, prices_updated = load_daily_prices(prices_url)
+    breakdown_path = REPOSITORY_ROOT / "data" / "dividend_breakdown.json"
+    dividend_breakdown: dict = {}
+    if breakdown_path.exists():
+        with breakdown_path.open(encoding="utf-8") as handle:
+            dividend_breakdown = json.load(handle)
+        print(f"配当内訳(記念・特別): {len(dividend_breakdown)}銘柄")
 
     database_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -322,6 +328,9 @@ def create_database(
                 payload.update(dividend)
                 payload["code"] = code
                 payload["industry"] = financial.get("industry")
+                breakdown_entry = dividend_breakdown.get(code)
+                if breakdown_entry:
+                    payload["dividendBreakdown"] = breakdown_entry
                 if daily_price:
                     payload["price"] = daily_price
                 if daily_yield is not None:

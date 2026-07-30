@@ -37,6 +37,9 @@ jobs:
           cache: pip
           cache-dependency-path: scripts/requirements.txt
 
+      - name: lftpをインストール
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
       - name: 依存ライブラリをインストール
         run: python -m pip install --disable-pip-version-check -r scripts/requirements.txt
 
@@ -106,74 +109,54 @@ jobs:
         run: |
           set -euo pipefail
           remote_dir="${FTP_REMOTE_DIR%/}"
-          upload_status=0
-          curl \
-            --ssl-reqd \
-            --silent \
-            --show-error \
-            --user "${FTP_USER}:${FTP_PASS}" \
-            --upload-file "$STATE_FILE" \
-            "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json.new" || upload_status=$?
-          # コノハは転送完了後に451を返すことがある(curl 18)。実サイズ一致なら成功とみなす
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
+                put -O ${remote_dir}/ \"$STATE_FILE\" -o forecasts_state.json.new; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          # 実サイズ検証（申告ではなく現物を確認）
           local_size=$(wc -c < "$STATE_FILE" | tr -d ' ')
           remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
             "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json.new" | awk '/Content-Length/ {print $2}' | tr -d '\r')
           if [ "$local_size" != "$remote_size" ]; then
-            echo "::error::forecasts_state.json のアップロード検証に失敗（local=$local_size remote=$remote_size curl=$upload_status）"
+            echo "::error::forecasts_state.json のアップロード検証に失敗（local=$local_size remote=$remote_size）"
             exit 1
           fi
-          echo "forecasts_state.json アップロード検証OK（$local_size bytes / curl終了コード $upload_status）"
-          curl \
-            --ssl-reqd \
-            --fail \
-            --silent \
-            --show-error \
-            --user "${FTP_USER}:${FTP_PASS}" \
-            --quote "*DELE ${remote_dir}/forecasts_state.json.bak" \
-            --quote "*RNFR ${remote_dir}/forecasts_state.json" \
-            --quote "*RNTO ${remote_dir}/forecasts_state.json.bak" \
-            --quote "RNFR ${remote_dir}/forecasts_state.json.new" \
-            --quote "RNTO ${remote_dir}/forecasts_state.json" \
-            --head \
-            "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json"
-          echo "予想stateを書き戻しました。"
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; \
+                rm -f ${remote_dir}/forecasts_state.json.bak; \
+                mv ${remote_dir}/forecasts_state.json ${remote_dir}/forecasts_state.json.bak || true; \
+                mv ${remote_dir}/forecasts_state.json.new ${remote_dir}/forecasts_state.json; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          echo "forecasts_state.json を検証つきで差し替えました（$local_size bytes）"
 
       - name: SQLiteをFTPSへ原子的に反映
         shell: bash
         run: |
           set -euo pipefail
           remote_dir="${FTP_REMOTE_DIR%/}"
-          upload_status=0
-          curl \
-            --ssl-reqd \
-            --silent \
-            --show-error \
-            --user "${FTP_USER}:${FTP_PASS}" \
-            --upload-file "$SQLITE_FILE" \
-            "ftp://${FTP_HOST}${remote_dir}/stocks.sqlite.new" || upload_status=$?
-          # コノハは転送完了後に451を返すことがある(curl 18)。実サイズ一致なら成功とみなす
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
+                put -O ${remote_dir}/ \"$SQLITE_FILE\" -o stocks.sqlite.new; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          # 実サイズ検証（申告ではなく現物を確認）
           local_size=$(wc -c < "$SQLITE_FILE" | tr -d ' ')
           remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
             "ftp://${FTP_HOST}${remote_dir}/stocks.sqlite.new" | awk '/Content-Length/ {print $2}' | tr -d '\r')
           if [ "$local_size" != "$remote_size" ]; then
-            echo "::error::stocks.sqlite のアップロード検証に失敗（local=$local_size remote=$remote_size curl=$upload_status）"
+            echo "::error::stocks.sqlite のアップロード検証に失敗（local=$local_size remote=$remote_size）"
             exit 1
           fi
-          echo "stocks.sqlite アップロード検証OK（$local_size bytes / curl終了コード $upload_status）"
-          curl \
-            --ssl-reqd \
-            --fail \
-            --silent \
-            --show-error \
-            --user "${FTP_USER}:${FTP_PASS}" \
-            --quote "*DELE ${remote_dir}/stocks.sqlite.bak" \
-            --quote "*RNFR ${remote_dir}/stocks.sqlite" \
-            --quote "*RNTO ${remote_dir}/stocks.sqlite.bak" \
-            --quote "RNFR ${remote_dir}/stocks.sqlite.new" \
-            --quote "RNTO ${remote_dir}/stocks.sqlite" \
-            --head \
-            "ftp://${FTP_HOST}${remote_dir}/stocks.sqlite"
-          echo "stocks.sqliteを原子的に差し替えました。"
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; \
+                rm -f ${remote_dir}/stocks.sqlite.bak; \
+                mv ${remote_dir}/stocks.sqlite ${remote_dir}/stocks.sqlite.bak || true; \
+                mv ${remote_dir}/stocks.sqlite.new ${remote_dir}/stocks.sqlite; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          echo "stocks.sqlite を検証つきで差し替えました（$local_size bytes）"
 
       - name: 完了
         run: echo "配当チェッカーDBの日次更新が完了しました。"

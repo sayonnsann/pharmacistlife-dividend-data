@@ -106,16 +106,23 @@ jobs:
         run: |
           set -euo pipefail
           remote_dir="${FTP_REMOTE_DIR%/}"
+          upload_status=0
           curl \
             --ssl-reqd \
-            --fail \
             --silent \
             --show-error \
             --user "${FTP_USER}:${FTP_PASS}" \
-            --retry 3 \
-            --retry-all-errors \
             --upload-file "$STATE_FILE" \
-            "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json.new"
+            "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json.new" || upload_status=$?
+          # コノハは転送完了後に451を返すことがある(curl 18)。実サイズ一致なら成功とみなす
+          local_size=$(wc -c < "$STATE_FILE" | tr -d ' ')
+          remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
+            "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json.new" | awk '/Content-Length/ {print $2}' | tr -d '\r')
+          if [ "$local_size" != "$remote_size" ]; then
+            echo "::error::forecasts_state.json のアップロード検証に失敗（local=$local_size remote=$remote_size curl=$upload_status）"
+            exit 1
+          fi
+          echo "forecasts_state.json アップロード検証OK（$local_size bytes / curl終了コード $upload_status）"
           curl \
             --ssl-reqd \
             --fail \
@@ -136,16 +143,23 @@ jobs:
         run: |
           set -euo pipefail
           remote_dir="${FTP_REMOTE_DIR%/}"
+          upload_status=0
           curl \
             --ssl-reqd \
-            --fail \
             --silent \
             --show-error \
             --user "${FTP_USER}:${FTP_PASS}" \
-            --retry 3 \
-            --retry-all-errors \
             --upload-file "$SQLITE_FILE" \
-            "ftp://${FTP_HOST}${remote_dir}/stocks.sqlite.new"
+            "ftp://${FTP_HOST}${remote_dir}/stocks.sqlite.new" || upload_status=$?
+          # コノハは転送完了後に451を返すことがある(curl 18)。実サイズ一致なら成功とみなす
+          local_size=$(wc -c < "$SQLITE_FILE" | tr -d ' ')
+          remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
+            "ftp://${FTP_HOST}${remote_dir}/stocks.sqlite.new" | awk '/Content-Length/ {print $2}' | tr -d '\r')
+          if [ "$local_size" != "$remote_size" ]; then
+            echo "::error::stocks.sqlite のアップロード検証に失敗（local=$local_size remote=$remote_size curl=$upload_status）"
+            exit 1
+          fi
+          echo "stocks.sqlite アップロード検証OK（$local_size bytes / curl終了コード $upload_status）"
           curl \
             --ssl-reqd \
             --fail \

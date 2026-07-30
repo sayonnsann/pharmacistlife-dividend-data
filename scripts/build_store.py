@@ -144,8 +144,8 @@ def json_text(value: Any) -> str:
     )
 
 
-def load_daily_prices(url: str) -> tuple[dict[str, float], str]:
-    """kouhaitou-dbの19列CSVを取得し、コード別の前日終値を返す。"""
+def load_daily_prices(url: str) -> tuple[dict[str, float], dict[str, float], str]:
+    """kouhaitou-dbの19列CSVを取得し、前日終値と年間配当(分割調整済み)を返す。"""
     try:
         completed = subprocess.run(
             [
@@ -172,6 +172,7 @@ def load_daily_prices(url: str) -> tuple[dict[str, float], str]:
     except UnicodeDecodeError as error:
         raise ValueError("日次株価CSVがUTF-8ではありません") from error
     prices: dict[str, float] = {}
+    daily_dividends: dict[str, float] = {}
     updated = ""
     for index, row in enumerate(csv.reader(io.StringIO(raw))):
         if len(row) != 19:
@@ -186,10 +187,16 @@ def load_daily_prices(url: str) -> tuple[dict[str, float], str]:
             continue
         if len(code) == 4 and code.isascii() and code.isalnum() and price > 0:
             prices[code] = price
+            try:
+                annual_dividend = float(row[4])
+            except (ValueError, IndexError):
+                annual_dividend = 0.0
+            if annual_dividend > 0:
+                daily_dividends[code] = annual_dividend
     if not prices:
         raise ValueError("日次株価CSVから有効な株価を1件も取得できませんでした")
     print(f"日次株価: {len(prices):,}銘柄（更新 {updated or '不明'}）")
-    return prices, updated
+    return prices, daily_dividends, updated
 
 
 def forecast_values(
@@ -230,7 +237,7 @@ def create_database(
     dividend_by_code, skipped_dividends = index_by_code(
         dividends, "dividends", skip_nonstandard=True
     )
-    daily_prices, prices_updated = load_daily_prices(prices_url)
+    daily_prices, daily_dividends, prices_updated = load_daily_prices(prices_url)
 
     database_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor, temporary_name = tempfile.mkstemp(
@@ -296,13 +303,14 @@ def create_database(
                     dividend.get("price"), 0.1, 10_000_000
                 )
                 daily_yield = None
-                annual = dividend.get("annual") or {}
-                if daily_price and isinstance(annual, dict) and annual:
-                    latest_dividend = latest_number(annual)
-                    if latest_dividend is not None and latest_dividend > 0:
-                        daily_yield = round(
-                            float(latest_dividend) / daily_price * 100, 2
-                        )
+                # 分子はkouhaitou-dbの年間配当(株式分割調整済み)を最優先で使う
+                numerator = daily_dividends.get(code)
+                if numerator is None:
+                    annual = dividend.get("annual") or {}
+                    if isinstance(annual, dict) and annual:
+                        numerator = latest_number(annual)
+                if daily_price and numerator is not None and float(numerator) > 0:
+                    daily_yield = round(float(numerator) / daily_price * 100, 2)
                 (
                     forecast_dividend,
                     forecast_yield,

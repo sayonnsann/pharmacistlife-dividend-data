@@ -15,6 +15,18 @@ def annual_totals(dividends):
     return dict(sorted(totals.items()))
 
 
+def current_year_total(dividends):
+    """当年（集計中）の権利落ち済み配当の合計。無ければNone。
+    連続増配等の判定には使わず、グラフの「集計中」表示専用。"""
+    total = 0.0
+    found = False
+    for ts, amount in dividends.items():
+        if ts.year == CURRENT_YEAR:
+            total += float(amount)
+            found = True
+    return round(total, 2) if found else None
+
+
 def compute_stats(totals):
     years = sorted(totals.keys())
     if not years:

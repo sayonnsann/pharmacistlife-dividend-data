@@ -17,7 +17,7 @@ from pathlib import Path
 
 import yfinance as yf
 
-from common import annual_totals, compute_stats, eps_by_year, payout_ratio_by_year
+from common import CURRENT_YEAR, annual_totals, compute_stats, current_year_total, eps_by_year, payout_ratio_by_year
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 TICKERS_PATH = DATA_DIR / "tickers.json"
@@ -54,8 +54,10 @@ def fetch_one(code):
         else None
     )
 
+    partial = current_year_total(dividends)
     return {
         "annual": totals,
+        "annualPartial": {str(CURRENT_YEAR): partial} if partial else {},
         "payoutRatio": payout_ratio,
         "price": price,
         "dividendYield": dividend_yield,

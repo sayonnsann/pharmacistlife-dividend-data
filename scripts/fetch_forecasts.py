@@ -475,11 +475,24 @@ def parse_forecast_response(
         "yearend_forecast_dividend_per_share",
         "yearendForecastDividendPerShare",
     )
+    # 同じ応答に入っている「確定した年度実績」も保存する（追加のAPI消費なし）。
+    # 権利落ちベースのYahoo集計と違い、会社発表の確定値なので表示の裏付けに使える。
+    confirmed = optional_number(
+        latest, "dividend_per_share", "dividendPerShare"
+    )
+    confirmed_adjusted = optional_number(
+        latest,
+        "adjusted_annual_dividend_per_share",
+        "adjustedAnnualDividendPerShare",
+    )
+    fiscal_year_end = first_present(latest, "fiscal_year_end", "fiscalYearEnd")
     return {
         "forecastDividend": annual,
         "forecastInterimDividend": interim,
         "forecastFinalDividend": final,
         "forecastPeriod": forecast_period(latest, fiscal_month),
+        "confirmedDividend": confirmed_adjusted if confirmed_adjusted is not None else confirmed,
+        "confirmedFiscalYearEnd": str(fiscal_year_end)[:10] if fiscal_year_end else None,
     }
 
 

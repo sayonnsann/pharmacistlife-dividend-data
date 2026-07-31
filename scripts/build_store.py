@@ -339,6 +339,12 @@ def create_database(
                 payload["forecastYield"] = forecast_yield
                 payload["forecastPeriod"] = forecast_period
                 payload["forecastFetchedAt"] = forecast_fetched_at
+                # 会社発表の確定年度配当（edinetdb由来）。集計中のYahoo値の裏付けに使う
+                forecast_record = forecasts.get(code) or {}
+                confirmed = bounded(forecast_record.get("confirmedDividend"), 0, 1_000_000)
+                if confirmed is not None:
+                    payload["confirmedDividend"] = confirmed
+                    payload["confirmedFiscalYearEnd"] = forecast_record.get("confirmedFiscalYearEnd")
 
                 name = str(
                     dividend.get("name") or financial.get("name") or code

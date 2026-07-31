@@ -1,645 +1,659 @@
 {
-  "1965": {
-    "2020": {
-      "base": 33.0,
-      "special": 1.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100J20L",
-        "quote": "１株当たり配当額には、創立70周年記念配当1.00円が含まれております。"
-      },
-      "fiscalYear": "2020-03"
-    }
-  },
-  "2108": {
-    "2019": {
-      "base": 50.0,
-      "special": 30.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100J0H8",
-        "quote": "１株当たり配当額には、創立100周年記念配当30円を含んでおります。"
-      },
-      "fiscalYear": "2019-03"
-    }
-  },
-  "2294": {
-    "2022": {
-      "base": 80.0,
-      "special": 20.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100U2W2",
-        "quote": "１株当たり配当額100円には、創業150周年記念配当20円を含んでおります。"
-      },
-      "fiscalYear": "2022-04"
-    }
-  },
-  "2307": {
-    "2023": {
-      "base": 25.0,
-      "special": 12.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100TQZF",
-        "quote": "１株当たり配当額37円には、創立50周年記念配当12円を含んでおります。"
-      },
-      "fiscalYear": "2023-03"
-    }
-  },
-  "2395": {
-    "2022": {
-      "base": 50.0,
-      "special": 10.0,
-      "kind": "特別",
-      "evidence": {
-        "docID": "S100OK5K",
-        "quote": "１株当たり40円（うち特別配当10円）"
-      },
-      "fiscalYear": "2022-03"
-    }
-  },
-  "2445": {
-    "2015": {
-      "base": 10.0,
-      "special": 2.5,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100AKBA",
-        "quote": "東京証券取引所市場第一部銘柄指定記念配当２円50銭を含んでおります。"
-      },
-      "fiscalYear": "2015-03"
-    }
-  },
-  "2816": {
-    "2016": {
-      "base": 17.0,
-      "special": 4.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100AM2O",
-        "quote": "１株当たり配当額には、創業50周年の記念配当４円が含まれております。"
-      },
-      "fiscalYear": "2016-03"
-    }
-  },
-  "2904": {
-    "2015": {
-      "base": 6.0,
-      "special": 1.5,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100BEBN",
-        "quote": "指定記念配当50銭、創業50周年記念配当１円を含んでおります。"
-      },
-      "fiscalYear": "2015-06"
-    }
-  },
-  "2907": {
-    "2017": {
-      "base": 12.0,
-      "special": 6.0,
-      "kind": "特別",
-      "evidence": {
-        "docID": "S100ANTD",
-        "quote": "普通配当12円に特別配当６円を加え、１株当たり18円"
-      },
-      "fiscalYear": "2017-03"
-    }
-  },
-  "3359": {
-    "2018": {
-      "base": 5.0,
-      "special": 5.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100EPJD",
-        "quote": "１株当たり配当を10.0円（うち第20期記念配当5.0円）"
-      },
-      "fiscalYear": "2018-09"
-    }
-  },
-  "3431": {
-    "2020": {
-      "base": 15.0,
-      "special": 5.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100IZ55",
-        "quote": "普通配当60円に記念配当20円を加え、１株当たり80円",
-        "rawBase": 60.0,
-        "rawSpecial": 20.0,
-        "rawTotal": 80.0,
-        "adjustmentFactor": 0.25,
-        "adjustmentBasis": "sharesIssuedがFY2024とFY2025に各2倍。2回の1:2分割の積で旧額を1/4換算"
-      },
-      "fiscalYear": "2020-03",
-      "notes": "FY2020実額80円を、その後の1:2分割2回で20円へ換算"
-    }
-  },
-  "3597": {
-    "2014": {
-      "base": 175.0,
-      "special": 100.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100BES7",
-        "quote": "第54期の１株当たり配当額には、創立90周年記念配当20円",
-        "rawBase": 35.0,
-        "rawSpecial": 20.0,
-        "rawTotal": 55.0,
-        "adjustmentFactor": 5.0,
-        "adjustmentBasis": "sharesIssuedがFY2018に約1/5、dpsAdjustmentFactorsが0.2。1:5併合後基準へ5倍換算"
-      },
-      "fiscalYear": "2014-06",
-      "notes": "FY2014実額55円を、FY2018の1:5株式併合後基準で275円へ換算"
-    }
-  },
-  "3865": {
-    "2022": {
-      "base": 16.0,
-      "special": 10.0,
-      "kind": "特別",
-      "evidence": {
-        "docID": "S100ODRU",
-        "quote": "１株当たり17円（うち、普通配当７円・特別配当10円）"
-      },
-      "fiscalYear": "2022-03"
-    }
-  },
-  "3953": {
-    "2015": {
-      "base": 10.0,
-      "special": 5.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100AMWJ",
-        "quote": "１株当たり配当額は、創業50周年記念配当５円であります。"
-      },
-      "fiscalYear": "2016-03"
-    }
-  },
-  "4026": {
-    "2017": {
-      "base": 23.0,
-      "special": 4.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100DNXL",
-        "quote": "創業100周年記念配当４円を含む中間配当金14円"
-      },
-      "fiscalYear": "2018-04"
-    }
-  },
-  "4320": {
-    "2014": {
-      "base": 3.75,
-      "special": 1.25,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100ES4B",
-        "quote": "第19期の１株当たり配当額には、東証一部指定記念配当５円",
-        "rawBase": 15.0,
-        "rawSpecial": 5.0,
-        "rawTotal": 20.0,
-        "adjustmentFactor": 0.25,
-        "adjustmentBasis": "sharesIssuedがFY2018とFY2020に各約2倍、dpsAdjustmentFactorsが4。1:2分割2回で1/4換算"
-      },
-      "fiscalYear": "2014-09",
-      "notes": "FY2014実額20円を、その後の1:2分割2回で5円へ換算"
-    }
-  },
-  "4462": {
-    "2018": {
-      "base": 17.0,
-      "special": 5.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100DE8Y",
-        "quote": "期末普通配当16円に記念配当10円を加え１株当たり26円",
-        "rawBase": 34.0,
-        "rawSpecial": 10.0,
-        "rawTotal": 44.0,
-        "adjustmentFactor": 0.5,
-        "adjustmentBasis": "暦年2018はFY2018期末26円とFY2019中間18円。sharesIssuedがFY2022に2倍のため1/2換算"
-      },
-      "fiscalYear": "2018-03",
-      "notes": "暦年対応はFY2018期末（普通16+記念10）とFY2019中間18の合計44円"
-    }
-  },
-  "4524": {
-    "2018": {
-      "base": 37.5,
-      "special": 12.5,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100DE5F",
-        "quote": "創業125周年であることから12円50銭の記念配当を加えて"
-      },
-      "fiscalYear": "2018-03"
-    }
-  },
-  "4658": {
-    "2021": {
-      "base": 26.5,
-      "special": 13.5,
-      "kind": "特別",
-      "evidence": {
-        "docID": "S100OGGI",
-        "quote": "13円50銭の特別配当を実施し、１株当たり27円50銭"
-      },
-      "fiscalYear": "2022-03"
-    }
-  },
-  "4667": {
-    "2020": {
-      "base": 16.0,
-      "special": 2.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100IWWD",
-        "quote": "記念配当（創立50周年）２円を加えまして、18円の配当"
-      },
-      "fiscalYear": "2020-03"
-    }
-  },
-  "4687": {
-    "2022": {
-      "base": 15.0,
-      "special": 7.5,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100OIOY",
-        "quote": "年間配当は普通配当30円に記念配当15円を加え45円",
-        "rawBase": 30.0,
-        "rawSpecial": 15.0,
-        "rawTotal": 45.0,
-        "adjustmentFactor": 0.5,
-        "adjustmentBasis": "記念配当はFY2023中間（暦年2022）に実施。sharesIssuedがFY2025に2倍、dpsAdjustmentFactorsが2"
-      },
-      "fiscalYear": "2023-03",
-      "notes": "FY2023の記念配当は暦年2022の中間配当。後の1:2分割で45円を22.5円へ換算"
-    }
-  },
-  "4751": {
-    "2014": {
-      "base": 5.0,
-      "special": 2.5,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100C0N6",
-        "quote": "第17期の配当額60円には、東証一部上場記念配当20円",
-        "rawBase": 40.0,
-        "rawSpecial": 20.0,
-        "rawTotal": 60.0,
-        "adjustmentFactor": 0.125,
-        "adjustmentBasis": "sharesIssuedがFY2017に2倍、FY2021に4倍。dpsAdjustmentFactorsが8で累積1/8換算"
-      },
-      "fiscalYear": "2014-09",
-      "notes": "FY2014実額60円を、その後の1:2と1:4分割の積で7.5円へ換算"
-    }
-  },
-  "4977": {
-    "2019": {
-      "base": 12.0,
-      "special": 4.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100JBRH",
-        "quote": "１株当たりの配当額には、記念配当４円を含んでおります。"
-      },
-      "fiscalYear": "2019-03"
-    }
-  },
-  "5268": {
-    "2024": {
-      "base": 13.0,
-      "special": 5.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100TVXE",
-        "quote": "普通株式１株当たり13円に加え、５円の記念配当"
-      },
-      "fiscalYear": "2024-03"
-    }
-  },
-  "5444": {
-    "2024": {
-      "base": 300.0,
-      "special": 150.0,
-      "kind": "記念・特別",
-      "evidence": {
-        "docID": "S100W82O",
-        "quote": "特別配当100円00銭…記念配当50円00銭"
-      },
-      "fiscalYear": "2024-03",
-      "notes": "2024年暦年内の2024年3月期期末100円と2025年3月期中間50円を合算"
-    }
-  },
-  "6134": {
-    "2015": {
-      "base": 30.0,
-      "special": 4.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100AR9R",
-        "quote": "１株当たり配当額20円00銭には、創立55周年記念配当４円00銭"
-      },
-      "fiscalYear": "2015-03"
-    }
-  },
-  "6286": {
-    "2019": {
-      "base": 16.0,
-      "special": 5.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100J0HK",
-        "quote": "中間配当金は１株当たり13円（創業80周年記念配当５円含む）"
-      },
-      "fiscalYear": "2020-03"
-    }
-  },
-  "6315": {
-    "2022": {
-      "base": 13.34,
-      "special": 3.33,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100OIFP",
-        "quote": "普通配当40円と記念配当10円を合計し１株当たり50円",
-        "rawBase": 40.0,
-        "rawSpecial": 10.0,
-        "rawTotal": 50.0,
-        "adjustmentFactor": 0.3333333333333333,
-        "adjustmentBasis": "sharesIssuedがFY2025に約3倍、dpsAdjustmentFactorsが3。1:3分割後基準へ1/3換算"
-      },
-      "fiscalYear": "2022-03",
-      "notes": "1/3換算の端数はspecialを3.33円、baseをspike差額の13.34円として合計16.67円に一致"
-    }
-  },
-  "6323": {
-    "2017": {
-      "base": 2.0,
-      "special": 0.3,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100AC6O",
-        "quote": "１株当たり23円（うち普通配当20円・記念配当3円）",
-        "rawBase": 20.0,
-        "rawSpecial": 3.0,
-        "rawTotal": 23.0,
-        "adjustmentFactor": 0.1,
-        "adjustmentBasis": "sharesIssuedがFY2025に10倍、dpsAdjustmentFactorsが10。1:10分割後基準へ1/10換算"
-      },
-      "fiscalYear": "2017-02",
-      "notes": "FY2017実額23円を、後の1:10分割で2.3円へ換算"
-    }
-  },
-  "6363": {
-    "2019": {
-      "base": 18.0,
-      "special": 7.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100IXUE",
-        "quote": "１株当たり配当額25.00円は、創立100周年記念配当7.00円を含む"
-      },
-      "fiscalYear": "2019-03"
-    }
-  },
-  "6369": {
-    "2017": {
-      "base": 50.0,
-      "special": 10.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100APY9",
-        "quote": "12円（普通配当10円、創立75周年記念配当２円）",
-        "rawBase": 10.0,
-        "rawSpecial": 2.0,
-        "rawTotal": 12.0,
-        "adjustmentFactor": 5.0,
-        "adjustmentBasis": "FY2018の約1:10併合とFY2026の1:2分割の積。dpsAdjustmentFactorsは0.2で実額を5倍"
-      },
-      "fiscalYear": "2017-03",
-      "notes": "FY2017実額12円を、1:10併合後さらに1:2分割した現基準で60円へ換算"
-    }
-  },
-  "6378": {
-    "2022": {
-      "base": 15.0,
-      "special": 5.0,
-      "kind": "特別",
-      "evidence": {
-        "docID": "S100ODJU",
-        "quote": "普通配当15円に特別配当としての５円を加えた１株につき20円"
-      },
-      "fiscalYear": "2022-03"
-    }
-  },
-  "6505": {
-    "2018": {
-      "base": 30.0,
-      "special": 20.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100E0M0",
-        "quote": "１株につき記念配当20円を加えて50円の期末配当"
-      },
-      "fiscalYear": "2018-05"
-    }
-  },
-  "6864": {
-    "2019": {
-      "base": 25.0,
-      "special": 10.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100IXPM",
-        "quote": "１株当たり配当額には創立60周年記念配当10円が含まれております。"
-      },
-      "fiscalYear": "2019-03"
-    }
-  },
-  "6877": {
-    "2015": {
-      "base": 90.0,
-      "special": 10.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100C073",
-        "quote": "１株当たり配当額100円には、最高益達成記念配当10円が含まれております。"
-      },
-      "fiscalYear": "2015-09"
-    }
-  },
-  "7412": {
-    "2015": {
-      "base": 2.0,
-      "special": 3.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100AFYT",
-        "quote": "１株当たり配当額の普通株式５円には、創業50周年の記念配当３円"
-      },
-      "fiscalYear": "2015-03"
-    }
-  },
-  "7447": {
-    "2015": {
-      "base": 50.0,
-      "special": 50.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100BTVM",
-        "quote": "１株当たり配当額100円には、記念配当50円を含んでおります。"
-      },
-      "fiscalYear": "2015-08"
-    }
-  },
-  "7512": {
-    "2018": {
-      "base": 12.0,
-      "special": 5.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100CZVE",
-        "quote": "普通配当12円にイオン北海道誕生10周年記念配当５円を加え"
-      },
-      "fiscalYear": "2018-02"
-    }
-  },
-  "7575": {
-    "2021": {
-      "base": 29.0,
-      "special": 20.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100OIWX",
-        "quote": "１株当たり配当額49.00円には、記念配当20.00円を含んでおります。"
-      },
-      "fiscalYear": "2021-03"
-    }
-  },
-  "7715": {
-    "2018": {
-      "base": 22.0,
-      "special": 5.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100DIS9",
-        "quote": "期末配当金の内訳　普通配当11円00銭　記念配当５円00銭"
-      },
-      "fiscalYear": "2018-03"
-    }
-  },
-  "7911": {
-    "2020": {
-      "base": 40.0,
-      "special": 20.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100J99K",
-        "quote": "１株当たり配当金は60円（普通配当40円、記念配当20円）"
-      },
-      "fiscalYear": "2020-03"
-    }
-  },
-  "7939": {
-    "2018": {
-      "base": 10.0,
-      "special": 5.0,
-      "kind": "記念・特別",
-      "evidence": {
-        "docID": "S100D98N",
-        "quote": "10円の期末配当に特別配当５円を加え合計15円"
-      },
-      "fiscalYear": "2018-03"
-    }
-  },
-  "8025": {
-    "2020": {
-      "base": 30.0,
-      "special": 10.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100JAWJ",
-        "quote": "普通配当30円と会社設立100周年の記念配当10円を加え40円"
-      },
-      "fiscalYear": "2020-03"
-    }
-  },
-  "9130": {
-    "2017": {
-      "base": 20.0,
-      "special": 10.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100AP7H",
-        "quote": "普通配当４円に創立80周年記念配当２円を加え６円",
-        "rawBase": 4.0,
-        "rawSpecial": 2.0,
-        "rawTotal": 6.0,
-        "adjustmentFactor": 5.0,
-        "adjustmentBasis": "sharesIssuedがFY2018に1/10、FY2020に2倍。dpsAdjustmentFactorsは0.2で累積5倍"
-      },
-      "fiscalYear": "2017-03",
-      "notes": "FY2017実額6円を、1:10併合と後の1:2分割の積で30円へ換算"
-    }
-  },
-  "9171": {
-    "2019": {
-      "base": 6.0,
-      "special": 6.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100J16O",
-        "quote": "１株当たり配当額12円には、設立100周年記念配当６円を含んでおります。"
-      },
-      "fiscalYear": "2019-03"
-    }
-  },
-  "9304": {
-    "2017": {
-      "base": 10.62,
-      "special": 2.5,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100DG8L",
-        "quote": "期末6円に創業120周年記念配当2円、中間4.5円",
-        "rawBase": 8.5,
-        "rawSpecial": 2.0,
-        "rawTotal": 10.5,
-        "adjustmentFactor": 1.25,
-        "adjustmentBasis": "暦年2017はFY2017期末6円とFY2018中間4.5円。FY2018の1:5併合とFY2026の1:4分割の積で1.25倍"
-      },
-      "fiscalYear": "2017-03",
-      "notes": "暦年実額10.5円×1.25=13.125円を候補精度に合わせ13.12円。baseは10.62円"
-    }
-  },
-  "9753": {
-    "2019": {
-      "base": 10.0,
-      "special": 10.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100IXJT",
-        "quote": "１株当たり配当金20円には、誕生20周年記念配当金10円が含まれております。"
-      },
-      "fiscalYear": "2019-03"
-    }
-  },
-  "9846": {
-    "2019": {
-      "base": 5.0,
-      "special": 5.0,
-      "kind": "記念",
-      "evidence": {
-        "docID": "S100INO1",
-        "quote": "2019年２月期の１株当たり配当額10円には、記念配当５円を含む"
-      },
-      "fiscalYear": "2019-02"
-    }
+ "1965": {
+  "2020": {
+   "base": 33.0,
+   "special": 1.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100J20L",
+    "quote": "１株当たり配当額には、創立70周年記念配当1.00円が含まれております。"
+   },
+   "fiscalYear": "2020-03"
   }
+ },
+ "2108": {
+  "2019": {
+   "base": 50.0,
+   "special": 30.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100J0H8",
+    "quote": "１株当たり配当額には、創立100周年記念配当30円を含んでおります。"
+   },
+   "fiscalYear": "2019-03"
+  }
+ },
+ "2294": {
+  "2022": {
+   "base": 80.0,
+   "special": 20.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100U2W2",
+    "quote": "１株当たり配当額100円には、創業150周年記念配当20円を含んでおります。"
+   },
+   "fiscalYear": "2022-04"
+  }
+ },
+ "2307": {
+  "2023": {
+   "base": 25.0,
+   "special": 12.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100TQZF",
+    "quote": "１株当たり配当額37円には、創立50周年記念配当12円を含んでおります。"
+   },
+   "fiscalYear": "2023-03"
+  }
+ },
+ "2395": {
+  "2022": {
+   "base": 50.0,
+   "special": 10.0,
+   "kind": "特別",
+   "evidence": {
+    "docID": "S100OK5K",
+    "quote": "１株当たり40円（うち特別配当10円）"
+   },
+   "fiscalYear": "2022-03"
+  }
+ },
+ "2445": {
+  "2015": {
+   "base": 10.0,
+   "special": 2.5,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100AKBA",
+    "quote": "東京証券取引所市場第一部銘柄指定記念配当２円50銭を含んでおります。"
+   },
+   "fiscalYear": "2015-03"
+  }
+ },
+ "2816": {
+  "2016": {
+   "base": 17.0,
+   "special": 4.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100AM2O",
+    "quote": "１株当たり配当額には、創業50周年の記念配当４円が含まれております。"
+   },
+   "fiscalYear": "2016-03"
+  }
+ },
+ "2904": {
+  "2015": {
+   "base": 6.0,
+   "special": 1.5,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100BEBN",
+    "quote": "指定記念配当50銭、創業50周年記念配当１円を含んでおります。"
+   },
+   "fiscalYear": "2015-06"
+  }
+ },
+ "2907": {
+  "2017": {
+   "base": 12.0,
+   "special": 6.0,
+   "kind": "特別",
+   "evidence": {
+    "docID": "S100ANTD",
+    "quote": "普通配当12円に特別配当６円を加え、１株当たり18円"
+   },
+   "fiscalYear": "2017-03"
+  }
+ },
+ "3359": {
+  "2018": {
+   "base": 5.0,
+   "special": 5.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100EPJD",
+    "quote": "１株当たり配当を10.0円（うち第20期記念配当5.0円）"
+   },
+   "fiscalYear": "2018-09"
+  }
+ },
+ "3431": {
+  "2020": {
+   "base": 15.0,
+   "special": 5.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100IZ55",
+    "quote": "普通配当60円に記念配当20円を加え、１株当たり80円",
+    "rawBase": 60.0,
+    "rawSpecial": 20.0,
+    "rawTotal": 80.0,
+    "adjustmentFactor": 0.25,
+    "adjustmentBasis": "sharesIssuedがFY2024とFY2025に各2倍。2回の1:2分割の積で旧額を1/4換算"
+   },
+   "fiscalYear": "2020-03",
+   "notes": "FY2020実額80円を、その後の1:2分割2回で20円へ換算"
+  }
+ },
+ "3597": {
+  "2014": {
+   "base": 175.0,
+   "special": 100.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100BES7",
+    "quote": "第54期の１株当たり配当額には、創立90周年記念配当20円",
+    "rawBase": 35.0,
+    "rawSpecial": 20.0,
+    "rawTotal": 55.0,
+    "adjustmentFactor": 5.0,
+    "adjustmentBasis": "sharesIssuedがFY2018に約1/5、dpsAdjustmentFactorsが0.2。1:5併合後基準へ5倍換算"
+   },
+   "fiscalYear": "2014-06",
+   "notes": "FY2014実額55円を、FY2018の1:5株式併合後基準で275円へ換算"
+  }
+ },
+ "3865": {
+  "2022": {
+   "base": 16.0,
+   "special": 10.0,
+   "kind": "特別",
+   "evidence": {
+    "docID": "S100ODRU",
+    "quote": "１株当たり17円（うち、普通配当７円・特別配当10円）"
+   },
+   "fiscalYear": "2022-03"
+  }
+ },
+ "3953": {
+  "2015": {
+   "base": 10.0,
+   "special": 5.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100AMWJ",
+    "quote": "１株当たり配当額は、創業50周年記念配当５円であります。"
+   },
+   "fiscalYear": "2016-03"
+  }
+ },
+ "4026": {
+  "2017": {
+   "base": 23.0,
+   "special": 4.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100DNXL",
+    "quote": "創業100周年記念配当４円を含む中間配当金14円"
+   },
+   "fiscalYear": "2018-04"
+  }
+ },
+ "4320": {
+  "2014": {
+   "base": 3.75,
+   "special": 1.25,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100ES4B",
+    "quote": "第19期の１株当たり配当額には、東証一部指定記念配当５円",
+    "rawBase": 15.0,
+    "rawSpecial": 5.0,
+    "rawTotal": 20.0,
+    "adjustmentFactor": 0.25,
+    "adjustmentBasis": "sharesIssuedがFY2018とFY2020に各約2倍、dpsAdjustmentFactorsが4。1:2分割2回で1/4換算"
+   },
+   "fiscalYear": "2014-09",
+   "notes": "FY2014実額20円を、その後の1:2分割2回で5円へ換算"
+  }
+ },
+ "4462": {
+  "2018": {
+   "base": 17.0,
+   "special": 5.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100DE8Y",
+    "quote": "期末普通配当16円に記念配当10円を加え１株当たり26円",
+    "rawBase": 34.0,
+    "rawSpecial": 10.0,
+    "rawTotal": 44.0,
+    "adjustmentFactor": 0.5,
+    "adjustmentBasis": "暦年2018はFY2018期末26円とFY2019中間18円。sharesIssuedがFY2022に2倍のため1/2換算"
+   },
+   "fiscalYear": "2018-03",
+   "notes": "暦年対応はFY2018期末（普通16+記念10）とFY2019中間18の合計44円"
+  }
+ },
+ "4524": {
+  "2018": {
+   "base": 37.5,
+   "special": 12.5,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100DE5F",
+    "quote": "創業125周年であることから12円50銭の記念配当を加えて"
+   },
+   "fiscalYear": "2018-03"
+  }
+ },
+ "4658": {
+  "2021": {
+   "base": 26.5,
+   "special": 13.5,
+   "kind": "特別",
+   "evidence": {
+    "docID": "S100OGGI",
+    "quote": "13円50銭の特別配当を実施し、１株当たり27円50銭"
+   },
+   "fiscalYear": "2022-03"
+  }
+ },
+ "4667": {
+  "2020": {
+   "base": 16.0,
+   "special": 2.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100IWWD",
+    "quote": "記念配当（創立50周年）２円を加えまして、18円の配当"
+   },
+   "fiscalYear": "2020-03"
+  }
+ },
+ "4687": {
+  "2022": {
+   "base": 15.0,
+   "special": 7.5,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100OIOY",
+    "quote": "年間配当は普通配当30円に記念配当15円を加え45円",
+    "rawBase": 30.0,
+    "rawSpecial": 15.0,
+    "rawTotal": 45.0,
+    "adjustmentFactor": 0.5,
+    "adjustmentBasis": "記念配当はFY2023中間（暦年2022）に実施。sharesIssuedがFY2025に2倍、dpsAdjustmentFactorsが2"
+   },
+   "fiscalYear": "2023-03",
+   "notes": "FY2023の記念配当は暦年2022の中間配当。後の1:2分割で45円を22.5円へ換算"
+  }
+ },
+ "4751": {
+  "2014": {
+   "base": 5.0,
+   "special": 2.5,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100C0N6",
+    "quote": "第17期の配当額60円には、東証一部上場記念配当20円",
+    "rawBase": 40.0,
+    "rawSpecial": 20.0,
+    "rawTotal": 60.0,
+    "adjustmentFactor": 0.125,
+    "adjustmentBasis": "sharesIssuedがFY2017に2倍、FY2021に4倍。dpsAdjustmentFactorsが8で累積1/8換算"
+   },
+   "fiscalYear": "2014-09",
+   "notes": "FY2014実額60円を、その後の1:2と1:4分割の積で7.5円へ換算"
+  }
+ },
+ "4977": {
+  "2019": {
+   "base": 12.0,
+   "special": 4.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100JBRH",
+    "quote": "１株当たりの配当額には、記念配当４円を含んでおります。"
+   },
+   "fiscalYear": "2019-03"
+  }
+ },
+ "5268": {
+  "2024": {
+   "base": 13.0,
+   "special": 5.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100TVXE",
+    "quote": "普通株式１株当たり13円に加え、５円の記念配当"
+   },
+   "fiscalYear": "2024-03"
+  }
+ },
+ "5444": {
+  "2024": {
+   "base": 300.0,
+   "special": 150.0,
+   "kind": "記念・特別",
+   "evidence": {
+    "docID": "S100W82O",
+    "quote": "特別配当100円00銭…記念配当50円00銭"
+   },
+   "fiscalYear": "2024-03",
+   "notes": "2024年暦年内の2024年3月期期末100円と2025年3月期中間50円を合算"
+  }
+ },
+ "6134": {
+  "2015": {
+   "base": 30.0,
+   "special": 4.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100AR9R",
+    "quote": "１株当たり配当額20円00銭には、創立55周年記念配当４円00銭"
+   },
+   "fiscalYear": "2015-03"
+  }
+ },
+ "6286": {
+  "2019": {
+   "base": 16.0,
+   "special": 5.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100J0HK",
+    "quote": "中間配当金は１株当たり13円（創業80周年記念配当５円含む）"
+   },
+   "fiscalYear": "2020-03"
+  }
+ },
+ "6315": {
+  "2022": {
+   "base": 13.34,
+   "special": 3.33,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100OIFP",
+    "quote": "普通配当40円と記念配当10円を合計し１株当たり50円",
+    "rawBase": 40.0,
+    "rawSpecial": 10.0,
+    "rawTotal": 50.0,
+    "adjustmentFactor": 0.3333333333333333,
+    "adjustmentBasis": "sharesIssuedがFY2025に約3倍、dpsAdjustmentFactorsが3。1:3分割後基準へ1/3換算"
+   },
+   "fiscalYear": "2022-03",
+   "notes": "1/3換算の端数はspecialを3.33円、baseをspike差額の13.34円として合計16.67円に一致"
+  }
+ },
+ "6323": {
+  "2017": {
+   "base": 2.0,
+   "special": 0.3,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100AC6O",
+    "quote": "１株当たり23円（うち普通配当20円・記念配当3円）",
+    "rawBase": 20.0,
+    "rawSpecial": 3.0,
+    "rawTotal": 23.0,
+    "adjustmentFactor": 0.1,
+    "adjustmentBasis": "sharesIssuedがFY2025に10倍、dpsAdjustmentFactorsが10。1:10分割後基準へ1/10換算"
+   },
+   "fiscalYear": "2017-02",
+   "notes": "FY2017実額23円を、後の1:10分割で2.3円へ換算"
+  }
+ },
+ "6363": {
+  "2019": {
+   "base": 18.0,
+   "special": 7.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100IXUE",
+    "quote": "１株当たり配当額25.00円は、創立100周年記念配当7.00円を含む"
+   },
+   "fiscalYear": "2019-03"
+  }
+ },
+ "6369": {
+  "2017": {
+   "base": 50.0,
+   "special": 10.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100APY9",
+    "quote": "12円（普通配当10円、創立75周年記念配当２円）",
+    "rawBase": 10.0,
+    "rawSpecial": 2.0,
+    "rawTotal": 12.0,
+    "adjustmentFactor": 5.0,
+    "adjustmentBasis": "FY2018の約1:10併合とFY2026の1:2分割の積。dpsAdjustmentFactorsは0.2で実額を5倍"
+   },
+   "fiscalYear": "2017-03",
+   "notes": "FY2017実額12円を、1:10併合後さらに1:2分割した現基準で60円へ換算"
+  }
+ },
+ "6378": {
+  "2022": {
+   "base": 15.0,
+   "special": 5.0,
+   "kind": "特別",
+   "evidence": {
+    "docID": "S100ODJU",
+    "quote": "普通配当15円に特別配当としての５円を加えた１株につき20円"
+   },
+   "fiscalYear": "2022-03"
+  }
+ },
+ "6505": {
+  "2018": {
+   "base": 30.0,
+   "special": 20.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100E0M0",
+    "quote": "１株につき記念配当20円を加えて50円の期末配当"
+   },
+   "fiscalYear": "2018-05"
+  }
+ },
+ "6864": {
+  "2019": {
+   "base": 25.0,
+   "special": 10.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100IXPM",
+    "quote": "１株当たり配当額には創立60周年記念配当10円が含まれております。"
+   },
+   "fiscalYear": "2019-03"
+  }
+ },
+ "6877": {
+  "2015": {
+   "base": 90.0,
+   "special": 10.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100C073",
+    "quote": "１株当たり配当額100円には、最高益達成記念配当10円が含まれております。"
+   },
+   "fiscalYear": "2015-09"
+  }
+ },
+ "7412": {
+  "2015": {
+   "base": 2.0,
+   "special": 3.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100AFYT",
+    "quote": "１株当たり配当額の普通株式５円には、創業50周年の記念配当３円"
+   },
+   "fiscalYear": "2015-03"
+  }
+ },
+ "7447": {
+  "2015": {
+   "base": 50.0,
+   "special": 50.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100BTVM",
+    "quote": "１株当たり配当額100円には、記念配当50円を含んでおります。"
+   },
+   "fiscalYear": "2015-08"
+  }
+ },
+ "7512": {
+  "2018": {
+   "base": 12.0,
+   "special": 5.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100CZVE",
+    "quote": "普通配当12円にイオン北海道誕生10周年記念配当５円を加え"
+   },
+   "fiscalYear": "2018-02"
+  }
+ },
+ "7575": {
+  "2021": {
+   "base": 29.0,
+   "special": 20.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100OIWX",
+    "quote": "１株当たり配当額49.00円には、記念配当20.00円を含んでおります。"
+   },
+   "fiscalYear": "2021-03"
+  }
+ },
+ "7715": {
+  "2018": {
+   "base": 22.0,
+   "special": 5.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100DIS9",
+    "quote": "期末配当金の内訳　普通配当11円00銭　記念配当５円00銭"
+   },
+   "fiscalYear": "2018-03"
+  }
+ },
+ "7911": {
+  "2020": {
+   "base": 40.0,
+   "special": 20.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100J99K",
+    "quote": "１株当たり配当金は60円（普通配当40円、記念配当20円）"
+   },
+   "fiscalYear": "2020-03"
+  }
+ },
+ "7939": {
+  "2018": {
+   "base": 10.0,
+   "special": 5.0,
+   "kind": "記念・特別",
+   "evidence": {
+    "docID": "S100D98N",
+    "quote": "10円の期末配当に特別配当５円を加え合計15円"
+   },
+   "fiscalYear": "2018-03"
+  }
+ },
+ "8025": {
+  "2020": {
+   "base": 30.0,
+   "special": 10.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100JAWJ",
+    "quote": "普通配当30円と会社設立100周年の記念配当10円を加え40円"
+   },
+   "fiscalYear": "2020-03"
+  }
+ },
+ "9130": {
+  "2017": {
+   "base": 20.0,
+   "special": 10.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100AP7H",
+    "quote": "普通配当４円に創立80周年記念配当２円を加え６円",
+    "rawBase": 4.0,
+    "rawSpecial": 2.0,
+    "rawTotal": 6.0,
+    "adjustmentFactor": 5.0,
+    "adjustmentBasis": "sharesIssuedがFY2018に1/10、FY2020に2倍。dpsAdjustmentFactorsは0.2で累積5倍"
+   },
+   "fiscalYear": "2017-03",
+   "notes": "FY2017実額6円を、1:10併合と後の1:2分割の積で30円へ換算"
+  }
+ },
+ "9171": {
+  "2019": {
+   "base": 6.0,
+   "special": 6.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100J16O",
+    "quote": "１株当たり配当額12円には、設立100周年記念配当６円を含んでおります。"
+   },
+   "fiscalYear": "2019-03"
+  }
+ },
+ "9304": {
+  "2017": {
+   "base": 10.62,
+   "special": 2.5,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100DG8L",
+    "quote": "期末6円に創業120周年記念配当2円、中間4.5円",
+    "rawBase": 8.5,
+    "rawSpecial": 2.0,
+    "rawTotal": 10.5,
+    "adjustmentFactor": 1.25,
+    "adjustmentBasis": "暦年2017はFY2017期末6円とFY2018中間4.5円。FY2018の1:5併合とFY2026の1:4分割の積で1.25倍"
+   },
+   "fiscalYear": "2017-03",
+   "notes": "暦年実額10.5円×1.25=13.125円を候補精度に合わせ13.12円。baseは10.62円"
+  }
+ },
+ "9753": {
+  "2019": {
+   "base": 10.0,
+   "special": 10.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100IXJT",
+    "quote": "１株当たり配当金20円には、誕生20周年記念配当金10円が含まれております。"
+   },
+   "fiscalYear": "2019-03"
+  }
+ },
+ "9846": {
+  "2019": {
+   "base": 5.0,
+   "special": 5.0,
+   "kind": "記念",
+   "evidence": {
+    "docID": "S100INO1",
+    "quote": "2019年２月期の１株当たり配当額10円には、記念配当５円を含む"
+   },
+   "fiscalYear": "2019-02"
+  }
+ },
+ "2659": {
+  "2026": {
+   "base": 100.0,
+   "special": 25.0,
+   "kind": "記念",
+   "evidence": {
+    "source": "適時開示 2026-04-07「剰余金の配当（株式公開25周年）に関するお知らせ」",
+    "quote": "普通配当100円00銭・記念配当25円00銭（株式公開25周年）",
+    "url": "https://finance-frontend-pc-dist.west.edge.storage-yahoo.jp/disclosure/20260407/20260406598817.pdf",
+    "providedBy": "オーナー提供・原文確認済み"
+   },
+   "fiscalYear": "2026-02"
+  }
+ }
 }

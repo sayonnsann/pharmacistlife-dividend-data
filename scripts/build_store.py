@@ -191,8 +191,10 @@ def load_daily_prices(url: str) -> tuple[dict[str, float], dict[str, float], str
                 annual_dividend = float(row[4])
             except (ValueError, IndexError):
                 annual_dividend = 0.0
-            if annual_dividend > 0:
-                daily_dividends[code] = annual_dividend
+            # 年間配当が空欄/0でも「kouhaitou-dbが把握している銘柄」として記録する。
+            # 0を残さないと、下流で「現在無配」と「そもそも情報がない」を
+            # 区別できず、何年も前にやめた配当で利回りを出してしまう。
+            daily_dividends[code] = annual_dividend if annual_dividend > 0 else 0.0
     if not prices:
         raise ValueError("日次株価CSVから有効な株価を1件も取得できませんでした")
     print(f"日次株価: {len(prices):,}銘柄（更新 {updated or '不明'}）")
@@ -311,6 +313,10 @@ def create_database(
                 daily_yield = None
                 # 分子はkouhaitou-dbの年間配当(株式分割調整済み)を最優先で使う
                 numerator = daily_dividends.get(code)
+                # kouhaitou-dbが把握していて年間配当0＝現在無配。
+                # この場合は過去の配当履歴に遡らない（東電の2010年60円のような
+                # 十数年前の金額で利回りを出してしまうため）。
+                currently_unpaid = numerator is not None and float(numerator) <= 0
                 if numerator is None:
                     annual = dividend.get("annual") or {}
                     if isinstance(annual, dict) and annual:
@@ -335,6 +341,9 @@ def create_database(
                     payload["price"] = daily_price
                 if daily_yield is not None:
                     payload["dividendYield"] = daily_yield
+                elif currently_unpaid:
+                    # dividends.json由来の古い利回りが銘柄詳細に残らないようにする
+                    payload["dividendYield"] = None
                 payload["forecastDividend"] = forecast_dividend
                 payload["forecastYield"] = forecast_yield
                 payload["forecastPeriod"] = forecast_period
@@ -357,7 +366,11 @@ def create_database(
                         bounded(
                             daily_yield
                             if daily_yield is not None
-                            else dividend.get("dividendYield"),
+                            else (
+                                None
+                                if currently_unpaid
+                                else dividend.get("dividendYield")
+                            ),
                             0,
                             30,
                         ),

@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "note": "一次資料で確定した株式分割イベント。有報からの自動抽出(stock_actions.json)で拾えなかった分を人手で補う。有報は年1回しか出ないため、提出後に決議・実施された分割は自動抽出では原理的に拾えない（3月決算以外で顕著）。半期報告書(160)の取得で将来的に自動化できる見込み。",
+  "adjustmentRule": "現在株価の基準に揃える場合、effectiveDate より前の1株当たり値に oldShares/newShares を掛ける。epsAdjusted=true の銘柄はEPS/BPSが既に遡及調整済みなので再調整しない（配当は実額のままなので調整が必要）。",
+  "confirmedBy": "Codex(GPT-5.6 Sol)によるWeb調査、2026-08-02。各eventのsource.urlが一次資料",
+  "events": [
+    {
+      "eventId": "8053-2026-07-01-split-1-to-4", "securityCode": "8053", "name": "住友商事",
+      "action": "split", "oldShares": 1, "newShares": 4, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www.sumitomocorp.com/-/media/Files/hq/ir/report/summary/2025/2603Tanshin.pdf?sc_lang=ja", "type": "issuer_ir"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "5802-2026-07-01-split-1-to-4", "securityCode": "5802", "name": "住友電気工業",
+      "action": "split", "oldShares": 1, "newShares": 4, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://sumitomoelectric.com/jp/sites/japan/files/2026-05/download_documents/prs053v.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "5801-2026-07-01-split-1-to-10", "securityCode": "5801", "name": "古河電気工業",
+      "action": "split", "oldShares": 1, "newShares": 10, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/58010/140120260511523194.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "1414-2026-01-01-split-1-to-4", "securityCode": "1414", "name": "ショーボンドホールディングス",
+      "action": "split", "oldShares": 1, "newShares": 4, "effectiveDate": "2026-01-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/14140/140120251110593695.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "2264-2026-07-01-split-1-to-4", "securityCode": "2264", "name": "森永乳業",
+      "action": "split", "oldShares": 1, "newShares": 4, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www.morinagamilk.co.jp/release/newsentry-4693.html", "type": "issuer_ir"},
+      "note": "別に2023-12-01の1→2分割もあるが、FY2026のEPSはその分割後の株数で算定済みのため、今回掛けるのは4倍のみ",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "7236-2026-07-01-split-1-to-10", "securityCode": "7236", "name": "ティラド",
+      "action": "split", "oldShares": 1, "newShares": 10, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/72360/140120260525546492.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "7173-2026-07-01-split-1-to-8", "securityCode": "7173", "name": "東京きらぼしフィナンシャルグループ",
+      "action": "split", "oldShares": 1, "newShares": 8, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/71730/140120260507518894.pdf", "type": "jpx"},
+      "note": "2026年5月に第一種優先株式を普通株式5,498,532株へ転換しており、分割補正だけでは完全でない。潜在株式調整後EPSベースの参考PERは13.28倍",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "8057-2026-01-21-split-1-to-5", "securityCode": "8057", "name": "内田洋行",
+      "action": "split", "oldShares": 1, "newShares": 5, "effectiveDate": "2026-01-21",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www.uchida.co.jp/company/news/customer/251014a.html", "type": "issuer_ir"},
+      "note": "2026年中間報告書では過年度の1株指標を5分割後基準へ遡及調整済み。次回有報取得時は二重適用に注意",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "2220-2026-04-01-split-1-to-3", "securityCode": "2220", "name": "亀田製菓",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2026-04-01",
+      "status": "confirmed", "epsAdjusted": true,
+      "source": {"url": "https://www2.jpx.co.jp/disc/22200/140120260218564292.pdf", "type": "jpx"},
+      "note": "FY2026有報が「2022年3月期の期首に分割が行われたと仮定」してEPS/BPSを遡及調整済み。PERは補正不要、配当のみ補正が必要",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "4641-2026-07-01-split-1-to-3", "securityCode": "4641", "name": "アルプス技研",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www.alpsgiken.co.jp/ir/images/report/2026/ir20260514_01.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "2986-2026-07-01-split-1-to-3", "securityCode": "2986", "name": "ＬＡホールディングス",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/29860/140120260514533330.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "3712-2026-04-01-split-1-to-5", "securityCode": "3712", "name": "情報企画",
+      "action": "split", "oldShares": 1, "newShares": 5, "effectiveDate": "2026-04-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www.jyohokikaku.co.jp/contents/wp-content/uploads/2026/02/20260205_01.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "9562-2026-04-01-split-1-to-3", "securityCode": "9562", "name": "ビジネスコーチ",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2026-04-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/95620/140120260213560433.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "4976-2026-01-01-split-1-to-3", "securityCode": "4976", "name": "東洋ドライルーブ",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2026-01-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/49760/140120260514532203.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "7846-2026-07-01-split-1-to-3", "securityCode": "7846", "name": "パイロットコーポレーション",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/78460/140120260213560067.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "3804-2026-05-01-split-1-to-3", "securityCode": "3804", "name": "システム　ディ",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2026-05-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www.systemd.co.jp/wordpress/wp-content/uploads/2026/03/20260325_ir.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "7460-2026-07-01-split-1-to-3", "securityCode": "7460", "name": "ヤギ",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www.yaginet.co.jp/ja/news/ir_news/auto_20260529554017/pdfFile.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "3277-2026-07-01-split-1-to-2", "securityCode": "3277", "name": "サンセイランディック",
+      "action": "split", "oldShares": 1, "newShares": 2, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/32770/140120260515536591.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "1899-2026-07-01-split-1-to-2", "securityCode": "1899", "name": "福田組",
+      "action": "split", "oldShares": 1, "newShares": 2, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www.fkd.co.jp/wp-content/uploads/2026/05/20260508_bunkatuhaitouyosou_osirase.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "3176-2026-07-01-split-1-to-2", "securityCode": "3176", "name": "三洋貿易",
+      "action": "split", "oldShares": 1, "newShares": 2, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/31760/140120260507517527.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "7425-2026-07-01-split-1-to-2", "securityCode": "7425", "name": "初穂商事",
+      "action": "split", "oldShares": 1, "newShares": 2, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjusted": false,
+      "source": {"url": "https://www.hatsuho.co.jp/ir/pdf/IR_k260612.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-02"
+    }
+  ]
+}

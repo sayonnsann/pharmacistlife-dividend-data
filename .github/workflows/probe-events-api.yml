@@ -1,6 +1,6 @@
 name: edinetdb イベントAPIの調査（手動実行のみ）
 
-# 目的: /v1/events と /v1/calendar が使えるかを1回だけ確認する調査用。
+# 目的: /v1/events の dividend_revision が増配検知に使えるかを確認する調査用。
 # 何も書き込まず、何もアップロードしない。読み取りだけ。
 # 確認が終わったらこのファイルは削除してよい。
 
@@ -26,11 +26,13 @@ jobs:
 
           KEY = os.environ["EDINETDB_API_KEY"]
           BASE = "https://edinetdb.jp/v1"
+          # 東計電算: 銘柄コード4746 / EDINETコードE05066 / 12月決算
+          TARGET_SEC = "4746"
+          TARGET_EDINET = "E05066"
 
 
           def call(path, params):
               url = f"{BASE}/{path}?{urlencode(params)}"
-              # キーはヘッダで送る。URLには含めない
               request = Request(
                   url,
                   headers={
@@ -44,7 +46,7 @@ jobs:
                       remaining = response.headers.get("X-RateLimit-Remaining")
                       return json.load(response), remaining, None
               except HTTPError as error:
-                  body = error.read().decode("utf-8", "replace")[:400]
+                  body = error.read().decode("utf-8", "replace")[:300]
                   return None, None, f"HTTP {error.code}: {body}"
               except (URLError, TimeoutError) as error:
                   return None, None, f"通信失敗: {error}"
@@ -52,135 +54,130 @@ jobs:
                   return None, None, f"JSONではない応答: {error}"
 
 
-          def show_keys(label, obj, depth=0):
-              pad = "  " * depth
-              if isinstance(obj, dict):
-                  print(f"{pad}{label}: dict キー={list(obj.keys())}")
-              elif isinstance(obj, list):
-                  print(f"{pad}{label}: list 件数={len(obj)}")
-              else:
-                  print(f"{pad}{label}: {type(obj).__name__}")
-
-
-          def records_of(payload):
-              """よくある包み方に対応して中身のリストを取り出す。"""
-              if isinstance(payload, list):
-                  return payload
+          def rows_of(payload):
               if isinstance(payload, dict):
-                  for key in ("events", "data", "items", "results", "calendar", "records"):
+                  data = payload.get("data")
+                  if isinstance(data, list):
+                      return data
+                  if isinstance(data, dict):
+                      for key in ("events", "earnings", "items", "calendar"):
+                          value = data.get(key)
+                          if isinstance(value, list):
+                              return value
+                  for key in ("events", "items", "results"):
                       value = payload.get(key)
                       if isinstance(value, list):
                           return value
-              return []
+              return payload if isinstance(payload, list) else []
 
 
           today = date.today()
           print(f"実行日: {today.isoformat()}")
           print("=" * 70)
 
-          # ---------- 1. /v1/events ----------
-          print("\n### /v1/events（直近7日のイベントフィード）")
-          params = {
-              "since": (today - timedelta(days=7)).isoformat(),
-              "until": today.isoformat(),
-              "limit": 100,
-          }
-          print(f"パラメータ: {params}")
-          payload, remaining, error = call("events", params)
+          # ---------- 1. 東計電算の earnings（正しいEDINETコードで） ----------
+          print(f"\n### 東計電算 {TARGET_EDINET}（12月決算）の earnings")
+          payload, remaining, error = call(
+              f"companies/{TARGET_EDINET}/earnings", {"limit": 4}
+          )
           if error:
               print(f"  失敗: {error}")
           else:
-              show_keys("応答", payload)
-              rows = records_of(payload)
-              print(f"  取り出せた件数: {len(rows)}")
+              rows = rows_of(payload)
+              print(f"  件数: {len(rows)}  残量={remaining}")
+              for row in rows:
+                  keep = {
+                      k: row.get(k)
+                      for k in (
+                          "disclosure_date", "fiscal_year", "quarter",
+                          "forecast_dividend_per_share", "dividend_per_share",
+                          "is_correction", "fiscal_year_end",
+                      )
+                      if k in row
+                  }
+                  print(f"    {json.dumps(keep, ensure_ascii=False)}")
               if rows:
-                  print(f"\n  1件目のフィールド: {list(rows[0].keys())}")
-                  print("\n  --- 1件目の中身 ---")
-                  print("  " + json.dumps(rows[0], ensure_ascii=False, indent=2).replace("\n", "\n  ")[:1200])
-                  types = Counter(
-                      str(r.get("event_type") or r.get("type") or "?") for r in rows
-                  )
-                  print(f"\n  event_type の分布: {dict(types)}")
-                  sev = Counter(str(r.get("severity") or "?") for r in rows)
-                  print(f"  severity の分布: {dict(sev)}")
-                  dates = Counter(
-                      str(r.get("date") or r.get("disclosure_date") or r.get("occurred_on") or "?")[:10]
-                      for r in rows
-                  )
-                  print(f"  日付の分布: {dict(sorted(dates.items()))}")
+                  print(f"\n  1件目の全フィールド名: {list(rows[0].keys())}")
 
-                  # 東計電算(4746)を探す
-                  hits = [
-                      r for r in rows
-                      if "4746" in json.dumps(r, ensure_ascii=False)
-                      or "東計電算" in json.dumps(r, ensure_ascii=False)
-                  ]
-                  print(f"\n  ★ 東計電算(4746)のヒット: {len(hits)}件")
-                  for hit in hits[:3]:
-                      print("  " + json.dumps(hit, ensure_ascii=False)[:600])
-              if remaining is not None:
-                  print(f"\n  残量ヘッダ: {remaining}")
+          # ---------- 2. dividend_revision の中身 ----------
+          print("\n\n### /v1/events?event_type=dividend_revision（直近7日）")
+          payload, remaining, error = call(
+              "events",
+              {
+                  "since": (today - timedelta(days=7)).isoformat(),
+                  "until": today.isoformat(),
+                  "event_type": "dividend_revision",
+                  "limit": 100,
+              },
+          )
+          if error:
+              print(f"  失敗: {error}")
+          else:
+              rows = rows_of(payload)
+              meta = payload.get("meta") if isinstance(payload, dict) else None
+              print(f"  件数: {len(rows)}  残量={remaining}")
+              if meta:
+                  print(f"  meta: {json.dumps(meta, ensure_ascii=False)[:400]}")
 
-          # ---------- 2. 配当関連イベントだけ絞れるか ----------
-          print("\n\n### /v1/events（event_type で絞る試行）")
-          for event_type in ("dividend_revision", "guidance_revision", "earnings_summary"):
+              dates = Counter(str(r.get("event_date") or "?")[:10] for r in rows)
+              print(f"\n  ★ 日付ごとの件数: {json.dumps(dict(sorted(dates.items())), ensure_ascii=False)}")
+
+              directions = Counter(
+                  str((r.get("metadata") or {}).get("dividend_direction") or "?")
+                  for r in rows
+              )
+              print(f"  dividend_direction の分布: {dict(directions)}")
+              sev = Counter(str(r.get("severity") or "?") for r in rows)
+              print(f"  severity の分布: {dict(sev)}")
+
+              hits = [r for r in rows if str(r.get("sec_code") or "") == TARGET_SEC]
+              print(f"\n  ★ 東計電算(sec_code={TARGET_SEC})のヒット: {len(hits)}件")
+              for hit in hits:
+                  print("  " + json.dumps(hit, ensure_ascii=False, indent=2).replace("\n", "\n  ")[:1200])
+
+              print("\n  --- 増配(up)と読めるものを最大8件 ---")
+              shown = 0
+              for row in rows:
+                  direction = (row.get("metadata") or {}).get("dividend_direction")
+                  if direction and str(direction) != "down" and shown < 8:
+                      print(
+                          f"    {row.get('sec_code')} {row.get('filer_name')} "
+                          f"[{direction}] {str(row.get('title'))[:60]}"
+                      )
+                      shown += 1
+
+          # ---------- 3. calendar が0件だった件を別パラメータで ----------
+          print("\n\n### /v1/calendar（パラメータを変えて再試行）")
+          for params in (
+              {"from": today.isoformat(), "to": (today + timedelta(days=30)).isoformat()},
+              {"from": (today - timedelta(days=7)).isoformat(), "to": today.isoformat()},
+          ):
+              payload, remaining, error = call("calendar", params)
+              if error:
+                  print(f"  {params}: 失敗 {error[:150]}")
+              else:
+                  rows = rows_of(payload)
+                  meta = payload.get("meta") if isinstance(payload, dict) else None
+                  print(f"  {params}: {len(rows)}件  残量={remaining}")
+                  if meta:
+                      print(f"    meta: {json.dumps(meta, ensure_ascii=False)[:300]}")
+                  if rows:
+                      print(f"    1件目: {json.dumps(rows[0], ensure_ascii=False)[:400]}")
+                      break
+
+          # ---------- 4. 1日だけに絞って件数を見る（枠の見積もり用） ----------
+          print("\n\n### 1日あたりの dividend_revision 件数（直近3営業日ぶん）")
+          for back in (0, 1, 2):
+              day = (today - timedelta(days=back)).isoformat()
               payload, remaining, error = call(
                   "events",
-                  {
-                      "since": (today - timedelta(days=7)).isoformat(),
-                      "until": today.isoformat(),
-                      "event_type": event_type,
-                      "limit": 100,
-                  },
+                  {"since": day, "until": day, "event_type": "dividend_revision", "limit": 100},
               )
               if error:
-                  print(f"  {event_type}: 失敗 {error[:120]}")
+                  print(f"  {day}: 失敗 {error[:100]}")
               else:
-                  rows = records_of(payload)
-                  print(f"  {event_type}: {len(rows)}件  残量={remaining}")
-
-          # ---------- 3. /v1/calendar ----------
-          print("\n\n### /v1/calendar（決算発表スケジュール）")
-          params = {
-              "from": today.isoformat(),
-              "to": (today + timedelta(days=14)).isoformat(),
-              "limit": 500,
-          }
-          print(f"パラメータ: {params}")
-          payload, remaining, error = call("calendar", params)
-          if error:
-              print(f"  失敗: {error}")
-          else:
-              show_keys("応答", payload)
-              rows = records_of(payload)
-              print(f"  取り出せた件数: {len(rows)}")
-              if rows:
-                  print(f"  1件目のフィールド: {list(rows[0].keys())}")
-                  print("  --- 1件目の中身 ---")
-                  print("  " + json.dumps(rows[0], ensure_ascii=False, indent=2).replace("\n", "\n  ")[:800])
-                  dates = Counter(
-                      str(r.get("date") or r.get("announcement_date") or "?")[:10] for r in rows
-                  )
-                  print(f"\n  発表予定日の分布（今日から14日）: {dict(sorted(dates.items()))}")
-              if remaining is not None:
-                  print(f"  残量ヘッダ: {remaining}")
-
-          # ---------- 4. 東計電算の earnings を直接見る ----------
-          print("\n\n### /v1/companies/{code}/earnings で東計電算を直接確認")
-          # 4746 のEDINETコードが分からないので銘柄コードでも試す
-          for code in ("4746", "E05094"):
-              payload, remaining, error = call(
-                  f"companies/{code}/earnings", {"limit": 3}
-              )
-              if error:
-                  print(f"  {code}: 失敗 {error[:200]}")
-              else:
-                  rows = records_of(payload) or (
-                      [payload] if isinstance(payload, dict) else []
-                  )
-                  print(f"  {code}: 取得成功 残量={remaining}")
-                  print("  " + json.dumps(payload, ensure_ascii=False, indent=2).replace("\n", "\n  ")[:1500])
-                  break
+                  rows = rows_of(payload)
+                  print(f"  {day}: {len(rows)}件  残量={remaining}")
 
           print("\n" + "=" * 70)
           print("調査終了")

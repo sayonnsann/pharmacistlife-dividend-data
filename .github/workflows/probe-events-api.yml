@@ -18,7 +18,7 @@ jobs:
           python - <<'PY'
           import json
           import os
-          from datetime import date, timedelta
+          from collections import Counter
           from urllib.error import HTTPError, URLError
           from urllib.parse import urlencode
           from urllib.request import Request, urlopen
@@ -33,54 +33,65 @@ jobs:
                   "X-API-Key": KEY, "Accept": "application/json",
                   "User-Agent": "events-api-probe/1.0"})
               try:
-                  with urlopen(request, timeout=45) as response:
+                  with urlopen(request, timeout=60) as response:
                       return json.load(response), response.headers.get("X-RateLimit-Remaining"), None
               except HTTPError as error:
-                  return None, None, f"HTTP {error.code}: {error.read().decode('utf-8','replace')[:300]}"
+                  return None, None, f"HTTP {error.code}: {error.read().decode('utf-8','replace')[:200]}"
               except (URLError, TimeoutError) as error:
                   return None, None, f"通信失敗: {error}"
 
 
-          today = date.today()
-          print("### 東計電算 E05066 の直近2件を全フィールド表示")
-          payload, remaining, error = call("companies/E05066/earnings", {"limit": 2})
-          if error:
-              print(f"  失敗: {error}")
-          else:
-              rows = (payload.get("data") or {}).get("earnings") or []
-              print(f"  残量={remaining}")
-              for row in rows:
-                  print("\n  --- disclosure_date=" + str(row.get("disclosure_date")) + " Q" + str(row.get("quarter")) + " ---")
-                  for key in sorted(row):
-                      value = row[key]
-                      if value is not None and key not in ("title",):
-                          print(f"    {key}: {value}")
-                  print(f"    title: {str(row.get('title'))[:100]}")
+          print("### 1. 分割系の event_type が使えるか")
+          found = {}
+          for etype in ("split", "stock_split", "share_split", "reverse_split"):
+              payload, remaining, error = call("events", {
+                  "since": "2026-01-01", "until": "2026-12-31",
+                  "event_type": etype, "limit": 1})
+              if error:
+                  print(f"  {etype}: {error[:110]}")
+              else:
+                  total = ((payload.get("meta") or {}).get("pagination") or {}).get("total")
+                  print(f"  {etype}: total={total}  残量={remaining}")
+                  found[etype] = total
 
-          print("\n\n### earnings_summary に配当の手がかりがあるか（8/3の東計電算を探す）")
-          payload, remaining, error = call("events", {
-              "since": "2026-08-03", "until": "2026-08-03",
-              "event_type": "earnings_summary", "limit": 100})
-          if error:
-              print(f"  失敗: {error}")
-          else:
-              rows = payload.get("data") or []
-              total = ((payload.get("meta") or {}).get("pagination") or {}).get("total")
-              print(f"  8/3のearnings_summary: {len(rows)}件（total={total}） 残量={remaining}")
-              hits = [r for r in rows if str(r.get("sec_code") or "") == "4746"]
-              print(f"  東計電算のヒット: {len(hits)}件")
-              for hit in hits:
-                  print("  " + json.dumps(hit, ensure_ascii=False, indent=2).replace("\n", "\n  ")[:1400])
-
-          print("\n\n### 5月中旬（決算集中期）の1日あたり件数")
-          for day in ("2026-05-13", "2026-05-14", "2026-05-15"):
-              for etype in ("dividend_revision", "earnings_summary"):
+          print("\n\n### 2. 分割イベントの一覧（2026年）")
+          rows = []
+          for etype, total in found.items():
+              if not total:
+                  continue
+              offset = 0
+              while offset < min(total, 300):
                   payload, remaining, error = call("events", {
-                      "since": day, "until": day, "event_type": etype, "limit": 1})
+                      "since": "2026-01-01", "until": "2026-12-31",
+                      "event_type": etype, "limit": 100, "offset": offset})
                   if error:
-                      print(f"  {day} {etype}: 失敗 {error[:80]}")
-                  else:
-                      total = ((payload.get("meta") or {}).get("pagination") or {}).get("total")
-                      print(f"  {day} {etype}: total={total}  残量={remaining}")
+                      print(f"  {etype} offset={offset}: {error[:110]}")
+                      break
+                  chunk = payload.get("data") or []
+                  if not chunk:
+                      break
+                  for row in chunk:
+                      row["_etype"] = etype
+                    
+                  rows.extend(chunk)
+                  offset += 100
+              print(f"  {etype}: {len([r for r in rows if r.get('_etype')==etype])}件を取得  残量={remaining}")
+
+          if rows:
+              print(f"\n  1件目のフィールド: {list(rows[0].keys())}")
+              print("  --- 1件目 ---")
+              print("  " + json.dumps(rows[0], ensure_ascii=False, indent=2).replace("\n", "\n  ")[:900])
+              months = Counter(str(r.get("event_date") or "?")[:7] for r in rows)
+              print(f"\n  月別の件数: {json.dumps(dict(sorted(months.items())), ensure_ascii=False)}")
+              print(f"\n  --- 直近に発表された分割 30件（銘柄コード・社名・日付・種別）---")
+              for row in sorted(rows, key=lambda r: str(r.get("event_date") or ""), reverse=True)[:30]:
+                  meta = row.get("metadata") or {}
+                  print(f"    {row.get('event_date')} {row.get('sec_code')} "
+                        f"{str(row.get('filer_name'))[:18]:<18} [{row.get('_etype')}] "
+                        f"{str(row.get('title'))[:44]}")
+
+              codes = sorted({str(r.get("sec_code") or "")[:4] for r in rows if r.get("sec_code")})
+              print(f"\n  ★ 分割・併合を発表した銘柄数（重複除く）: {len(codes)}")
+              print("  " + " ".join(codes))
           print("\n調査終了")
           PY

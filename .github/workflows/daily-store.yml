@@ -43,12 +43,43 @@ jobs:
       - name: 依存ライブラリをインストール
         run: python -m pip install --disable-pip-version-check -r scripts/requirements.txt
 
+      - name: 外部由来データがリポジトリに入っていないか確認
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 公開してよいのはEDINET原本から作った2次資料まで。以下は外部サイト由来の
+          # 値そのものを含むので、Publicのこのリポジトリには絶対に入れない。
+          #   fiscal_dividends.json          … 半分近くの年が haitoukin-checker 由来
+          #   haitoukin_fills.json           … haitoukin-checker 由来の配当額そのもの
+          #   dividends.json                 … Yahoo(yfinance)由来＋上の補完入り（廃止済み）
+          #   calendar_dividends_frozen.json … 上から切り出した14銘柄分の凍結スナップショット
+          # 利用の許可はあるが再配布の許可ではない。誤ってコミットされたら
+          # ここで気づけるようにする。
+          tracked=0
+          for path in \
+            data/fiscal_dividends.json \
+            data/haitoukin_fills.json \
+            data/dividends.json \
+            data/calendar_dividends_frozen.json
+          do
+            if git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
+              echo "::error::${path} がリポジトリに入っています。外部サイト由来のデータをPublicリポジトリに置くことはできません。git rm --cached で外してください。"
+              tracked=1
+            fi
+          done
+          if [[ "$tracked" -ne 0 ]]; then
+            exit 1
+          fi
+          echo "外部由来データはリポジトリに入っていません。"
+
       - name: 非公開ファイルの一時パスを設定
         shell: bash
         run: |
           set -euo pipefail
           echo "STATE_FILE=${RUNNER_TEMP}/forecasts_state.json" >> "$GITHUB_ENV"
           echo "SQLITE_FILE=${RUNNER_TEMP}/stocks.sqlite" >> "$GITHUB_ENV"
+          echo "FISCAL_FILE=${RUNNER_TEMP}/fiscal_dividends.json" >> "$GITHUB_ENV"
+          echo "CALENDAR_FILE=${RUNNER_TEMP}/calendar_dividends_frozen.json" >> "$GITHUB_ENV"
 
       - name: FTPS設定を検証
         shell: bash
@@ -95,13 +126,107 @@ jobs:
             fi
           fi
 
+      - name: 事業年度の配当系列をFTPSから取得
+        shell: bash
+        run: |
+          set -euo pipefail
+          # このファイルはリポジトリに置けない（外部サイト由来のデータを含み、
+          # このリポジトリはPublicのため）。ConoHaの非公開dataディレクトリから
+          # 実行のたびに取ってきて、ランナーの一時領域だけで使う。
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          curl \
+            --ssl-reqd \
+            --fail \
+            --silent \
+            --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$FISCAL_FILE" \
+            "ftp://${FTP_HOST}${remote_dir}/fiscal_dividends.json"
+          # 中身がJSONとして読めるかまで確認する（途中で切れたファイルで
+          # ビルドすると、配当系列が欠けたまま本番に出てしまうため）。
+          python - <<'PY'
+          import json
+          import os
+          path = os.environ["FISCAL_FILE"]
+          with open(path, encoding="utf-8") as source:
+              document = json.load(source)
+          if not isinstance(document, dict) or len(document) < 3000:
+              raise SystemExit(
+                  f"事業年度の配当系列が不足しています（{type(document).__name__}, "
+                  f"{len(document) if isinstance(document, dict) else 0}銘柄）"
+              )
+          print(f"事業年度の配当系列を取得しました: {len(document):,}銘柄")
+          PY
+
+      - name: 暦年の凍結スナップショットをFTPSから取得
+        shell: bash
+        run: |
+          set -euo pipefail
+          # EDINETにもhaitoukin-checkerにも配当の記載が無く、事業年度の系列を
+          # 作れなかった銘柄（14銘柄）の配当グラフ用。Yahoo由来の値を含むので
+          # リポジトリには置けない。凍結（更新しない）ファイル。
+          # 無くてもビルドは通る（その14銘柄のグラフだけが空になる）ので、
+          # 取得に失敗しても止めない。
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          if curl \
+            --ssl-reqd \
+            --fail \
+            --silent \
+            --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$CALENDAR_FILE" \
+            "ftp://${FTP_HOST}${remote_dir}/calendar_dividends_frozen.json"
+          then
+            python - <<'PY'
+          import json
+          import os
+          path = os.environ["CALENDAR_FILE"]
+          with open(path, encoding="utf-8") as source:
+              document = json.load(source)
+          stocks = document.get("stocks") if isinstance(document, dict) else None
+          if not isinstance(stocks, dict) or not stocks:
+              raise SystemExit("凍結スナップショットが空です")
+          print(f"暦年の凍結スナップショットを取得しました: {len(stocks):,}銘柄")
+          PY
+          else
+            echo "::warning::凍結スナップショットを取得できませんでした。該当14銘柄の配当グラフが空になります。"
+            rm -f "$CALENDAR_FILE"
+          fi
+
       - name: 配当予想を更新
-        run: python scripts/fetch_forecasts.py --state "$STATE_FILE"
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="${RUNNER_TEMP}/fetch_forecasts.log"
+          python scripts/fetch_forecasts.py \
+            --fiscal-dividends "$FISCAL_FILE" \
+            --calendar-dividends "$CALENDAR_FILE" \
+            --state "$STATE_FILE" | tee "$log"
+          # 1銘柄のAPI失敗ではもう止まらない（止めるとこの後のストア構築も
+          # FTPS反映も走らず、株価や利回りまで更新されなくなるため）。
+          # 代わりに、まとまった数が失敗していたら実行結果の画面に出す。
+          # 認証失敗のような全体障害はスクリプトが非0で終わるので、
+          # 警告ではなくステップの失敗として現れる。
+          summary="$(grep -m1 '^summary ' "$log" || true)"
+          if [[ -z "$summary" ]]; then
+            echo "::warning::配当予想の取得結果を読み取れませんでした。ログを確認してください。"
+          else
+            selected="$(sed -n 's/.*selected=\([0-9][0-9]*\).*/\1/p' <<<"$summary")"
+            failed="$(sed -n 's/.*failed=\([0-9][0-9]*\).*/\1/p' <<<"$summary")"
+            selected="${selected:-0}"
+            failed="${failed:-0}"
+            # 取得しようとした件数の1割を超えたら警告する。
+            if (( failed > 0 && failed * 10 > selected )); then
+              echo "::warning::配当予想の取得で ${selected} 件中 ${failed} 件が失敗しました。edinetdb.jp の状態とAPIキーを確認してください。"
+            fi
+          fi
 
       - name: SQLiteストアを構築
         run: >-
           python scripts/build_store.py
           --forecasts "$STATE_FILE"
+          --fiscal-dividends "$FISCAL_FILE"
+          --calendar-dividends "$CALENDAR_FILE"
           --output "$SQLITE_FILE"
 
       - name: 予想stateをFTPSへ書き戻す

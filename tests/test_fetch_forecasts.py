@@ -1,4 +1,6 @@
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -358,6 +360,26 @@ class FetchLoopResilienceTest(unittest.TestCase):
         self.assertEqual(fetch.call_count, len(self.CODES))
         self.assertEqual(len(self.state()["stocks"]), len(self.CODES))
         self.assertEqual(self.state()["stocks"]["7203"]["forecastDividend"], 80.0)
+
+    def test_a_machine_readable_summary_line_is_printed(self) -> None:
+        """CI側がこの行を見て、まとまった失敗を警告に出す。"""
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            self.run_main(self.failing_fetch("8058"))
+        self.assertIn("summary selected=5 ok=4 failed=1", buffer.getvalue())
+
+    def test_the_summary_line_has_no_thousands_separator(self) -> None:
+        """桁区切りが入るとCI側の数値の取り出しが壊れる。"""
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            self.run_main(self.failing_fetch())
+        summary = [
+            line
+            for line in buffer.getvalue().splitlines()
+            if line.startswith("summary ")
+        ]
+        self.assertEqual(len(summary), 1)
+        self.assertNotIn(",", summary[0])
 
     def test_a_broken_response_is_a_per_stock_failure(self) -> None:
         """不正JSON・想定外の形も1銘柄の失敗として扱う（全体は止めない）。"""

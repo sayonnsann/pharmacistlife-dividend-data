@@ -852,6 +852,10 @@ def main() -> None:
         f"（予想なし {no_forecast:,}件、失敗 {failed:,}件、"
         f"対象 {len(candidates):,}件）"
     )
+    # 上の行は人間向け。こちらは呼び出し側（CIなど）が拾う用に、桁区切りも
+    # 日本語も入れずに出す。個別銘柄の失敗ではもう止まらないので、
+    # まとまった数が失敗したことに気づく手がかりが要る。
+    print(f"summary selected={len(selected)} ok={processed} failed={failed}")
     if last_remaining is not None:
         print(f"edinetdb日次残量: {last_remaining:,}")
     print(f"状態保存: {args.state}")

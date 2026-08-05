@@ -909,12 +909,12 @@ class ForecastSplitBasisTest(unittest.TestCase):
     def test_a_yearly_forecast_already_on_one_basis_is_not_recomposed(
         self,
     ) -> None:
-        """pre_split と申告された期は、組み立て直すと係数が二重に掛かる。"""
+        """内訳の合計が年間値と一致する期は、組み立てると係数が二重に掛かる。"""
         resolved = build_store.forecast_on_price_basis(
             TOUKEI_Q1, today=self.BEFORE
         )
         self.assertEqual(resolved["value"], 173)
-        self.assertEqual(resolved["basis"], "pre_split_reported")
+        self.assertEqual(resolved["basis"], "single_basis_as_reported")
         # 62.5 + 110.5×4 = 504.5 は誤り（API側の 43.25×4 = 173 とも合わない）
         self.assertNotEqual(resolved["value"], 504.5)
         after = build_store.forecast_values(
@@ -927,6 +927,8 @@ class ForecastSplitBasisTest(unittest.TestCase):
             )[1],
             after[1],
         )
+
+
 
     def test_composes_after_the_split_when_the_api_value_is_missing(self) -> None:
         record = dict(TOUKEI_Q2)
@@ -1038,6 +1040,132 @@ class ForecastSplitBasisTest(unittest.TestCase):
         self.assertEqual(result["2027"]["interim"], 40.0)
         self.assertEqual(result["2027"]["final"], 44.0)
 
+
+class ForecastLegsSelfCheckTest(unittest.TestCase):
+    """組み立てるかどうかは、申告ではなくデータ自身の検算で決める。
+
+    中間＋期末が会社発表の年間値と一致すれば、その期の予想はどこかの
+    一つの株数基準で書かれている。一致しなければ、中間と期末が別々の
+    株数に対する金額（＝期中分割）だと分かる。
+    """
+
+    BEFORE = date(2026, 9, 30)
+
+    def resolve(self, **overrides) -> dict:
+        record = {
+            "forecastSplitFactor": 4,
+            "forecastSplitEffectiveDate": "2026-10-01",
+            **overrides,
+        }
+        return build_store.forecast_on_price_basis(record, today=self.BEFORE)
+
+    def test_the_check_separates_the_two_real_disclosures(self) -> None:
+        self.assertFalse(build_store.legs_match_annual(86.5, 97.5, 97.5))
+        self.assertTrue(build_store.legs_match_annual(62.5, 110.5, 173))
+
+    def test_the_route_does_not_depend_on_the_reported_basis(self) -> None:
+        """forecast_share_basis が何であっても、また無くても同じ結果になる。"""
+        for reported in ("indeterminate", "pre_split", "post_split", "", None):
+            with self.subTest(reported=reported, legs="混在"):
+                mixed = dict(TOUKEI_Q2)
+                mixed["forecastShareBasis"] = reported
+                resolved = build_store.forecast_on_price_basis(
+                    mixed, today=self.BEFORE
+                )
+                self.assertEqual(resolved["value"], 476.5)
+                self.assertEqual(resolved["basis"], "pre_split_composed")
+            with self.subTest(reported=reported, legs="単一"):
+                single = dict(TOUKEI_Q1)
+                single["forecastShareBasis"] = reported
+                resolved = build_store.forecast_on_price_basis(
+                    single, today=self.BEFORE
+                )
+                self.assertEqual(resolved["value"], 173)
+                self.assertEqual(resolved["basis"], "single_basis_as_reported")
+
+    def test_a_missing_share_basis_key_is_fine(self) -> None:
+        for source, expected, basis in (
+            (TOUKEI_Q2, 476.5, "pre_split_composed"),
+            (TOUKEI_Q1, 173, "single_basis_as_reported"),
+        ):
+            with self.subTest(expected=expected):
+                record = {
+                    key: value
+                    for key, value in source.items()
+                    if key != "forecastShareBasis"
+                }
+                resolved = build_store.forecast_on_price_basis(
+                    record, today=self.BEFORE
+                )
+                self.assertEqual(resolved["value"], expected)
+                self.assertEqual(resolved["basis"], basis)
+
+    def test_post_split_with_matching_legs_is_left_alone(self) -> None:
+        """中間も期末も分割後基準なら合計が年間値と合う。組み立てない。"""
+        resolved = self.resolve(
+            forecastDividend=119.125,
+            forecastInterimDividend=21.625,
+            forecastFinalDividend=97.5,
+            forecastShareBasis="post_split",
+        )
+        self.assertEqual(resolved["value"], 119.125)
+        self.assertEqual(resolved["basis"], "single_basis_as_reported")
+
+    def test_post_split_with_mismatched_legs_is_still_composed(self) -> None:
+        """申告と検算が食い違うときは検算を採る（判断の理由はコードのコメント）。"""
+        resolved = self.resolve(
+            forecastDividend=97.5,
+            forecastInterimDividend=86.5,
+            forecastFinalDividend=97.5,
+            forecastShareBasis="post_split",
+        )
+        self.assertEqual(resolved["value"], 476.5)
+        self.assertEqual(resolved["basis"], "pre_split_composed")
+
+    def test_small_rounding_gaps_still_count_as_a_match(self) -> None:
+        # 年間値100円なら許容は0.5円（0.01円と0.5%の大きいほう）
+        for legs_total, matches in ((100.4, True), (100.5, True), (100.6, False)):
+            with self.subTest(total=legs_total):
+                resolved = self.resolve(
+                    forecastDividend=100.0,
+                    forecastInterimDividend=50.0,
+                    forecastFinalDividend=legs_total - 50.0,
+                )
+                self.assertEqual(
+                    resolved["basis"],
+                    "single_basis_as_reported" if matches else "pre_split_composed",
+                )
+
+    def test_tiny_dividends_use_the_absolute_tolerance(self) -> None:
+        # 年間1円なら0.5%は0.005円。0.01円まで同じとみなす
+        self.assertTrue(build_store.legs_match_annual(0.5, 0.505, 1.0))
+        self.assertFalse(build_store.legs_match_annual(0.5, 0.52, 1.0))
+
+    def test_a_missing_leg_cannot_be_checked(self) -> None:
+        self.assertFalse(build_store.legs_match_annual(None, 97.5, 97.5))
+        self.assertFalse(build_store.legs_match_annual(86.5, None, 97.5))
+        self.assertFalse(build_store.legs_match_annual(86.5, 97.5, None))
+
+    def test_without_legs_a_pre_split_claim_is_still_used(self) -> None:
+        """検算できないときだけ、申告を判断材料にする。"""
+        resolved = self.resolve(
+            forecastDividend=173,
+            forecastInterimDividend=None,
+            forecastFinalDividend=None,
+            forecastShareBasis="pre_split",
+        )
+        self.assertEqual(resolved["value"], 173)
+        self.assertEqual(resolved["basis"], "pre_split_reported")
+
+    def test_without_legs_and_without_a_claim_the_raw_value_is_kept(self) -> None:
+        resolved = self.resolve(
+            forecastDividend=173,
+            forecastInterimDividend=None,
+            forecastFinalDividend=None,
+            forecastShareBasis="indeterminate",
+        )
+        self.assertEqual(resolved["value"], 173)
+        self.assertEqual(resolved["basis"], "raw")
 
 class ForecastSplitBasisInStoreTest(unittest.TestCase):
     """DBに書き出すところまで通して確かめる。"""

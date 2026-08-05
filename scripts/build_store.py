@@ -587,6 +587,29 @@ def forecast_split_effective_date(record: dict[str, Any]) -> date | None:
         return None
 
 
+def legs_match_annual(
+    interim: float | int | None,
+    final: float | int | None,
+    annual: float | int | None,
+) -> bool:
+    """中間＋期末が会社発表の年間値と一致するか。
+
+    一致するなら、その期の予想は中間も期末も年間値も同じ株数で書かれている
+    （＝どこかの一つの基準で揃っている）。一致しないなら、中間と期末が別々の
+    株数に対する金額で、足しても意味のある数にならない期だと分かる。
+
+      東計電算のQ2開示: 86.5 + 97.5 = 184.0 ≠ 97.5   → 混在
+      同じ銘柄のQ1開示: 62.5 + 110.5 = 173.0 = 173.0 → 単一基準
+
+    円未満の端数と、まとめて出すときの丸めを吸収するため、0.01円と
+    年間値の0.5%の大きいほうまでは同じとみなす。
+    """
+    if interim is None or final is None or annual is None:
+        return False
+    tolerance = max(0.01, abs(float(annual)) * 0.005)
+    return abs(float(interim) + float(final) - float(annual)) <= tolerance
+
+
 def forecast_on_price_basis(record: Any, *, today: date) -> dict[str, Any]:
     """予想配当を、株価と同じ株数基準に揃えて返す。
 
@@ -604,10 +627,20 @@ def forecast_on_price_basis(record: Any, *, today: date) -> dict[str, Any]:
     株価と組み合わせると利回りが1/4になってしまう。分割日を過ぎてからなら
     基準が合うのでそのまま使える。
 
+    ただし、分割日をまたぐ期でも会社が予想を一つの基準に揃えて出している
+    ことがある。組み立てるかどうかは中間＋期末が年間値と一致するかで決める
+    （legs_match_annual 参照）。合っているなら組み立て直さない。
+
     返す辞書:
       value   … 表示・利回り計算に使う年間予想
-      basis   … どの経路で決めたか（pre_split_composed / post_split_adjusted /
-                post_split_composed / raw）
+      basis   … どの経路で決めたか
+                  single_basis_as_reported … 内訳の合計が年間値と一致した
+                                              ので、会社発表の年間値のまま
+                  pre_split_composed  … 分割日前。中間 + 期末×係数
+                  pre_split_reported  … 内訳が無く、申告が pre_split
+                  post_split_adjusted … 分割日以降。API側の分割後年間値
+                  post_split_composed … 分割日以降。中間÷係数 + 期末
+                  raw                 … 分割の予定なし、または判断材料なし
       interim … value と同じ株数基準に揃えた中間（取れなければNone）
       final   … 同じく期末
     """
@@ -633,19 +666,33 @@ def forecast_on_price_basis(record: Any, *, today: date) -> dict[str, Any]:
         return as_raw()
 
     if today < effective:
-        # 会社発表の年間予想が「分割前の株数で揃えてある」とAPIが明示して
-        # いる期（forecast_share_basis = pre_split）は、生の年間値がすでに
-        # 分割前の株価と同じ基準になっている。ここで組み立て直すと係数が
-        # 二重に掛かる（東計電算のQ1開示なら 62.5+110.5×4 = 504.5円。
-        # 正しくは173円で、API側の adjusted 43.25×4 = 173 とも合う）。
-        if reported_share_basis(record) == "pre_split":
+        # まずデータ自身で確かめる。中間＋期末が年間値と一致するなら、その期の
+        # 予想は一つの株数基準で書かれているので、組み立て直すと係数が二重に
+        # 掛かる（東計電算のQ1開示なら 62.5+110.5×4 = 504.5円。正しくは173円で、
+        # API側の adjusted 43.25×4 = 173 とも合う）。
+        if legs_match_annual(interim, final, raw_value):
             return {
                 "value": raw_value,
-                "basis": "pre_split_reported",
+                "basis": "single_basis_as_reported",
                 "interim": interim,
                 "final": final,
             }
+        # 合計が合わないのは、中間と期末が別々の株数に対する金額だから。
+        # forecast_share_basis が何と申告していても（post_split でも）、
+        # ここはデータ自身の検算を優先して組み立てる。混在期は会社も年間値と
+        # して意味のある一つの数字を出せていない（東計電算のQ2開示なら
+        # forecast_dividend_per_share=97.5 は期末だけの額）ので、内訳から
+        # 組み立てるほうが根拠がはっきりする。
         if interim is None or final is None:
+            # 内訳が無いと検算できない。申告が pre_split なら、生の年間値が
+            # 分割前の株価と同じ基準だと分かるので、そのまま使ってよい。
+            if reported_share_basis(record) == "pre_split":
+                return {
+                    "value": raw_value,
+                    "basis": "pre_split_reported",
+                    "interim": interim,
+                    "final": final,
+                }
             return as_raw()
         composed_final = float(final) * factor
         total = bounded(round(float(interim) + composed_final, 4), 0, 1_000_000)

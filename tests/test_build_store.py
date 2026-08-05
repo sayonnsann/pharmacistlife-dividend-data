@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import sqlite3
 import tempfile
 import unittest
@@ -85,12 +86,12 @@ class SplitAdjustmentTest(unittest.TestCase):
                 path,
                 financials,
                 {},
-                [],
+                {},
                 {},
                 [
                     Path("financials"),
                     Path("sectors"),
-                    Path("dividends"),
+                    Path("tickers"),
                     Path("forecasts"),
                 ],
                 "fixture.csv",
@@ -214,3 +215,1001 @@ class SplitAdjustmentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FiscalDividendStatsTest(unittest.TestCase):
+    def test_counts_consecutive_increases_and_detects_ceiling(self) -> None:
+        stats = build_store.fiscal_dividend_stats(
+            {2022: 10.0, 2023: 11.0, 2024: 12.0, 2025: 13.0}
+        )
+        # 系列の一番古い年まで増配が続く＝それより前は確認できない
+        self.assertEqual(stats["streakIncrease"], 3)
+        self.assertTrue(stats["streakIncreaseCapped"])
+
+    def test_streak_that_stops_inside_the_series_is_not_capped(self) -> None:
+        stats = build_store.fiscal_dividend_stats(
+            {2021: 10.0, 2022: 9.0, 2023: 11.0, 2024: 12.0}
+        )
+        self.assertEqual(stats["streakIncrease"], 2)
+        self.assertFalse(stats["streakIncreaseCapped"])
+
+    def test_flat_year_stops_increase_but_not_non_decrease(self) -> None:
+        stats = build_store.fiscal_dividend_stats(
+            {2022: 10.0, 2023: 10.0, 2024: 11.0}
+        )
+        self.assertEqual(stats["streakIncrease"], 1)
+        self.assertEqual(stats["streakNonDecrease"], 2)
+        self.assertTrue(stats["streakNonDecreaseCapped"])
+
+    def test_unpaid_year_stops_the_streak(self) -> None:
+        # 無配(0円)から復配した年は「連続増配」に数えない
+        stats = build_store.fiscal_dividend_stats(
+            {2021: 8.0, 2022: 0.0, 2023: 5.0, 2024: 6.0, 2025: 7.0}
+        )
+        self.assertEqual(stats["streakIncrease"], 2)
+        self.assertFalse(stats["streakIncreaseCapped"])
+
+    def test_missing_year_stops_the_streak(self) -> None:
+        # 欠測年をまたいで比較すると連続していたか確認できない
+        stats = build_store.fiscal_dividend_stats(
+            {2020: 5.0, 2021: 6.0, 2023: 7.0, 2024: 8.0}
+        )
+        self.assertEqual(stats["streakIncrease"], 1)
+
+    def test_cagr_uses_year_distance_not_entry_count(self) -> None:
+        stats = build_store.fiscal_dividend_stats(
+            {2020: 100.0, 2023: 133.1, 2024: 150.0}
+        )
+        # 2021年が無いので「3年前」は2021年ではなく存在しない -> None
+        self.assertIsNone(stats["cagr3"])
+        self.assertIsNone(stats["cagr5"])
+
+    def test_cagr_is_computed_from_the_year_n_years_back(self) -> None:
+        series = {year: 100.0 * (1.1 ** (year - 2020)) for year in range(2020, 2026)}
+        stats = build_store.fiscal_dividend_stats(series)
+        self.assertAlmostEqual(stats["cagr3"], 10.0, places=1)
+        self.assertAlmostEqual(stats["cagr5"], 10.0, places=1)
+
+    def test_empty_series_is_all_zero(self) -> None:
+        stats = build_store.fiscal_dividend_stats({})
+        self.assertEqual(stats["streakIncrease"], 0)
+        self.assertFalse(stats["streakIncreaseCapped"])
+        self.assertIsNone(stats["cagr3"])
+
+
+class FiscalDividendLoaderTest(unittest.TestCase):
+    def load(self, document: dict) -> dict:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fiscal_dividends.json"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            return build_store.load_fiscal_dividends(path)
+
+    def test_skips_stocks_without_a_series(self) -> None:
+        loaded = self.load(
+            {
+                "1301": {"fiscalMonth": 3, "series": {}, "connection": {}},
+                "9433": {
+                    "fiscalMonth": 3,
+                    "series": {"2025": 72.5, "2026": 80.0},
+                    "connection": {"status": "scaled", "reason": "テスト"},
+                    "externalSource": "haitoukin-checker",
+                    "externalYears": [2025],
+                },
+            }
+        )
+        self.assertEqual(set(loaded), {"9433"})
+        self.assertEqual(loaded["9433"]["series"], {2025: 72.5, 2026: 80.0})
+        self.assertEqual(loaded["9433"]["connectionStatus"], "scaled")
+        self.assertEqual(loaded["9433"]["externalYears"], [2025])
+
+    def test_drops_external_years_that_are_not_in_the_series(self) -> None:
+        loaded = self.load(
+            {
+                "1301": {
+                    "fiscalMonth": 3,
+                    "series": {"2025": 130.0},
+                    "connection": {"status": "connected"},
+                    "externalYears": [1990, 2025],
+                }
+            }
+        )
+        self.assertEqual(loaded["1301"]["externalYears"], [2025])
+
+    def test_real_file_covers_most_of_the_universe(self) -> None:
+        path = ROOT / "data" / "fiscal_dividends.json"
+        if not path.exists():
+            self.skipTest(
+                "data/fiscal_dividends.json は外部由来のためリポジトリに含めない。"
+                "ConoHaから取得するか edinet-direct からコピーして実行する。"
+            )
+        loaded = build_store.load_fiscal_dividends(path)
+        self.assertGreater(len(loaded), 3000)
+        kddi = loaded["9433"]
+        self.assertEqual(kddi["fiscalMonth"], 3)
+        self.assertEqual(
+            build_store.fiscal_dividend_stats(kddi["series"])["streakIncrease"],
+            24,
+        )
+
+
+class FiscalSeriesInStoreTest(unittest.TestCase):
+    def build(
+        self,
+        path: Path,
+        fiscal: dict,
+        actions: dict,
+        *,
+        forecasts: dict | None = None,
+        frozen: dict | None = None,
+        financials: list | None = None,
+    ) -> None:
+        financials = financials if financials is not None else [
+            {"code": "9433", "name": "ＫＤＤＩ", "dividendPerShare": {"2026": 80.0}},
+            {"code": "9999", "name": "系列なし", "dividendPerShare": {"2026": 20.0}},
+        ]
+        tickers = {
+            "9433": {
+                "code": "9433",
+                "name": "ＫＤＤＩ",
+                "market": "プライム（内国株式）",
+                "sector": "情報・通信業",
+            },
+            "9999": {"code": "9999", "name": "系列なし"},
+        }
+        prices = {"9433": 2877.0, "9999": 1000.0}
+        with mock.patch.object(
+            build_store,
+            "load_daily_prices",
+            return_value=(prices, {"9433": 80.0, "9999": 20.0}, "2026-08-04"),
+        ):
+            build_store.create_database(
+                path,
+                financials,
+                {},
+                tickers,
+                forecasts or {},
+                [Path("f"), Path("s"), Path("t"), Path("fc")],
+                "fixture.csv",
+                actions,
+                Path("stock_actions.json"),
+                fiscal,
+                Path("fiscal_dividends.json"),
+                frozen or {},
+                Path("calendar_dividends_frozen.json"),
+                date(2026, 8, 5),
+            )
+
+    def test_fiscal_series_replaces_calendar_series(self) -> None:
+        fiscal = {
+            "9433": {
+                "series": {2023: 67.5, 2024: 70.0, 2025: 72.5, 2026: 80.0},
+                "fiscalMonth": 3,
+                "connectionStatus": "scaled",
+                "connectionReason": "テスト",
+                "externalSource": "haitoukin-checker",
+                "externalYears": [2023],
+            }
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            self.build(path, fiscal, {})
+            with sqlite3.connect(path) as connection:
+                rows = {
+                    row[0]: row
+                    for row in connection.execute(
+                        "SELECT code, streak, streak_nd, streak_capped,"
+                        " streak_nd_capped, cagr3, payload FROM stocks"
+                    )
+                }
+
+        kddi = json.loads(rows["9433"][6])
+        self.assertEqual(
+            kddi["annual"],
+            {"2023": 67.5, "2024": 70.0, "2025": 72.5, "2026": 80.0},
+        )
+        self.assertEqual(kddi["streakIncrease"], 3)
+        self.assertTrue(kddi["streakIncreaseCapped"])
+        self.assertEqual(rows["9433"][1], 3)
+        self.assertEqual(rows["9433"][3], 1)
+        self.assertEqual(rows["9433"][5], kddi["cagr3"])
+        # Yahooの「集計中」は無くなった。会社発表が無ければバーは出ない。
+        self.assertEqual(kddi["annualPartial"], {})
+        self.assertEqual(kddi["annualPending"], {})
+        self.assertNotIn("annualPartialCalendar", kddi)
+        self.assertEqual(kddi["dividendSeries"]["basis"], "fiscal")
+        self.assertEqual(kddi["dividendSeries"]["externalYears"], [2023])
+        # 銘柄マスタ（JPX由来）から市場・業種が入る
+        self.assertEqual(kddi["market"], "プライム（内国株式）")
+        self.assertEqual(kddi["sector"], "情報・通信業")
+
+        # 系列が無く凍結スナップショットにも無い銘柄は、配当の年数がNULLになる
+        other = json.loads(rows["9999"][6])
+        self.assertNotIn("annual", other)
+        self.assertIsNone(other["streakIncrease"])
+        self.assertEqual(other["annualPartial"], {})
+        self.assertEqual(other["dividendSeries"]["basis"], "calendar")
+        self.assertFalse(other["dividendSeries"]["frozen"])
+        self.assertEqual(rows["9999"][3], 0)
+
+    def test_frozen_calendar_snapshot_fills_the_stocks_without_a_series(
+        self,
+    ) -> None:
+        frozen = {
+            "9999": {
+                "name": "系列なし",
+                "series": {2018: 5.0, 2019: 6.0, 2020: 7.0},
+            }
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            self.build(path, {}, {}, frozen=frozen)
+            with sqlite3.connect(path) as connection:
+                rows = {
+                    row[0]: row
+                    for row in connection.execute(
+                        "SELECT code, streak, payload FROM stocks"
+                    )
+                }
+        payload = json.loads(rows["9999"][2])
+        self.assertEqual(payload["annual"], {"2018": 5.0, "2019": 6.0, "2020": 7.0})
+        # 年数は凍結系列から数え直す（Yahooが付けていた値は使わない）
+        self.assertEqual(payload["streakIncrease"], 2)
+        self.assertEqual(rows["9999"][1], 2)
+        self.assertTrue(payload["dividendSeries"]["frozen"])
+        self.assertEqual(payload["dividendSeries"]["basis"], "calendar")
+
+    def test_pending_bar_comes_from_the_company_announcement(self) -> None:
+        fiscal = {
+            "9433": {
+                "series": {2024: 70.0, 2025: 72.5},
+                "fiscalMonth": 3,
+                "connectionStatus": "connected",
+                "connectionReason": "",
+                "externalSource": None,
+                "externalYears": [],
+            }
+        }
+        forecasts = {
+            "9433": {
+                "forecastDividend": 84.0,
+                "forecastPeriod": "2027年3月期(予)",
+                "forecastFiscalYear": 2027,
+                "confirmedDividend": 80.0,
+                "confirmedFiscalYearEnd": "2026-03-31",
+                "lastFetchedAt": "2026-08-05",
+            }
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            self.build(path, fiscal, {}, forecasts=forecasts)
+            with sqlite3.connect(path) as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload FROM stocks WHERE code='9433'"
+                    ).fetchone()[0]
+                )
+        self.assertEqual(
+            payload["annualPartial"], {"2026": 80.0, "2027": 84.0}
+        )
+        self.assertEqual(payload["annualPending"]["2026"]["kind"], "confirmed")
+        self.assertEqual(payload["annualPending"]["2026"]["label"], "確定")
+        self.assertEqual(payload["annualPending"]["2027"]["kind"], "forecast")
+        self.assertEqual(payload["annualPending"]["2027"]["label"], "予想")
+
+    def test_payout_ratio_line_comes_from_edinet(self) -> None:
+        financials = [
+            {
+                "code": "9433",
+                "name": "ＫＤＤＩ",
+                "payoutRatioTotalBased": {"2024": 49.57, "2025": 43.77},
+            },
+            {"code": "9999", "name": "系列なし"},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            self.build(path, {}, {}, financials=financials)
+            with sqlite3.connect(path) as connection:
+                rows = {
+                    row[0]: (row[1], json.loads(row[2]))
+                    for row in connection.execute(
+                        "SELECT code, payout, payload FROM stocks"
+                    )
+                }
+        self.assertEqual(
+            rows["9433"][1]["payoutRatio"],
+            {"2024": 49.57, "2025": 43.77},
+        )
+        self.assertEqual(rows["9433"][0], 43.77)
+        # EDINET側に無ければ折れ線も出さない（Yahooの暦年値には戻さない）
+        self.assertEqual(rows["9999"][1]["payoutRatio"], {})
+        self.assertIsNone(rows["9999"][0])
+
+    def test_split_factor_is_applied_to_the_fiscal_series(self) -> None:
+        fiscal = {
+            "9433": {
+                "series": {2025: 72.5, 2026: 80.0},
+                "fiscalMonth": 3,
+                "connectionStatus": "edinet_only",
+                "connectionReason": "",
+                "externalSource": None,
+                "externalYears": [],
+            }
+        }
+        actions = {
+            "9433": [event("9433", "one-to-two", 1, 2, eps_adjusted=False)]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            self.build(path, fiscal, actions)
+            with sqlite3.connect(path) as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload FROM stocks WHERE code = '9433'"
+                    ).fetchone()[0]
+                )
+        self.assertEqual(payload["annual"], {"2025": 36.25, "2026": 40.0})
+        # 比なので連続増配・増配率は分割で変わらない
+        self.assertEqual(payload["streakIncrease"], 1)
+
+    def test_unreliable_stock_hides_years_but_keeps_the_series(self) -> None:
+        """株式分割の基準ズレで数えられない銘柄は、年数だけ空欄にする。
+
+        イエローハット(9882)を模した形。2025年度100円→2026年度62円と並ぶが、
+        2025年4月1日の1→2分割が入っているので62円は分割後の基準。
+        0年ではなくNULLにし、配当系列（グラフ）はそのまま残す。
+        """
+        fiscal = {
+            "9433": {
+                "series": {2023: 90.0, 2024: 95.0, 2025: 100.0, 2026: 62.0},
+                "fiscalMonth": 3,
+                "connectionStatus": "edinet_only",
+                "connectionReason": "",
+                "externalSource": None,
+                "externalYears": [],
+                "streakReliable": False,
+                "streakUnreliableReason": "split_basis",
+                "streakUnreliableNote": "株式分割の基準がそろっていない",
+                "streakBreakYears": [2025, 2026],
+            }
+        }
+        frozen = {"9999": {"name": "系列なし", "series": {2024: 19.0, 2025: 20.0}}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            self.build(path, fiscal, {}, frozen=frozen)
+            with sqlite3.connect(path) as connection:
+                row = connection.execute(
+                    "SELECT streak, streak_nd, streak_capped,"
+                    " streak_nd_capped, streak_unreliable, cagr3, payload"
+                    " FROM stocks WHERE code = '9433'"
+                ).fetchone()
+                # NULLは比較条件に一致しないので、絞り込みから自動的に外れる
+                filtered = connection.execute(
+                    "SELECT COUNT(*) FROM stocks WHERE streak >= 0"
+                ).fetchone()[0]
+                unreliable_count = connection.execute(
+                    "SELECT COUNT(*) FROM stocks WHERE streak_unreliable = 1"
+                ).fetchone()[0]
+
+        streak, streak_nd, capped, nd_capped, unreliable, cagr3, raw = row
+        self.assertIsNone(streak)
+        self.assertIsNone(streak_nd)
+        self.assertEqual(capped, 0)
+        self.assertEqual(nd_capped, 0)
+        self.assertEqual(unreliable, 1)
+        # 3年増配率は2023→2026なので基準の切れ目をまたぐ
+        self.assertIsNone(cagr3)
+
+        payload = json.loads(raw)
+        self.assertIsNone(payload["streakIncrease"])
+        self.assertIsNone(payload["streakNonDecrease"])
+        self.assertIsNone(payload["cagr3"])
+        self.assertEqual(payload["streakUnreliable"]["reason"], "split_basis")
+        self.assertEqual(
+            payload["streakUnreliable"]["breakYears"], [2025, 2026]
+        )
+        # 配当系列は消さない（グラフは出せる）
+        self.assertEqual(
+            payload["annual"],
+            {"2023": 90.0, "2024": 95.0, "2025": 100.0, "2026": 62.0},
+        )
+        # 系列が無い9999だけが残り、伏せた銘柄は絞り込みに出てこない
+        self.assertEqual(filtered, 1)
+        self.assertEqual(unreliable_count, 1)
+
+    def test_reliable_stock_is_not_flagged(self) -> None:
+        fiscal = {
+            "9433": {
+                "series": {2025: 72.5, 2026: 80.0},
+                "fiscalMonth": 3,
+                "connectionStatus": "edinet_only",
+                "connectionReason": "",
+                "externalSource": None,
+                "externalYears": [],
+                "streakReliable": True,
+                "streakUnreliableReason": None,
+                "streakUnreliableNote": None,
+                "streakBreakYears": [],
+            }
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            self.build(path, fiscal, {})
+            with sqlite3.connect(path) as connection:
+                streak, unreliable, raw = connection.execute(
+                    "SELECT streak, streak_unreliable, payload FROM stocks"
+                    " WHERE code = '9433'"
+                ).fetchone()
+        self.assertEqual(streak, 1)
+        self.assertEqual(unreliable, 0)
+        self.assertIsNone(json.loads(raw)["streakUnreliable"])
+
+
+class StreakBasisFlagTest(unittest.TestCase):
+    """印の読み取りと、増配率を落とす区間の判定。"""
+
+    def load(self, document: dict) -> dict:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "fiscal_dividends.json"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            return build_store.load_fiscal_dividends(path)
+
+    def test_reads_the_flag_written_by_edinet_direct(self) -> None:
+        loaded = self.load(
+            {
+                "9882": {
+                    "fiscalMonth": 3,
+                    "series": {"2025": 100.0, "2026": 62.0},
+                    "connection": {},
+                    "streakBasis": {
+                        "reliable": False,
+                        "reason": "split_basis",
+                        "note": "テスト",
+                        "breakYears": [2025, 2026],
+                    },
+                },
+                "9433": {
+                    "fiscalMonth": 3,
+                    "series": {"2025": 72.5, "2026": 80.0},
+                    "connection": {},
+                    "streakBasis": {"reliable": True},
+                },
+            }
+        )
+        self.assertFalse(loaded["9882"]["streakReliable"])
+        self.assertEqual(loaded["9882"]["streakUnreliableReason"], "split_basis")
+        self.assertEqual(loaded["9882"]["streakBreakYears"], [2025, 2026])
+        self.assertTrue(loaded["9433"]["streakReliable"])
+        self.assertEqual(loaded["9433"]["streakBreakYears"], [])
+
+    def test_missing_flag_is_treated_as_countable(self) -> None:
+        """印が無い（印を付ける前の版の）ファイルでも壊れずに動く。"""
+        loaded = self.load(
+            {"9433": {"fiscalMonth": 3, "series": {"2026": 80.0}, "connection": {}}}
+        )
+        self.assertTrue(loaded["9433"]["streakReliable"])
+
+    def test_only_the_spans_that_cross_the_break_are_dropped(self) -> None:
+        series = {year: float(year - 2000) for year in range(2015, 2027)}
+        stats = build_store.fiscal_dividend_stats(
+            series, streak_reliable=False, break_years=[2021, 2022]
+        )
+        self.assertIsNone(stats["streakIncrease"])
+        self.assertIsNone(stats["streakNonDecrease"])
+        # 2023〜2026はまたがないので残る、2016〜2026・2021〜2026はまたぐ
+        self.assertIsNotNone(stats["cagr3"])
+        self.assertIsNone(stats["cagr5"])
+        self.assertIsNone(stats["cagr10"])
+
+    def test_unknown_break_years_drop_every_span(self) -> None:
+        series = {year: float(year - 2000) for year in range(2015, 2027)}
+        stats = build_store.fiscal_dividend_stats(
+            series, streak_reliable=False, break_years=[]
+        )
+        self.assertIsNone(stats["cagr3"])
+        self.assertIsNone(stats["cagr5"])
+        self.assertIsNone(stats["cagr10"])
+
+    def test_real_file_marks_the_reviewed_stocks(self) -> None:
+        path = ROOT / "data" / "fiscal_dividends.json"
+        if not path.exists():
+            self.skipTest(
+                "data/fiscal_dividends.json は外部由来のためリポジトリに含めない。"
+                "ConoHaから取得するか edinet-direct からコピーして実行する。"
+            )
+        loaded = build_store.load_fiscal_dividends(path)
+        unreliable = [
+            code for code, record in loaded.items() if not record["streakReliable"]
+        ]
+        self.assertGreater(len(unreliable), 50)
+        self.assertIn("9882", unreliable)
+        self.assertNotIn("9433", unreliable)
+
+
+class PendingDividendsTest(unittest.TestCase):
+    TODAY = date(2026, 8, 5)
+
+    def pending(self, record: dict, years: set[int], **kwargs) -> dict:
+        return build_store.pending_dividends(
+            record, years, today=self.TODAY, **kwargs
+        )
+
+    def test_forecast_year_is_read_from_the_explicit_field(self) -> None:
+        result = self.pending(
+            {"forecastDividend": 84.0, "forecastFiscalYear": 2027},
+            {2025, 2026},
+        )
+        self.assertEqual(list(result), ["2027"])
+        self.assertEqual(result["2027"]["kind"], "forecast")
+        self.assertEqual(result["2027"]["value"], 84.0)
+
+    def test_forecast_year_falls_back_to_the_display_string(self) -> None:
+        for period, expected in (
+            ("2027年3月期(予)", "2027"),
+            ("FY2027", "2027"),
+        ):
+            with self.subTest(period=period):
+                result = self.pending(
+                    {"forecastDividend": 84.0, "forecastPeriod": period},
+                    {2026},
+                )
+                self.assertEqual(list(result), [expected])
+
+    def test_year_already_in_the_series_is_not_repeated(self) -> None:
+        # EDINETの有報から実績が取れている年は、そちらが正
+        result = self.pending(
+            {
+                "confirmedDividend": 80.0,
+                "confirmedFiscalYearEnd": "2026-03-31",
+                "forecastDividend": 84.0,
+                "forecastFiscalYear": 2027,
+            },
+            {2025, 2026},
+        )
+        self.assertEqual(list(result), ["2027"])
+
+    def test_confirmed_and_forecast_can_both_appear(self) -> None:
+        result = self.pending(
+            {
+                "confirmedDividend": 80.0,
+                "confirmedFiscalYearEnd": "2026-03-31",
+                "forecastDividend": 84.0,
+                "forecastFiscalYear": 2027,
+                "lastFetchedAt": "2026-08-05",
+            },
+            {2024, 2025},
+        )
+        self.assertEqual(result["2026"]["kind"], "confirmed")
+        self.assertEqual(result["2027"]["kind"], "forecast")
+        self.assertEqual(result["2026"]["fetchedAt"], "2026-08-05")
+
+    def test_stale_year_behind_the_series_is_dropped(self) -> None:
+        result = self.pending(
+            {"confirmedDividend": 60.0, "confirmedFiscalYearEnd": "2024-03-31"},
+            {2025, 2026},
+        )
+        self.assertEqual(result, {})
+
+    def test_absurd_future_year_is_dropped(self) -> None:
+        result = self.pending(
+            {"forecastDividend": 84.0, "forecastFiscalYear": 2031}, {2026}
+        )
+        self.assertEqual(result, {})
+
+    def test_zero_and_missing_values_produce_no_bar(self) -> None:
+        self.assertEqual(
+            self.pending({"forecastDividend": 0, "forecastFiscalYear": 2027}, {2026}),
+            {},
+        )
+        self.assertEqual(self.pending({}, {2026}), {})
+        self.assertEqual(self.pending(None, {2026}), {})
+
+    def test_split_factor_is_applied(self) -> None:
+        result = self.pending(
+            {"forecastDividend": 100.0, "forecastFiscalYear": 2027},
+            {2026},
+            factor=0.5,
+        )
+        self.assertEqual(result["2027"]["value"], 50.0)
+
+
+# 東計電算(4746 / E05066 / 12月決算)の実データ。2026-08-03開示のQ2。
+# 2026-10-01に1株→4株の分割があり、中間86.5円は分割前の株数に、
+# 期末97.5円は分割後の株数に対して払われる（足した184円はどの株数の
+# 話でもない）。fetch_forecasts.py が state に書く形。
+TOUKEI_Q2 = {
+    "forecastDividend": 97.5,
+    "forecastInterimDividend": 86.5,
+    "forecastFinalDividend": 97.5,
+    "forecastDividendAdjusted": 119.125,
+    "forecastSplitFactor": 4,
+    "forecastSplitEffectiveDate": "2026-10-01",
+    "forecastShareBasis": "indeterminate",
+    "forecastPeriod": "2026年12月期(予)",
+    "forecastFiscalYear": 2026,
+    "confirmedDividend": None,
+    "confirmedFiscalYearEnd": "2026-12-31",
+    "lastFetchedAt": "2026-08-06",
+}
+# 同じ銘柄の2026-05-07開示(Q1)。年間予想173円が分割前の株数で揃っていると
+# API側が申告している（forecast_share_basis = pre_split）。
+TOUKEI_Q1 = {
+    "forecastDividend": 173,
+    "forecastInterimDividend": 62.5,
+    "forecastFinalDividend": 110.5,
+    "forecastDividendAdjusted": 43.25,
+    "forecastSplitFactor": 4,
+    "forecastSplitEffectiveDate": "2026-10-01",
+    "forecastShareBasis": "pre_split",
+    "forecastPeriod": "2026年12月期(予)",
+    "forecastFiscalYear": 2026,
+    "confirmedDividend": 173,
+    "confirmedFiscalYearEnd": "2026-12-31",
+    "lastFetchedAt": "2026-05-08",
+}
+# 分割前後の株価。市場が分割日に株価を1/4にするので、配当も同じ日に
+# 基準を切り替えれば利回りが連続する。
+TOUKEI_PRICE_BEFORE = 5630.0
+TOUKEI_PRICE_AFTER = 1407.5
+
+
+class ForecastSplitBasisTest(unittest.TestCase):
+    """分割日をまたぐ期の予想配当を、株価と同じ株数基準に揃える。"""
+
+    BEFORE = date(2026, 9, 30)
+    ON_DAY = date(2026, 10, 1)
+    AFTER = date(2026, 11, 4)
+
+    def test_before_the_split_the_yearend_is_scaled_up(self) -> None:
+        resolved = build_store.forecast_on_price_basis(
+            TOUKEI_Q2, today=self.BEFORE
+        )
+        # 86.5 + 97.5×4
+        self.assertEqual(resolved["value"], 476.5)
+        self.assertEqual(resolved["basis"], "pre_split_composed")
+        # 内訳も同じ基準に揃える（足して表示値になる）
+        self.assertEqual(resolved["interim"], 86.5)
+        self.assertEqual(resolved["final"], 390.0)
+
+    def test_after_the_split_the_adjusted_value_is_used(self) -> None:
+        for today in (self.ON_DAY, self.AFTER):
+            with self.subTest(today=today):
+                resolved = build_store.forecast_on_price_basis(
+                    TOUKEI_Q2, today=today
+                )
+                # 86.5÷4 + 97.5
+                self.assertEqual(resolved["value"], 119.125)
+                self.assertEqual(resolved["basis"], "post_split_adjusted")
+                self.assertEqual(resolved["interim"], 21.625)
+                self.assertEqual(resolved["final"], 97.5)
+
+    def test_the_yield_is_continuous_across_the_split(self) -> None:
+        """分割の前後で利回りが同じになる（ここが壊れると表示が1/4になる）。"""
+        before = build_store.forecast_values(
+            TOUKEI_Q2, TOUKEI_PRICE_BEFORE, today=self.BEFORE
+        )
+        after = build_store.forecast_values(
+            TOUKEI_Q2, TOUKEI_PRICE_AFTER, today=self.AFTER
+        )
+        self.assertEqual(before[0], 476.5)
+        self.assertEqual(after[0], 119.125)
+        self.assertEqual(before[1], 8.46)
+        self.assertEqual(after[1], 8.46)
+        self.assertEqual(before[4], "pre_split_composed")
+        self.assertEqual(after[4], "post_split_adjusted")
+
+    def test_api_adjusted_value_alone_would_quarter_the_yield(self) -> None:
+        """直したかった症状そのもの。分割前の株価に分割後の配当を当てると1/4。"""
+        wrong = round(119.125 / TOUKEI_PRICE_BEFORE * 100, 2)
+        self.assertEqual(wrong, 2.12)
+        right = build_store.forecast_values(
+            TOUKEI_Q2, TOUKEI_PRICE_BEFORE, today=self.BEFORE
+        )[1]
+        self.assertEqual(right, 8.46)
+
+    def test_a_yearly_forecast_already_on_one_basis_is_not_recomposed(
+        self,
+    ) -> None:
+        """pre_split と申告された期は、組み立て直すと係数が二重に掛かる。"""
+        resolved = build_store.forecast_on_price_basis(
+            TOUKEI_Q1, today=self.BEFORE
+        )
+        self.assertEqual(resolved["value"], 173)
+        self.assertEqual(resolved["basis"], "pre_split_reported")
+        # 62.5 + 110.5×4 = 504.5 は誤り（API側の 43.25×4 = 173 とも合わない）
+        self.assertNotEqual(resolved["value"], 504.5)
+        after = build_store.forecast_values(
+            TOUKEI_Q1, TOUKEI_PRICE_AFTER, today=self.AFTER
+        )
+        self.assertEqual(after[0], 43.25)
+        self.assertEqual(
+            build_store.forecast_values(
+                TOUKEI_Q1, TOUKEI_PRICE_BEFORE, today=self.BEFORE
+            )[1],
+            after[1],
+        )
+
+    def test_composes_after_the_split_when_the_api_value_is_missing(self) -> None:
+        record = dict(TOUKEI_Q2)
+        record["forecastDividendAdjusted"] = None
+        resolved = build_store.forecast_on_price_basis(record, today=self.AFTER)
+        self.assertEqual(resolved["value"], 119.125)
+        self.assertEqual(resolved["basis"], "post_split_composed")
+
+    def test_falls_back_to_the_raw_value_when_a_leg_is_missing(self) -> None:
+        for missing in ("forecastInterimDividend", "forecastFinalDividend"):
+            with self.subTest(missing=missing):
+                record = dict(TOUKEI_Q2)
+                record[missing] = None
+                record["forecastDividendAdjusted"] = None
+                for today in (self.BEFORE, self.AFTER):
+                    resolved = build_store.forecast_on_price_basis(
+                        record, today=today
+                    )
+                    self.assertEqual(resolved["value"], 97.5)
+                    self.assertEqual(resolved["basis"], "raw")
+
+    def test_unusable_factors_never_multiply_or_divide(self) -> None:
+        for factor in (0, -4, None, "4", float("nan")):
+            with self.subTest(factor=factor):
+                record = dict(TOUKEI_Q2)
+                record["forecastSplitFactor"] = factor
+                for today in (self.BEFORE, self.AFTER):
+                    resolved = build_store.forecast_on_price_basis(
+                        record, today=today
+                    )
+                    self.assertEqual(resolved["value"], 97.5)
+                    self.assertEqual(resolved["basis"], "raw")
+
+    def test_a_broken_effective_date_is_ignored(self) -> None:
+        for raw in ("", "2026-13-01", "近日", None, 20261001):
+            with self.subTest(raw=raw):
+                record = dict(TOUKEI_Q2)
+                record["forecastSplitEffectiveDate"] = raw
+                resolved = build_store.forecast_on_price_basis(
+                    record, today=self.BEFORE
+                )
+                self.assertEqual(resolved["value"], 97.5)
+                self.assertEqual(resolved["basis"], "raw")
+
+    def test_stocks_without_a_split_keep_the_previous_behaviour(self) -> None:
+        """大多数の銘柄。今までどおり forecastDividend がそのまま出る。"""
+        plain = {
+            "forecastDividend": 84.0,
+            "forecastInterimDividend": 40.0,
+            "forecastFinalDividend": 44.0,
+            "forecastFiscalYear": 2027,
+        }
+        resolved = build_store.forecast_on_price_basis(plain, today=self.BEFORE)
+        self.assertEqual(resolved["value"], 84.0)
+        self.assertEqual(resolved["basis"], "raw")
+        self.assertEqual(resolved["interim"], 40.0)
+        self.assertEqual(resolved["final"], 44.0)
+        values = build_store.forecast_values(plain, 2000.0, today=self.BEFORE)
+        self.assertEqual(values[0], 84.0)
+        self.assertEqual(values[1], 4.2)
+        self.assertEqual(values[4], "raw")
+
+    def test_missing_record_is_still_handled(self) -> None:
+        for record in (None, {}, "文字列"):
+            with self.subTest(record=record):
+                resolved = build_store.forecast_on_price_basis(
+                    record, today=self.BEFORE
+                )
+                self.assertIsNone(resolved["value"])
+                self.assertEqual(resolved["basis"], "raw")
+        self.assertEqual(
+            build_store.forecast_values(None, 100.0, today=self.BEFORE),
+            (None, None, None, None, None),
+        )
+
+    def test_pending_bar_switches_basis_on_the_split_day(self) -> None:
+        before = build_store.pending_dividends(
+            TOUKEI_Q2, {2024, 2025}, today=self.BEFORE
+        )
+        after = build_store.pending_dividends(
+            TOUKEI_Q2, {2024, 2025}, today=self.AFTER
+        )
+        self.assertEqual(before["2026"]["value"], 476.5)
+        self.assertEqual(before["2026"]["basis"], "pre_split_composed")
+        self.assertEqual(before["2026"]["interim"], 86.5)
+        self.assertEqual(before["2026"]["final"], 390.0)
+        self.assertEqual(after["2026"]["value"], 119.125)
+        self.assertEqual(after["2026"]["basis"], "post_split_adjusted")
+        # 内訳の合計が表示値と合う
+        self.assertAlmostEqual(
+            after["2026"]["interim"] + after["2026"]["final"],
+            after["2026"]["value"],
+        )
+
+    def test_pending_bar_without_a_split_has_no_basis_key(self) -> None:
+        """分割の無い銘柄のバーは今までと同じ形（余計なキーを足さない）。"""
+        result = build_store.pending_dividends(
+            {
+                "forecastDividend": 84.0,
+                "forecastInterimDividend": 40.0,
+                "forecastFinalDividend": 44.0,
+                "forecastFiscalYear": 2027,
+            },
+            {2026},
+            today=self.BEFORE,
+        )
+        self.assertEqual(result["2027"]["value"], 84.0)
+        self.assertNotIn("basis", result["2027"])
+        self.assertEqual(result["2027"]["interim"], 40.0)
+        self.assertEqual(result["2027"]["final"], 44.0)
+
+
+class ForecastSplitBasisInStoreTest(unittest.TestCase):
+    """DBに書き出すところまで通して確かめる。"""
+
+    def build(self, path: Path, today: date, price: float) -> dict:
+        financials = [
+            {
+                "code": "4746",
+                "name": "東計電算",
+                "dividendPerShare": {"2025": 173.0},
+            }
+        ]
+        fiscal = {
+            "4746": {
+                "series": {2024: 160.0, 2025: 173.0},
+                "fiscalMonth": 12,
+                "connectionStatus": "direct",
+                "connectionReason": "テスト",
+                "externalSource": None,
+                "externalYears": [],
+            }
+        }
+        with mock.patch.object(
+            build_store,
+            "load_daily_prices",
+            return_value=({"4746": price}, {"4746": 173.0}, "2026-09-30"),
+        ):
+            build_store.create_database(
+                path,
+                financials,
+                {},
+                {"4746": {"code": "4746", "name": "東計電算"}},
+                {"4746": dict(TOUKEI_Q2)},
+                [Path("f"), Path("s"), Path("t"), Path("fc")],
+                "fixture.csv",
+                {},
+                Path("stock_actions.json"),
+                fiscal,
+                Path("fiscal_dividends.json"),
+                {},
+                Path("calendar_dividends_frozen.json"),
+                today,
+            )
+        with sqlite3.connect(path) as connection:
+            code, forecast_yield, payload = connection.execute(
+                "SELECT code, forecast_yield, payload FROM stocks"
+            ).fetchone()
+        return {"forecastYieldColumn": forecast_yield, **json.loads(payload)}
+
+    def test_the_store_switches_basis_on_the_split_day(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            before = self.build(
+                Path(directory) / "before.sqlite",
+                date(2026, 9, 30),
+                TOUKEI_PRICE_BEFORE,
+            )
+            after = self.build(
+                Path(directory) / "after.sqlite",
+                date(2026, 10, 1),
+                TOUKEI_PRICE_AFTER,
+            )
+        self.assertEqual(before["forecastDividend"], 476.5)
+        self.assertEqual(before["forecastYield"], 8.46)
+        self.assertEqual(before["forecastBasis"], "pre_split_composed")
+        self.assertEqual(before["forecastYieldColumn"], 8.46)
+        self.assertEqual(before["annualPending"]["2026"]["value"], 476.5)
+        self.assertEqual(before["annualPartial"]["2026"], 476.5)
+
+        self.assertEqual(after["forecastDividend"], 119.125)
+        self.assertEqual(after["forecastYield"], 8.46)
+        self.assertEqual(after["forecastBasis"], "post_split_adjusted")
+        self.assertEqual(after["forecastYieldColumn"], 8.46)
+        self.assertEqual(after["annualPending"]["2026"]["value"], 119.125)
+        # 系列に入っている実績年は今までどおり
+        self.assertEqual(before["annual"], {"2024": 160.0, "2025": 173.0})
+        self.assertEqual(after["annual"], {"2024": 160.0, "2025": 173.0})
+
+
+class PayoutSeriesTest(unittest.TestCase):
+    def test_total_based_is_preferred(self) -> None:
+        series = build_store.payout_series(
+            {
+                "payoutRatioTotalBased": {"2025": 43.77},
+                "payoutRatioConsolidated": {"2025": 99.0},
+            }
+        )
+        self.assertEqual(series, {"2025": 43.77})
+
+    def test_falls_back_to_consolidated(self) -> None:
+        series = build_store.payout_series(
+            {"payoutRatioConsolidated": {"2025": 99.0}}
+        )
+        self.assertEqual(series, {"2025": 99.0})
+
+    def test_outlier_years_are_dropped_from_the_line(self) -> None:
+        # 利益がほぼゼロの年に数千%が入る。1年で縦軸が伸びて他が読めなくなる
+        series = build_store.payout_series(
+            {"payoutRatioTotalBased": {"2024": 40.0, "2025": 58375.81}}
+        )
+        self.assertEqual(series, {"2024": 40.0})
+
+    def test_missing_source_returns_an_empty_line(self) -> None:
+        self.assertEqual(build_store.payout_series({}), {})
+
+
+class CalendarSnapshotLoaderTest(unittest.TestCase):
+    def load(self, document: dict) -> dict:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "calendar_dividends_frozen.json"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            return build_store.load_calendar_dividends(path)
+
+    def test_missing_file_is_not_an_error(self) -> None:
+        self.assertEqual(
+            build_store.load_calendar_dividends(Path("/does/not/exist.json")), {}
+        )
+        self.assertEqual(build_store.load_calendar_dividends(None), {})
+
+    def test_reads_the_series(self) -> None:
+        loaded = self.load(
+            {"stocks": {"9501": {"name": "東京電力", "annual": {"2010": 60.0}}}}
+        )
+        self.assertEqual(loaded["9501"]["series"], {2010: 60.0})
+
+    def test_skips_broken_entries(self) -> None:
+        loaded = self.load(
+            {
+                "stocks": {
+                    "9501": {"annual": {}},
+                    "ながすぎるコード": {"annual": {"2010": 60.0}},
+                    "9502": {"annual": {"2010": None, "2011": -5}},
+                }
+            }
+        )
+        self.assertEqual(loaded, {})
+
+    def test_real_file_covers_the_stocks_without_a_fiscal_series(self) -> None:
+        path = ROOT / "data" / "calendar_dividends_frozen.json"
+        if not path.exists():
+            self.skipTest(
+                "data/calendar_dividends_frozen.json は外部由来のため"
+                "リポジトリに含めない。ConoHaから取得して実行する。"
+            )
+        loaded = build_store.load_calendar_dividends(path)
+        self.assertIn("9501", loaded)
+        self.assertIn("5981", loaded)
+        self.assertLess(len(loaded), 50)
+
+
+class NoYahooDependencyTest(unittest.TestCase):
+    """dividends.json を読むコードが残っていないことを確かめる。"""
+
+    #  fiscal_dividends.json / calendar_dividends_frozen.json は別物なので、
+    #  前に「_」や英数字が付かない dividends.json だけを探す。
+    PATTERN = re.compile(r"(?<![\w_])dividends\.json")
+
+    def test_scripts_do_not_read_the_retired_file(self) -> None:
+        for name in ("build_store.py", "fetch_forecasts.py"):
+            source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+            code_lines = [
+                line
+                for line in source.splitlines()
+                # 経緯を書いたコメント・docstringに名前が出るのは残してよい
+                if self.PATTERN.search(line)
+                and not line.lstrip().startswith("#")
+                and "以前" not in line
+                and "あちら" not in line
+            ]
+            self.assertEqual(code_lines, [], f"{name} に残っている行: {code_lines}")
+
+    def test_build_runs_without_the_retired_file(self) -> None:
+        """--dividends という引数自体が無くなっていること。"""
+        for name in ("build_store.py", "fetch_forecasts.py"):
+            source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+            self.assertNotIn('"--dividends"', source, name)

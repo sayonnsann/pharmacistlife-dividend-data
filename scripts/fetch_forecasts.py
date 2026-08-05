@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass
 from datetime import date
@@ -18,9 +21,16 @@ from urllib.request import Request, urlopen
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DIVIDENDS = REPOSITORY_ROOT / "data" / "dividends.json"
+DEFAULT_FISCAL_DIVIDENDS = REPOSITORY_ROOT / "data" / "fiscal_dividends.json"
+DEFAULT_CALENDAR_DIVIDENDS = (
+    REPOSITORY_ROOT / "data" / "calendar_dividends_frozen.json"
+)
 DEFAULT_EDINET_DIR = REPOSITORY_ROOT / "edinet"
 DEFAULT_STATE = REPOSITORY_ROOT / "forecasts_state.json"
+DAILY_PRICE_CSV_URL = (
+    "https://cdn.jsdelivr.net/gh/sayonnsann/"
+    "kouhaitou-db@main/data/database.csv"
+)
 EDINET_FEED_BASE_URL = (
     "https://cdn.jsdelivr.net/gh/sayonnsann/"
     "pharmacistlife-dividend-data@main/edinet"
@@ -29,6 +39,14 @@ EDINETDB_BASE_URL = "https://edinetdb.jp/v1/companies"
 STATE_VERSION = 1
 CODE_PATTERN = re.compile(r"^[0-9A-Z]{4}$")
 EDINET_CODE_PATTERN = re.compile(r"^E[0-9]{5}$")
+# 認証・権限の失敗は「その銘柄が悪い」のではなく設定の問題なので、
+# 次の銘柄へ進んでも全部失敗する。ここだけは全体障害として止める。
+FATAL_HTTP_STATUSES = frozenset({401, 403})
+# 途中保存の間隔。全部終わってから1回だけ書くと、後半で落ちたときに
+# その日に取った分がまるごと消える。
+SAVE_INTERVAL = 20
+# 連続でこの件数だけ失敗したら、個別銘柄の問題ではないとみなして止める。
+CONSECUTIVE_FAILURE_LIMIT = 10
 
 
 @dataclass(frozen=True)
@@ -58,7 +76,17 @@ class Candidate:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--dividends", type=Path, default=DEFAULT_DIVIDENDS)
+    parser.add_argument(
+        "--fiscal-dividends", type=Path, default=DEFAULT_FISCAL_DIVIDENDS
+    )
+    parser.add_argument(
+        "--calendar-dividends", type=Path, default=DEFAULT_CALENDAR_DIVIDENDS
+    )
+    parser.add_argument(
+        "--prices-url",
+        default=DAILY_PRICE_CSV_URL,
+        help="利回り順の並べ替えに使う日次株価CSV（file://も可）",
+    )
     parser.add_argument("--edinet-dir", type=Path, default=DEFAULT_EDINET_DIR)
     parser.add_argument("--state", type=Path, default=DEFAULT_STATE)
     parser.add_argument(
@@ -139,22 +167,91 @@ def finite_number(value: Any) -> float | None:
     return number if number == number and abs(number) != float("inf") else None
 
 
-def has_recent_dividend(record: dict[str, Any]) -> bool:
-    annual = record.get("annual")
-    if not isinstance(annual, dict):
+def has_positive_series(series: Any) -> bool:
+    """1年でも正の配当がある系列か（＝配当履歴のある銘柄か）。"""
+    if not isinstance(series, dict):
         return False
-    values: list[tuple[int, float]] = []
-    for raw_year, raw_value in annual.items():
-        try:
-            year = int(raw_year)
-        except (TypeError, ValueError):
-            continue
+    for raw_value in series.values():
         value = finite_number(raw_value)
-        if value is not None:
-            values.append((year, value))
-    # dividends.jsonには上場廃止・特殊銘柄などで最新年だけ0のレコードもある。
-    # 「配当履歴がある銘柄」という対象定義に合わせ、少なくとも1年の正値を条件にする。
-    return any(value > 0 for _, value in values)
+        if value is not None and value > 0:
+            return True
+    return False
+
+
+def load_dividend_codes(fiscal_path: Path, calendar_path: Path) -> list[str]:
+    """配当履歴のある銘柄コードを返す。
+
+    以前は dividends.json（Yahoo由来の暦年系列）を対象定義に使っていたが、
+    あちらは廃止した。事業年度の配当系列（EDINET＋haitoukin-checker）と、
+    事業年度の系列を作れなかった銘柄用の暦年の凍結スナップショットを足して
+    同じ対象を作る。
+    """
+    codes: list[str] = []
+    seen: set[str] = set()
+
+    document = load_json(fiscal_path, dict)
+    for raw_code, record in document.items():
+        code = normalize_code(raw_code)
+        if not code or code in seen or not isinstance(record, dict):
+            continue
+        if has_positive_series(record.get("series")):
+            seen.add(code)
+            codes.append(code)
+
+    if calendar_path.exists():
+        frozen = load_json(calendar_path, dict).get("stocks")
+        if isinstance(frozen, dict):
+            for raw_code, record in frozen.items():
+                code = normalize_code(raw_code)
+                if not code or code in seen or not isinstance(record, dict):
+                    continue
+                if has_positive_series(record.get("annual")):
+                    seen.add(code)
+                    codes.append(code)
+
+    return sorted(codes)
+
+
+def load_dividend_yields(url: str) -> dict[str, float]:
+    """kouhaitou-dbの日次CSVから利回りを出す（待ち行列の並べ替え用）。
+
+    以前は dividends.json の dividendYield を使っていた。同じCSVを
+    build_store.py も株価と年間配当に使っているので、出どころが1つに揃う。
+    取得できなくても待ち行列は作れる（利回りは全銘柄0として扱う）ので、
+    ここで止めはしない。
+    """
+    try:
+        completed = subprocess.run(
+            [
+                "curl", "--fail", "--silent", "--show-error", "--location",
+                "--max-time", "60", url,
+            ],
+            capture_output=True,
+            check=True,
+        )
+        raw = completed.stdout.decode("utf-8-sig")
+    except (OSError, subprocess.CalledProcessError, UnicodeDecodeError) as error:
+        print(f"日次株価CSVを取得できませんでした（利回り順は無効）: {error}")
+        return {}
+
+    yields: dict[str, float] = {}
+    for index, row in enumerate(csv.reader(io.StringIO(raw))):
+        if index == 0 or len(row) != 19:
+            continue
+        code = normalize_code(row[0])
+        if not code:
+            continue
+        try:
+            dividend = float(row[4])
+            price = float(row[18])
+        except ValueError:
+            continue
+        if price > 0 and dividend > 0:
+            value = round(dividend / price * 100, 2)
+            if 0 <= value <= 30:
+                yields[code] = value
+    print(f"利回り: {len(yields):,}銘柄（{url}）")
+    return yields
 
 
 def read_priority_codes() -> dict[str, int]:
@@ -244,7 +341,8 @@ def latest_event(fiscal_month: int, today: date) -> Event | None:
 
 
 def build_candidates(
-    dividends: list[dict[str, Any]],
+    codes: list[str],
+    dividend_yields: dict[str, float],
     state: dict[str, Any],
     edinet_dir: Path,
     today: date,
@@ -256,14 +354,8 @@ def build_candidates(
     missing_feed = 0
     seen: set[str] = set()
     stock_state = state["stocks"]
-    for record in dividends:
-        if not isinstance(record, dict) or not has_recent_dividend(record):
-            continue
-        code = normalize_code(record.get("code"))
-        if not code:
-            missing_feed += 1
-            continue
-        if code in seen:
+    for code in codes:
+        if not code or code in seen:
             continue
         seen.add(code)
         feed = load_feed(code, edinet_dir, allow_network=allow_feed_network)
@@ -280,10 +372,7 @@ def build_candidates(
         ):
             missing_feed += 1
             continue
-        raw_yield = finite_number(record.get("dividendYield"))
-        dividend_yield = (
-            raw_yield if raw_yield is not None and 0 <= raw_yield <= 30 else 0.0
-        )
+        dividend_yield = dividend_yields.get(code, 0.0)
         candidates.append(
             Candidate(
                 code=code,
@@ -355,6 +444,22 @@ def optional_number(record: dict[str, Any], *keys: str) -> float | int | None:
     if value is None or not 0 <= value <= 1_000_000:
         return None
     return int(value) if value.is_integer() else value
+
+
+def iso_date_text(value: Any) -> str | None:
+    """YYYY-MM-DDの10文字に正規化する。日付として読めない値はNone。
+
+    "2026-10-01T00:00:00+09:00" のような時刻つきも、"20261001" のような
+    区切り無しも同じ10文字に揃える（Python 3.11以降の fromisoformat は
+    どちらも読める）。
+    """
+    if value is None:
+        return None
+    text = str(value).strip()[:10]
+    try:
+        return date.fromisoformat(text).isoformat()
+    except ValueError:
+        return None
 
 
 def forecast_period(
@@ -461,19 +566,41 @@ def parse_forecast_response(
     annual = optional_number(
         latest, "forecast_dividend_per_share", "forecastDividendPerShare"
     )
+    # 実応答の内訳は interim_dividend_per_share / yearend_dividend_per_share。
+    # 以前は forecast_ を頭に付けた名前を探していたが、その名前の項目は応答に
+    # 無いので中間・期末が常にNoneになっていた。
     interim = optional_number(
-        latest,
-        "forecast_interim_dividend_per_share",
-        "forecastInterimDividendPerShare",
-        "interim_forecast_dividend_per_share",
-        "interimForecastDividendPerShare",
+        latest, "interim_dividend_per_share", "interimDividendPerShare"
     )
     final = optional_number(
+        latest, "yearend_dividend_per_share", "yearendDividendPerShare"
+    )
+    # 分割をまたぐ予想の付帯情報。表示側（build_store.py）が株価と同じ
+    # 株数基準に配当を揃えるのに使う。
+    annual_adjusted = optional_number(
         latest,
-        "forecast_yearend_dividend_per_share",
-        "forecastYearendDividendPerShare",
-        "yearend_forecast_dividend_per_share",
-        "yearendForecastDividendPerShare",
+        "adjusted_forecast_dividend_per_share",
+        "adjustedForecastDividendPerShare",
+    )
+    split_factor = optional_number(
+        latest,
+        "forecast_split_adjustment_factor",
+        "forecastSplitAdjustmentFactor",
+    )
+    split_effective_date = iso_date_text(
+        first_present(
+            latest,
+            "forecast_split_effective_date",
+            "forecastSplitEffectiveDate",
+        )
+    )
+    share_basis = first_present(
+        latest, "forecast_share_basis", "forecastShareBasis"
+    )
+    share_basis_text = (
+        str(share_basis).strip()[:40]
+        if share_basis is not None and str(share_basis).strip()
+        else None
     )
     # 同じ応答に入っている「確定した年度実績」も保存する（追加のAPI消費なし）。
     # 権利落ちベースのYahoo集計と違い、会社発表の確定値なので表示の裏付けに使える。
@@ -486,14 +613,50 @@ def parse_forecast_response(
         "adjustedAnnualDividendPerShare",
     )
     fiscal_year_end = first_present(latest, "fiscal_year_end", "fiscalYearEnd")
+    period = forecast_period(latest, fiscal_month)
     return {
         "forecastDividend": annual,
         "forecastInterimDividend": interim,
         "forecastFinalDividend": final,
-        "forecastPeriod": forecast_period(latest, fiscal_month),
+        # 分割後の株数に揃えた年間予想（API側の計算値）。
+        "forecastDividendAdjusted": annual_adjusted,
+        "forecastSplitFactor": split_factor,
+        "forecastSplitEffectiveDate": split_effective_date,
+        "forecastShareBasis": share_basis_text,
+        "forecastPeriod": period,
+        # 予想が「どの事業年度のものか」を数値でも残す。配当グラフは事業年度で
+        # 並んでいるので、表示文字列を読み直さずに棒の位置を決められる。
+        "forecastFiscalYear": forecast_fiscal_year(period),
         "confirmedDividend": confirmed_adjusted if confirmed_adjusted is not None else confirmed,
         "confirmedFiscalYearEnd": str(fiscal_year_end)[:10] if fiscal_year_end else None,
     }
+
+
+def forecast_fiscal_year(period: str | None) -> int | None:
+    """「2027年3月期(予)」「FY2027」などから対象の事業年度（決算期末の暦年）を拾う。"""
+    if not isinstance(period, str):
+        return None
+    match = re.search(r"(\d{4})\s*年", period) or re.search(
+        r"FY\s*(\d{4})", period, re.IGNORECASE
+    )
+    if not match:
+        return None
+    year = int(match.group(1))
+    return year if 1990 <= year <= 2100 else None
+
+
+class FetchError(RuntimeError):
+    """1銘柄の取得失敗。全体を止めるべきかを status / kind で判断する。"""
+
+    def __init__(self, message: str, *, kind: str, status: int | None = None):
+        super().__init__(message)
+        self.kind = kind
+        self.status = status
+
+    @property
+    def is_fatal(self) -> bool:
+        """認証・権限の失敗は銘柄固有ではないので、続けても全滅する。"""
+        return self.status in FATAL_HTTP_STATUSES
 
 
 def fetch_one(candidate: Candidate, api_key: str) -> tuple[dict[str, Any], int | None]:
@@ -514,18 +677,50 @@ def fetch_one(candidate: Candidate, api_key: str) -> tuple[dict[str, Any], int |
             body = json.load(response)
             remaining_header = response.headers.get("X-RateLimit-Remaining")
     except HTTPError as error:
-        raise RuntimeError(
-            f"{candidate.code}: edinetdb HTTP {error.code}"
+        raise FetchError(
+            f"{candidate.code}: edinetdb HTTP {error.code}",
+            kind="http",
+            status=error.code,
         ) from error
     except (URLError, TimeoutError) as error:
-        raise RuntimeError(f"{candidate.code}: edinetdb通信失敗") from error
+        raise FetchError(
+            f"{candidate.code}: edinetdb通信失敗", kind="network"
+        ) from error
     except json.JSONDecodeError as error:
-        raise RuntimeError(f"{candidate.code}: edinetdb応答が不正なJSONです") from error
+        raise FetchError(
+            f"{candidate.code}: edinetdb応答が不正なJSONです", kind="invalid_json"
+        ) from error
     try:
         remaining = int(remaining_header) if remaining_header is not None else None
     except ValueError:
         remaining = None
-    return parse_forecast_response(body, candidate.fiscal_month), remaining
+    try:
+        parsed = parse_forecast_response(body, candidate.fiscal_month)
+    except ValueError as error:
+        raise FetchError(f"{candidate.code}: {error}", kind="parse") from error
+    return parsed, remaining
+
+
+def record_failure(
+    state: dict[str, Any], code: str, attempted_at: str, error: FetchError
+) -> None:
+    """失敗を状態に書き留める。前回までに取れている予想は消さない。
+
+    次に成功したときは parsed で丸ごと置き換わるので、ここで足した項目も
+    一緒に消える（＝失敗の痕跡が残るのは失敗している間だけ）。
+    """
+    previous = state["stocks"].get(code)
+    record = dict(previous) if isinstance(previous, dict) else {}
+    record["lastFailedAt"] = attempted_at
+    record["lastFailureKind"] = error.kind
+    record["lastFailureDetail"] = str(error)[:200]
+    count = record.get("failureCount")
+    record["failureCount"] = (
+        count + 1
+        if isinstance(count, int) and not isinstance(count, bool) and count >= 0
+        else 1
+    )
+    state["stocks"][code] = record
 
 
 def dry_run_output(
@@ -567,11 +762,13 @@ def main() -> None:
         raise SystemExit(
             "EDINETDB_API_KEYがありません。APIを呼ばない確認は--dry-runを指定してください。"
         )
-    dividends = load_json(args.dividends, list)
+    codes = load_dividend_codes(args.fiscal_dividends, args.calendar_dividends)
+    dividend_yields = load_dividend_yields(args.prices_url)
     state = load_state(args.state)
     priority_codes = read_priority_codes()
     candidates, missing_feed = build_candidates(
-        dividends,
+        codes,
+        dividend_yields,
         state,
         args.edinet_dir,
         args.today,
@@ -595,37 +792,73 @@ def main() -> None:
     limit = min(env_daily_limit(), len(queue))
     selected = queue[:limit]
     fetched_at = args.today.isoformat()
+    normal_count = len(candidates) - due_count
     normal_processed = 0
     no_forecast = 0
     last_remaining: int | None = None
     processed = 0
-    for candidate in selected:
-        parsed, last_remaining = fetch_one(candidate, api_key)
-        parsed["lastFetchedAt"] = fetched_at
-        state["stocks"][candidate.code] = parsed
-        if parsed["forecastDividend"] is None:
-            no_forecast += 1
-        if not candidate.is_due:
-            normal_processed += 1
-        processed += 1
+    failed = 0
+    consecutive_failures = 0
+    fatal: FetchError | None = None
+
+    def save_progress() -> None:
+        if normal_count:
+            state["queuePosition"] = (
+                normal_position + normal_processed
+            ) % normal_count
+        write_state(args.state, state)
+
+    for index, candidate in enumerate(selected, start=1):
+        try:
+            parsed, last_remaining = fetch_one(candidate, api_key)
+        except FetchError as error:
+            # 1銘柄の失敗でその日の取得を全部捨てない。既存の保存値は
+            # そのまま残し、失敗の記録だけ足して次の銘柄へ進む。
+            failed += 1
+            consecutive_failures += 1
+            record_failure(state, candidate.code, fetched_at, error)
+            print(f"取得失敗（続行）: {error}", file=sys.stderr)
+            # 失敗した銘柄でも待ち行列は進める（次回は次の銘柄から始める）。
+            if not candidate.is_due:
+                normal_processed += 1
+            if error.is_fatal:
+                fatal = error
+                break
+            if consecutive_failures >= CONSECUTIVE_FAILURE_LIMIT:
+                fatal = FetchError(
+                    f"{consecutive_failures}件続けて失敗しました（最後: {error}）",
+                    kind="consecutive",
+                )
+                break
+        else:
+            consecutive_failures = 0
+            parsed["lastFetchedAt"] = fetched_at
+            state["stocks"][candidate.code] = parsed
+            if parsed["forecastDividend"] is None:
+                no_forecast += 1
+            if not candidate.is_due:
+                normal_processed += 1
+            processed += 1
+        if index % SAVE_INTERVAL == 0:
+            save_progress()
         # 既定95件なら通常は残量5を残す。サーバー側残量が想定より少ない時も
         # 最低5件を温存して停止する。
         if last_remaining is not None and last_remaining <= 5:
             break
 
-    normal_count = len(candidates) - due_count
-    if normal_count:
-        state["queuePosition"] = (
-            normal_position + normal_processed
-        ) % normal_count
-    write_state(args.state, state)
+    save_progress()
     print(
         f"予想取得完了: {processed:,}件 "
-        f"（予想なし {no_forecast:,}件、対象 {len(candidates):,}件）"
+        f"（予想なし {no_forecast:,}件、失敗 {failed:,}件、"
+        f"対象 {len(candidates):,}件）"
     )
     if last_remaining is not None:
         print(f"edinetdb日次残量: {last_remaining:,}")
     print(f"状態保存: {args.state}")
+    if fatal is not None:
+        # ここまでの取得結果は保存済み。設定・APIキーの問題は気づけるように
+        # 非0で終わる（個別銘柄の失敗では0で終わり、後続の処理を止めない）。
+        raise SystemExit(f"取得を中断しました: {fatal}")
 
 
 if __name__ == "__main__":

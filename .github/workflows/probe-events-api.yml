@@ -18,7 +18,6 @@ jobs:
           python - <<'PY'
           import json
           import os
-          from collections import Counter
           from datetime import date, timedelta
           from urllib.error import HTTPError, URLError
           from urllib.parse import urlencode
@@ -26,159 +25,62 @@ jobs:
 
           KEY = os.environ["EDINETDB_API_KEY"]
           BASE = "https://edinetdb.jp/v1"
-          # 東計電算: 銘柄コード4746 / EDINETコードE05066 / 12月決算
-          TARGET_SEC = "4746"
-          TARGET_EDINET = "E05066"
 
 
           def call(path, params):
               url = f"{BASE}/{path}?{urlencode(params)}"
-              request = Request(
-                  url,
-                  headers={
-                      "X-API-Key": KEY,
-                      "Accept": "application/json",
-                      "User-Agent": "events-api-probe/1.0",
-                  },
-              )
+              request = Request(url, headers={
+                  "X-API-Key": KEY, "Accept": "application/json",
+                  "User-Agent": "events-api-probe/1.0"})
               try:
                   with urlopen(request, timeout=45) as response:
-                      remaining = response.headers.get("X-RateLimit-Remaining")
-                      return json.load(response), remaining, None
+                      return json.load(response), response.headers.get("X-RateLimit-Remaining"), None
               except HTTPError as error:
-                  body = error.read().decode("utf-8", "replace")[:300]
-                  return None, None, f"HTTP {error.code}: {body}"
+                  return None, None, f"HTTP {error.code}: {error.read().decode('utf-8','replace')[:300]}"
               except (URLError, TimeoutError) as error:
                   return None, None, f"通信失敗: {error}"
-              except json.JSONDecodeError as error:
-                  return None, None, f"JSONではない応答: {error}"
-
-
-          def rows_of(payload):
-              if isinstance(payload, dict):
-                  data = payload.get("data")
-                  if isinstance(data, list):
-                      return data
-                  if isinstance(data, dict):
-                      for key in ("events", "earnings", "items", "calendar"):
-                          value = data.get(key)
-                          if isinstance(value, list):
-                              return value
-                  for key in ("events", "items", "results"):
-                      value = payload.get(key)
-                      if isinstance(value, list):
-                          return value
-              return payload if isinstance(payload, list) else []
 
 
           today = date.today()
-          print(f"実行日: {today.isoformat()}")
-          print("=" * 70)
-
-          # ---------- 1. 東計電算の earnings（正しいEDINETコードで） ----------
-          print(f"\n### 東計電算 {TARGET_EDINET}（12月決算）の earnings")
-          payload, remaining, error = call(
-              f"companies/{TARGET_EDINET}/earnings", {"limit": 4}
-          )
+          print("### 東計電算 E05066 の直近2件を全フィールド表示")
+          payload, remaining, error = call("companies/E05066/earnings", {"limit": 2})
           if error:
               print(f"  失敗: {error}")
           else:
-              rows = rows_of(payload)
-              print(f"  件数: {len(rows)}  残量={remaining}")
+              rows = (payload.get("data") or {}).get("earnings") or []
+              print(f"  残量={remaining}")
               for row in rows:
-                  keep = {
-                      k: row.get(k)
-                      for k in (
-                          "disclosure_date", "fiscal_year", "quarter",
-                          "forecast_dividend_per_share", "dividend_per_share",
-                          "is_correction", "fiscal_year_end",
-                      )
-                      if k in row
-                  }
-                  print(f"    {json.dumps(keep, ensure_ascii=False)}")
-              if rows:
-                  print(f"\n  1件目の全フィールド名: {list(rows[0].keys())}")
+                  print("\n  --- disclosure_date=" + str(row.get("disclosure_date")) + " Q" + str(row.get("quarter")) + " ---")
+                  for key in sorted(row):
+                      value = row[key]
+                      if value is not None and key not in ("title",):
+                          print(f"    {key}: {value}")
+                  print(f"    title: {str(row.get('title'))[:100]}")
 
-          # ---------- 2. dividend_revision の中身 ----------
-          print("\n\n### /v1/events?event_type=dividend_revision（直近7日）")
-          payload, remaining, error = call(
-              "events",
-              {
-                  "since": (today - timedelta(days=7)).isoformat(),
-                  "until": today.isoformat(),
-                  "event_type": "dividend_revision",
-                  "limit": 100,
-              },
-          )
+          print("\n\n### earnings_summary に配当の手がかりがあるか（8/3の東計電算を探す）")
+          payload, remaining, error = call("events", {
+              "since": "2026-08-03", "until": "2026-08-03",
+              "event_type": "earnings_summary", "limit": 100})
           if error:
               print(f"  失敗: {error}")
           else:
-              rows = rows_of(payload)
-              meta = payload.get("meta") if isinstance(payload, dict) else None
-              print(f"  件数: {len(rows)}  残量={remaining}")
-              if meta:
-                  print(f"  meta: {json.dumps(meta, ensure_ascii=False)[:400]}")
-
-              dates = Counter(str(r.get("event_date") or "?")[:10] for r in rows)
-              print(f"\n  ★ 日付ごとの件数: {json.dumps(dict(sorted(dates.items())), ensure_ascii=False)}")
-
-              directions = Counter(
-                  str((r.get("metadata") or {}).get("dividend_direction") or "?")
-                  for r in rows
-              )
-              print(f"  dividend_direction の分布: {dict(directions)}")
-              sev = Counter(str(r.get("severity") or "?") for r in rows)
-              print(f"  severity の分布: {dict(sev)}")
-
-              hits = [r for r in rows if str(r.get("sec_code") or "") == TARGET_SEC]
-              print(f"\n  ★ 東計電算(sec_code={TARGET_SEC})のヒット: {len(hits)}件")
+              rows = payload.get("data") or []
+              total = ((payload.get("meta") or {}).get("pagination") or {}).get("total")
+              print(f"  8/3のearnings_summary: {len(rows)}件（total={total}） 残量={remaining}")
+              hits = [r for r in rows if str(r.get("sec_code") or "") == "4746"]
+              print(f"  東計電算のヒット: {len(hits)}件")
               for hit in hits:
-                  print("  " + json.dumps(hit, ensure_ascii=False, indent=2).replace("\n", "\n  ")[:1200])
+                  print("  " + json.dumps(hit, ensure_ascii=False, indent=2).replace("\n", "\n  ")[:1400])
 
-              print("\n  --- 増配(up)と読めるものを最大8件 ---")
-              shown = 0
-              for row in rows:
-                  direction = (row.get("metadata") or {}).get("dividend_direction")
-                  if direction and str(direction) != "down" and shown < 8:
-                      print(
-                          f"    {row.get('sec_code')} {row.get('filer_name')} "
-                          f"[{direction}] {str(row.get('title'))[:60]}"
-                      )
-                      shown += 1
-
-          # ---------- 3. calendar が0件だった件を別パラメータで ----------
-          print("\n\n### /v1/calendar（パラメータを変えて再試行）")
-          for params in (
-              {"from": today.isoformat(), "to": (today + timedelta(days=30)).isoformat()},
-              {"from": (today - timedelta(days=7)).isoformat(), "to": today.isoformat()},
-          ):
-              payload, remaining, error = call("calendar", params)
-              if error:
-                  print(f"  {params}: 失敗 {error[:150]}")
-              else:
-                  rows = rows_of(payload)
-                  meta = payload.get("meta") if isinstance(payload, dict) else None
-                  print(f"  {params}: {len(rows)}件  残量={remaining}")
-                  if meta:
-                      print(f"    meta: {json.dumps(meta, ensure_ascii=False)[:300]}")
-                  if rows:
-                      print(f"    1件目: {json.dumps(rows[0], ensure_ascii=False)[:400]}")
-                      break
-
-          # ---------- 4. 1日だけに絞って件数を見る（枠の見積もり用） ----------
-          print("\n\n### 1日あたりの dividend_revision 件数（直近3営業日ぶん）")
-          for back in (0, 1, 2):
-              day = (today - timedelta(days=back)).isoformat()
-              payload, remaining, error = call(
-                  "events",
-                  {"since": day, "until": day, "event_type": "dividend_revision", "limit": 100},
-              )
-              if error:
-                  print(f"  {day}: 失敗 {error[:100]}")
-              else:
-                  rows = rows_of(payload)
-                  print(f"  {day}: {len(rows)}件  残量={remaining}")
-
-          print("\n" + "=" * 70)
-          print("調査終了")
+          print("\n\n### 5月中旬（決算集中期）の1日あたり件数")
+          for day in ("2026-05-13", "2026-05-14", "2026-05-15"):
+              for etype in ("dividend_revision", "earnings_summary"):
+                  payload, remaining, error = call("events", {
+                      "since": day, "until": day, "event_type": etype, "limit": 1})
+                  if error:
+                      print(f"  {day} {etype}: 失敗 {error[:80]}")
+                  else:
+                      total = ((payload.get("meta") or {}).get("pagination") or {}).get("total")
+                      print(f"  {day} {etype}: total={total}  残量={remaining}")
+          print("\n調査終了")
           PY

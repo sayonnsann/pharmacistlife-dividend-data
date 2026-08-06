@@ -1,0 +1,138 @@
+name: 指定銘柄の配当予想を今すぐ取り直す（手動実行）
+
+# 用途: 巡回や決算月からの近似日を待たずに、指定した銘柄の配当予想だけを
+# その場で最新にする。
+#
+# 例: 東計電算(4746)は2026-08-03のQ2決算短信で株式分割と大幅増配を出したが、
+#     近似発表日は8/15なので巡回では12日遅れる。ここで即座に直す。
+#
+# 通常の検知は日次更新（daily-store.yml）が /v1/events を見て自動でやる。
+# このワークフローはその取りこぼしと、急ぎで直したいときの手当てである。
+#
+# 反映について: ここで更新するのは forecasts_state.json だけで、サイトが読む
+# stocks.sqlite は作り直さない。画面に出るのは次の日次更新のあと（07:00 JST）。
+# すぐ出したいときは、このあと「配当チェッカーDBの日次更新」を手動実行する。
+
+on:
+  workflow_dispatch:
+    inputs:
+      codes:
+        description: "取り直す銘柄コード（カンマ区切り。例: 4746,9433）"
+        required: true
+        type: string
+      overrides:
+        description: "feedに無い銘柄の指定（コード:EDINETコード:決算月。カンマ区切り。通常は空でよい）"
+        required: false
+        default: ""
+        type: string
+      dry_run:
+        description: "取得して表示するだけで、stateには書き戻さない"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  # 日次更新と同時に走ると、どちらかのstateが上書きで消える。
+  group: daily-dividend-store
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EDINETDB_API_KEY: ${{ secrets.EDINETDB_API_KEY }}
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASS: ${{ secrets.FTP_PASS }}
+      FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+      TARGET_CODES: ${{ inputs.codes }}
+      TARGET_OVERRIDES: ${{ inputs.overrides }}
+      DRY_RUN: ${{ inputs.dry_run }}
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: lftpをインストール
+        if: ${{ inputs.dry_run == false }}
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: 設定を検証
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in FTP_HOST FTP_USER FTP_PASS FTP_REMOTE_DIR EDINETDB_API_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Secret ${name} が未設定です。"
+              exit 1
+            fi
+          done
+          if [[ "$FTP_REMOTE_DIR" != /* ]]; then
+            echo "::error::FTP_REMOTE_DIR は / から始めてください。"
+            exit 1
+          fi
+          echo "STATE_FILE=${RUNNER_TEMP}/forecasts_state.json" >> "$GITHUB_ENV"
+
+      - name: 予想stateをFTPSから取得
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          curl --ssl-reqd --fail --silent --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$STATE_FILE" \
+            "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json"
+          echo "取得しました（$(wc -c < "$STATE_FILE" | tr -d ' ') bytes）"
+
+      - name: 指定銘柄の予想を取り直す
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--state "$STATE_FILE" --codes "$TARGET_CODES" --overrides "$TARGET_OVERRIDES")
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          python scripts/refresh_one.py "${args[@]}"
+
+      - name: 予想stateをFTPSへ書き戻す
+        if: ${{ inputs.dry_run == false }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
+                put -O ${remote_dir}/ \"$STATE_FILE\" -o forecasts_state.json.new; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          # 申告ではなく現物のサイズを見る
+          local_size=$(wc -c < "$STATE_FILE" | tr -d ' ')
+          remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
+            "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json.new" \
+            | awk '/Content-Length/ {print $2}' | tr -d '\r')
+          if [ "$local_size" != "$remote_size" ]; then
+            echo "::error::forecasts_state.json のアップロード検証に失敗（local=$local_size remote=$remote_size）"
+            exit 1
+          fi
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; \
+                rm -f ${remote_dir}/forecasts_state.json.bak; \
+                mv ${remote_dir}/forecasts_state.json ${remote_dir}/forecasts_state.json.bak || true; \
+                mv ${remote_dir}/forecasts_state.json.new ${remote_dir}/forecasts_state.json; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          echo "forecasts_state.json を検証つきで差し替えました（$local_size bytes）"
+
+      - name: 反映方法を案内
+        if: ${{ inputs.dry_run == false }}
+        run: |
+          echo "::notice::stateは更新しました。サイトに出るのは次の日次更新（07:00 JST）のあとです。すぐ出したい場合は「配当チェッカーDBの日次更新」を手動実行してください。"

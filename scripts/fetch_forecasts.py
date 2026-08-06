@@ -12,7 +12,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -36,6 +36,7 @@ EDINET_FEED_BASE_URL = (
     "pharmacistlife-dividend-data@main/edinet"
 )
 EDINETDB_BASE_URL = "https://edinetdb.jp/v1/companies"
+EDINETDB_EVENTS_URL = "https://edinetdb.jp/v1/events"
 STATE_VERSION = 1
 CODE_PATTERN = re.compile(r"^[0-9A-Z]{4}$")
 EDINET_CODE_PATTERN = re.compile(r"^E[0-9]{5}$")
@@ -48,12 +49,71 @@ SAVE_INTERVAL = 20
 # 連続でこの件数だけ失敗したら、個別銘柄の問題ではないとみなして止める。
 CONSECUTIVE_FAILURE_LIMIT = 10
 
+# ---------------------------------------------------------------------------
+# 開示イベント（/v1/events）まわりの設定
+#
+# 決算月から作る近似発表日は最大2週間ずれる。東計電算(4746)は12月決算で
+# 近似日が8/15だが、実際のQ2発表は8/3で、そこで分割と大幅増配を出した。
+# 近似日を待つと12日間気づけないので、実際の開示イベントを毎日見て
+# 「今日取り直すべき銘柄」を横から差し込む。
+# ---------------------------------------------------------------------------
+EVENT_PAGE_SIZE = 100
+# 1日にイベント枠へ割り当てる会社数の上限。0にするとイベントAPIを一切
+# 呼ばず、従来どおりの巡回だけになる（不具合時の緊急停止スイッチ。
+# DVC_EVENT_SLOTS で上書きできる）。
+EVENT_SLOT_DEFAULT = 20
+# 取りに行く種別と、1日に許すページ数（＝リクエスト数）の上限。
+# 配当修正は繁忙期でも1日31件、分割・併合は年168件しかないので取り切れる。
+# 決算短信は繁忙期に1日780件あり、必ず打ち切られる（打ち切り件数はログに出す）。
+EVENT_SOURCES: tuple[tuple[str, int], ...] = (
+    ("dividend_revision", 2),
+    ("stock_split", 1),
+    ("reverse_split", 1),
+    ("earnings_summary", 2),
+)
+# イベント枠の中の並び順。小さいほど先に取る。
+EVENT_TYPE_RANK = {
+    "dividend_revision": 0,
+    "stock_split": 1,
+    "reverse_split": 1,
+    "earnings_summary": 2,
+}
+# 前回の記録が無いときに遡る日数。土日・祝日と、1〜2回の実行失敗を吸収する。
+EVENT_LOOKBACK_DAYS = 3
+# 長く止まっていた後でも、これ以上は遡らない（枠を食い潰さないため）。
+EVENT_MAX_LOOKBACK_DAYS = 14
+# 処理済みイベントIDの保持上限。実際は1日最大20件しか増えないので届かないが、
+# 状態ファイルが無限に太らないための歯止め。
+EVENT_SEEN_LIMIT = 2000
+# metadata.dividend_direction がこれらのときは「配当に動きなし」とみなす。
+EVENT_NO_DIVIDEND_SIGNAL = frozenset({"", "none", "unchanged", "flat", "-"})
+
 
 @dataclass(frozen=True)
 class Event:
     announced_on: date
     kind: str
     period: str
+
+
+@dataclass(frozen=True)
+class DisclosureEvent:
+    """/v1/events の1レコード（実際に開示された事実）。
+
+    近似日から作る Event と違い、こちらは実日付である。
+    """
+
+    event_id: str
+    event_type: str
+    event_date: date
+    sec_code: str
+    edinet_code: str
+    is_earnings: bool
+    has_dividend_signal: bool
+
+    @property
+    def type_rank(self) -> int:
+        return EVENT_TYPE_RANK.get(self.event_type, len(EVENT_TYPE_RANK))
 
 
 @dataclass(frozen=True)
@@ -120,8 +180,33 @@ def load_json(path: Path, expected_type: type) -> Any:
     return value
 
 
+def empty_event_state() -> dict[str, Any]:
+    return {"lastCheckedAt": None, "lastEventDate": None, "seen": {}}
+
+
 def empty_state() -> dict[str, Any]:
-    return {"version": STATE_VERSION, "queuePosition": 0, "stocks": {}}
+    return {
+        "version": STATE_VERSION,
+        "queuePosition": 0,
+        "stocks": {},
+        "events": empty_event_state(),
+    }
+
+
+def event_state(state: dict[str, Any]) -> dict[str, Any]:
+    """events ブロックを取り出す。壊れていたら黙って作り直す。
+
+    stocks と違って、ここが壊れていても失うのは「どのイベントを見たか」の
+    記憶だけである。日次更新そのものを止める理由にはならないので、
+    例外にはせず空から作り直す（最悪、同じ銘柄をもう一度取り直すだけ）。
+    """
+    block = state.get("events")
+    if not isinstance(block, dict):
+        block = empty_event_state()
+        state["events"] = block
+    if not isinstance(block.get("seen"), dict):
+        block["seen"] = {}
+    return block
 
 
 def load_state(path: Path) -> dict[str, Any]:
@@ -135,6 +220,10 @@ def load_state(path: Path) -> dict[str, Any]:
     position = state.get("queuePosition", 0)
     if isinstance(position, bool) or not isinstance(position, int) or position < 0:
         raise ValueError(f"{path}: queuePositionが不正です")
+    # events を持たない古い状態ファイル（本番で動いているのはこれ）も
+    # そのまま読める。versionは上げない：上げると稼働中の日次更新が
+    # 「未対応のstate version」で止まってしまう。
+    event_state(state)
     return state
 
 
@@ -419,6 +508,388 @@ def ordered_queue(
         return due, len(due), 0
     position = state["queuePosition"] % len(normal)
     return due + normal[position:] + normal[:position], len(due), position
+
+
+# ---------------------------------------------------------------------------
+# 開示イベントを見て「今日取り直す銘柄」を決める
+# ---------------------------------------------------------------------------
+
+
+def event_slot_size() -> int:
+    raw = os.environ.get("DVC_EVENT_SLOTS", str(EVENT_SLOT_DEFAULT))
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ValueError("DVC_EVENT_SLOTSは整数で指定してください") from error
+    if not 0 <= value <= 100:
+        raise ValueError("DVC_EVENT_SLOTSは0〜100で指定してください")
+    return value
+
+
+def event_window(block: dict[str, Any], today: date) -> tuple[date, date]:
+    """イベントを問い合わせる期間を決める。
+
+    前回見た日が分かっていればそこから、分かっていなければ数日前から。
+    どちらの場合も最低 EVENT_LOOKBACK_DAYS 日分は重ねて見る（枠に入り
+    きらず持ち越したイベントを、翌日また拾えるようにするため）。
+    長期間止まっていた後でも EVENT_MAX_LOOKBACK_DAYS より前は見ない。
+    """
+    default_start = today - timedelta(days=EVENT_LOOKBACK_DAYS)
+    earliest = today - timedelta(days=EVENT_MAX_LOOKBACK_DAYS)
+    raw = block.get("lastCheckedAt")
+    last = None
+    if isinstance(raw, str):
+        try:
+            last = date.fromisoformat(raw[:10])
+        except ValueError:
+            last = None
+    start = default_start if last is None else min(last, default_start)
+    return max(start, earliest), today
+
+
+def parse_event_record(record: Any) -> DisclosureEvent | None:
+    """/v1/events の1件を読む。読めない・関心のない種別はNone。"""
+    if not isinstance(record, dict):
+        return None
+    event_type = str(
+        first_present(record, "event_type", "eventType") or ""
+    ).strip()
+    if event_type not in EVENT_TYPE_RANK:
+        return None
+    day_text = iso_date_text(first_present(record, "event_date", "eventDate"))
+    if day_text is None:
+        return None
+    event_date = date.fromisoformat(day_text)
+    sec_code = str(first_present(record, "sec_code", "secCode") or "").strip().upper()
+    edinet_code = (
+        str(first_present(record, "edinet_code", "edinetCode") or "").strip().upper()
+    )
+    if not sec_code and not edinet_code:
+        return None
+
+    raw_metadata = record.get("metadata")
+    metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
+    direction = str(metadata.get("dividend_direction") or "").strip().lower()
+
+    raw_id = first_present(record, "event_id", "eventId", "id")
+    if raw_id is None or not str(raw_id).strip():
+        # 応答にIDが無いので、同じ開示を指す安定なキーを自分で組む。
+        identity = f"{event_type}:{sec_code or edinet_code}:{day_text}"
+    else:
+        identity = str(raw_id).strip()[:120]
+
+    return DisclosureEvent(
+        event_id=identity,
+        event_type=event_type,
+        event_date=event_date,
+        sec_code=sec_code,
+        edinet_code=edinet_code,
+        is_earnings=bool(metadata.get("is_earnings")),
+        has_dividend_signal=direction not in EVENT_NO_DIVIDEND_SIGNAL,
+    )
+
+
+def fetch_event_page(
+    event_type: str, since: date, until: date, offset: int, api_key: str
+) -> tuple[list[Any], int | None, int | None]:
+    """1ページ分のイベントを取る。(records, total, next_offset)"""
+    query = urlencode(
+        {
+            "since": since.isoformat(),
+            "until": until.isoformat(),
+            "event_type": event_type,
+            "limit": EVENT_PAGE_SIZE,
+            "offset": offset,
+        }
+    )
+    request = Request(
+        f"{EDINETDB_EVENTS_URL}?{query}",
+        headers={
+            "X-API-Key": api_key,
+            "Accept": "application/json",
+            "User-Agent": "dividend-store-updater/1.0",
+        },
+    )
+    try:
+        with urlopen(request, timeout=45) as response:
+            body = json.load(response)
+    except HTTPError as error:
+        raise FetchError(
+            f"events {event_type}: HTTP {error.code}",
+            kind="http",
+            status=error.code,
+        ) from error
+    except (URLError, TimeoutError) as error:
+        raise FetchError(
+            f"events {event_type}: 通信失敗", kind="network"
+        ) from error
+    except json.JSONDecodeError as error:
+        raise FetchError(
+            f"events {event_type}: 不正なJSONです", kind="invalid_json"
+        ) from error
+
+    data = body.get("data") if isinstance(body, dict) else None
+    if not isinstance(data, list):
+        raise FetchError(f"events {event_type}: data配列がありません", kind="parse")
+
+    total: int | None = None
+    next_offset: int | None = None
+    meta = body.get("meta") if isinstance(body, dict) else None
+    pagination = meta.get("pagination") if isinstance(meta, dict) else None
+    if isinstance(pagination, dict):
+        raw_total = pagination.get("total")
+        if isinstance(raw_total, int) and not isinstance(raw_total, bool):
+            total = raw_total
+        raw_next = pagination.get("next_offset")
+        if isinstance(raw_next, int) and not isinstance(raw_next, bool):
+            next_offset = raw_next
+    return data, total, next_offset
+
+
+def collect_events(
+    since: date, until: date, api_key: str
+) -> tuple[list[DisclosureEvent], int, int, int]:
+    """全種別のイベントを集める。
+
+    返り値は (events, 送ったリクエスト数, 打ち切り件数, 成功したページ数)。
+    リクエスト数と成功数を分けているのは、用途が違うため:
+      - リクエスト数 … 1日100件の枠から引く（失敗した分も枠は減っている）
+      - 成功数       … 「この期間は確かに見た」と言えるかの判断に使う
+
+    種別ごとに独立して取る。1種別が失敗しても他は使える（配当修正だけ
+    取れれば、東計電算のようなケース以外はだいたい拾える）。
+    """
+    collected: list[DisclosureEvent] = []
+    requests_used = 0
+    ok_pages = 0
+    truncated_total = 0
+    for event_type, max_pages in EVENT_SOURCES:
+        offset = 0
+        fetched = 0
+        reported_total: int | None = None
+        try:
+            for _ in range(max_pages):
+                # 送った時点で数える。応答が壊れていてもサーバー側の枠は
+                # 減っているので、成功した分だけ数えると1日100件を超える。
+                requests_used += 1
+                data, total, next_offset = fetch_event_page(
+                    event_type, since, until, offset, api_key
+                )
+                ok_pages += 1
+                fetched += len(data)
+                if total is not None:
+                    reported_total = total
+                for record in data:
+                    parsed = parse_event_record(record)
+                    if parsed is not None:
+                        collected.append(parsed)
+                if not data or next_offset is None or next_offset <= offset:
+                    break
+                offset = next_offset
+        except FetchError as error:
+            # イベントが取れないのは「今日は近似日方式に戻る」だけの話で、
+            # 予想取得そのものは止めない。
+            print(f"イベント取得失敗（続行）: {error}", file=sys.stderr)
+            continue
+
+        left = 0 if reported_total is None else max(reported_total - fetched, 0)
+        truncated_total += left
+        summary = f"イベント取得: {event_type} {fetched}件"
+        if reported_total is not None:
+            summary += f" / 全{reported_total}件"
+        if left:
+            # 黙って切り捨てない。繁忙期の決算短信はここで必ず削れる。
+            summary += f"（{left}件は上限{max_pages}ページで打ち切り）"
+        print(summary)
+    return collected, requests_used, truncated_total, ok_pages
+
+
+def index_candidates(
+    candidates: list[Candidate],
+) -> tuple[dict[str, Candidate], dict[str, Candidate]]:
+    by_code = {candidate.code: candidate for candidate in candidates}
+    by_edinet = {candidate.edinet_code: candidate for candidate in candidates}
+    return by_code, by_edinet
+
+
+def match_candidate(
+    event: DisclosureEvent,
+    by_code: dict[str, Candidate],
+    by_edinet: dict[str, Candidate],
+) -> Candidate | None:
+    """イベントの銘柄コード／EDINETコードから、待ち行列の候補を引く。"""
+    code = normalize_code(event.sec_code)
+    if code and code in by_code:
+        return by_code[code]
+    # EDINET側は5桁（末尾0）で持っていることがある。
+    raw = event.sec_code
+    if len(raw) == 5 and raw.endswith("0"):
+        code = normalize_code(raw[:4])
+        if code and code in by_code:
+            return by_code[code]
+    if event.edinet_code and event.edinet_code in by_edinet:
+        return by_edinet[event.edinet_code]
+    return None
+
+
+def event_sort_key(item: tuple[Candidate, DisclosureEvent]) -> tuple[Any, ...]:
+    candidate, event = item
+    return (
+        event.type_rank,
+        # 決算短信の中で配当に触れているものを、触れていないものより先に。
+        0 if event.has_dividend_signal else 1,
+        -event.event_date.toordinal(),
+        candidate.priority_rank is None,
+        candidate.priority_rank if candidate.priority_rank is not None else 0,
+        -candidate.dividend_yield,
+        candidate.code,
+    )
+
+
+def plan_event_slots(
+    events: list[DisclosureEvent],
+    candidates: list[Candidate],
+    seen: dict[str, Any],
+    slots: int,
+) -> tuple[list[Candidate], dict[str, dict[str, str]], dict[str, int]]:
+    """イベント枠に入れる銘柄を決める。
+
+    返り値は (取り直す候補, 銘柄コード→{イベントID: 発生日}, 集計)。
+    2つ目は「その銘柄を取れたら、この開示はもう見た」と記録するためのもの。
+    枠は会社数で数えるので、同じ銘柄が複数のイベントに出ても1件である。
+    """
+    by_code, by_edinet = index_candidates(candidates)
+    stats = {
+        "matched": 0,
+        "unmatched": 0,
+        "already_seen": 0,
+        "already_fetched": 0,
+        "not_earnings": 0,
+    }
+    best: dict[str, tuple[Candidate, DisclosureEvent]] = {}
+    ids_by_code: dict[str, dict[str, str]] = {}
+
+    for event in events:
+        if event.event_type == "earnings_summary" and not event.is_earnings:
+            # 決算短信の枠に入っているが決算そのものではない開示。
+            stats["not_earnings"] += 1
+            continue
+        candidate = match_candidate(event, by_code, by_edinet)
+        if candidate is None:
+            # 配当履歴が無い・feedが無いなど、そもそも待ち行列にいない銘柄。
+            stats["unmatched"] += 1
+            continue
+        if event.event_id in seen:
+            stats["already_seen"] += 1
+            continue
+        if (
+            candidate.last_fetched is not None
+            and candidate.last_fetched > event.event_date
+        ):
+            # 開示日より後に取得済み＝すでに新しい値を持っている。
+            # 同日は「開示前に取った」可能性があるので取り直す側に倒す。
+            stats["already_fetched"] += 1
+            continue
+        stats["matched"] += 1
+        ids_by_code.setdefault(candidate.code, {})[event.event_id] = (
+            event.event_date.isoformat()
+        )
+        current = best.get(candidate.code)
+        if current is None or event_sort_key((candidate, event)) < event_sort_key(
+            current
+        ):
+            best[candidate.code] = (candidate, event)
+
+    ordered = sorted(best.values(), key=event_sort_key)
+    picks = [candidate for candidate, _ in ordered[: max(slots, 0)]]
+    picked_codes = {candidate.code for candidate in picks}
+    ids_by_code = {
+        code: ids for code, ids in ids_by_code.items() if code in picked_codes
+    }
+    stats["companies"] = len(best)
+    stats["picked"] = len(picks)
+    return picks, ids_by_code, stats
+
+
+def prune_seen(seen: dict[str, Any], today: date) -> None:
+    """古い処理済みイベントを捨てる。問い合わせ窓から外れた分はもう来ない。"""
+    earliest = (today - timedelta(days=EVENT_MAX_LOOKBACK_DAYS)).isoformat()
+    stale = [
+        key
+        for key, value in seen.items()
+        if not isinstance(value, str) or value < earliest
+    ]
+    for key in stale:
+        del seen[key]
+    if len(seen) > EVENT_SEEN_LIMIT:
+        newest = sorted(seen.items(), key=lambda item: item[1], reverse=True)
+        seen.clear()
+        seen.update(newest[:EVENT_SEEN_LIMIT])
+
+
+def run_event_stage(
+    state: dict[str, Any],
+    candidates: list[Candidate],
+    today: date,
+    api_key: str,
+) -> tuple[list[Candidate], dict[str, dict[str, str]], int]:
+    """イベントを見て優先枠を組む。失敗しても従来の待ち行列は動かす。"""
+    block = event_state(state)
+    slots = event_slot_size()
+    if slots <= 0:
+        print("イベント枠: 無効（DVC_EVENT_SLOTS=0）")
+        return [], {}, 0
+
+    since, until = event_window(block, today)
+    try:
+        events, requests_used, truncated, ok_pages = collect_events(
+            since, until, api_key
+        )
+    except (OSError, ValueError, RuntimeError) as error:
+        # イベントは「あれば早く気づける」ための仕組みで、日次更新の前提では
+        # ない。ここで落ちても株価・利回りの更新まで止めない。
+        print(f"イベント取得を中止しました（続行）: {error}", file=sys.stderr)
+        block["lastError"] = str(error)[:200]
+        block["lastErrorAt"] = today.isoformat()
+        return [], {}, 0
+
+    if ok_pages:
+        # 1ページでも応答があった日だけ「ここまで見た」を進める。全滅した日に
+        # 進めると、その日の開示を二度と見ないことになる。
+        # 一部の種別だけ落ちた日に進めてしまっても、問い合わせ期間は必ず
+        # 3日重ねるので、翌日以降に拾い直せる。
+        block["lastCheckedAt"] = today.isoformat()
+        block.pop("lastError", None)
+        block.pop("lastErrorAt", None)
+    else:
+        block["lastError"] = "イベントAPIから1件も応答がありませんでした"
+        block["lastErrorAt"] = today.isoformat()
+
+    if events:
+        block["lastEventDate"] = max(
+            event.event_date for event in events
+        ).isoformat()
+
+    picks, ids_by_code, stats = plan_event_slots(
+        events, candidates, block["seen"], slots
+    )
+    print(
+        f"イベント枠: {stats['picked']}件/{slots}枠 "
+        f"（対象社数={stats['companies']} 期間={since.isoformat()}〜"
+        f"{until.isoformat()} リクエスト={requests_used}）"
+    )
+    # noEarnings が急に events と同じ数になったら、metadata.is_earnings の
+    # 意味か有無が変わった合図（決算短信経由の検知が黙って死ぬ形）。
+    print(
+        f"events requests={requests_used} events={len(events)} "
+        f"companies={stats['companies']} picked={stats['picked']} "
+        f"truncated={truncated} unmatched={stats['unmatched']} "
+        f"seen={stats['already_seen']} fresh={stats['already_fetched']} "
+        f"noEarnings={stats['not_earnings']}"
+    )
+    if picks:
+        print("イベント枠の銘柄: " + " ".join(pick.code for pick in picks))
+    return picks, ids_by_code, requests_used
 
 
 def env_daily_limit() -> int:
@@ -775,9 +1246,9 @@ def main() -> None:
         priority_codes,
         allow_feed_network=not args.dry_run,
     )
-    queue, due_count, normal_position = ordered_queue(candidates, state)
-
     if args.dry_run:
+        queue, due_count, normal_position = ordered_queue(candidates, state)
+        print("dry-run: イベントAPIは呼ばないのでイベント枠は空です")
         dry_run_output(
             queue,
             due_count,
@@ -789,10 +1260,25 @@ def main() -> None:
         )
         return
 
-    limit = min(env_daily_limit(), len(queue))
+    # イベント枠を先に決める。ここで選んだ銘柄は従来の待ち行列から抜いて
+    # おく（同じ銘柄を1日に2回叩かないため、かつ巡回位置の数え方を
+    # 壊さないため）。
+    event_picks, event_ids_by_code, event_requests = run_event_stage(
+        state, candidates, args.today, api_key
+    )
+    picked_codes = {candidate.code for candidate in event_picks}
+    remaining = [
+        candidate for candidate in candidates if candidate.code not in picked_codes
+    ]
+    tail, due_count, normal_position = ordered_queue(remaining, state)
+    queue = event_picks + tail
+
+    # イベント取得に使ったリクエストも同じ1日100件の枠を食う。
+    # 枠が足りなくならないよう、使った分だけ予想取得の上限を下げる。
+    limit = min(max(env_daily_limit() - event_requests, 0), len(queue))
     selected = queue[:limit]
     fetched_at = args.today.isoformat()
-    normal_count = len(candidates) - due_count
+    normal_count = len(remaining) - due_count
     normal_processed = 0
     no_forecast = 0
     last_remaining: int | None = None
@@ -806,9 +1292,15 @@ def main() -> None:
             state["queuePosition"] = (
                 normal_position + normal_processed
             ) % normal_count
+        prune_seen(event_state(state)["seen"], args.today)
         write_state(args.state, state)
 
     for index, candidate in enumerate(selected, start=1):
+        # イベント枠の銘柄は巡回の外から差し込んでいるので、巡回位置は
+        # 進めない（進めると別の銘柄が1つ飛ばされる）。
+        counts_towards_rotation = (
+            candidate.code not in picked_codes and not candidate.is_due
+        )
         try:
             parsed, last_remaining = fetch_one(candidate, api_key)
         except FetchError as error:
@@ -819,7 +1311,8 @@ def main() -> None:
             record_failure(state, candidate.code, fetched_at, error)
             print(f"取得失敗（続行）: {error}", file=sys.stderr)
             # 失敗した銘柄でも待ち行列は進める（次回は次の銘柄から始める）。
-            if not candidate.is_due:
+            # イベント枠側は「処理済み」にしないので、翌日また拾われる。
+            if counts_towards_rotation:
                 normal_processed += 1
             if error.is_fatal:
                 fatal = error
@@ -833,10 +1326,19 @@ def main() -> None:
         else:
             consecutive_failures = 0
             parsed["lastFetchedAt"] = fetched_at
+            triggers = event_ids_by_code.get(candidate.code)
+            if triggers:
+                # 何をきっかけに取り直したかを残す（後から追える形にする）。
+                parsed["lastEventAt"] = max(triggers.values())
+                # 取れた分だけ「見た」と記録する。失敗した銘柄は記録しないので
+                # 翌日また同じイベントで拾われる。
+                event_state(state)["seen"].update(
+                    {event_id: day for event_id, day in triggers.items()}
+                )
             state["stocks"][candidate.code] = parsed
             if parsed["forecastDividend"] is None:
                 no_forecast += 1
-            if not candidate.is_due:
+            if counts_towards_rotation:
                 normal_processed += 1
             processed += 1
         if index % SAVE_INTERVAL == 0:
@@ -855,7 +1357,10 @@ def main() -> None:
     # 上の行は人間向け。こちらは呼び出し側（CIなど）が拾う用に、桁区切りも
     # 日本語も入れずに出す。個別銘柄の失敗ではもう止まらないので、
     # まとまった数が失敗したことに気づく手がかりが要る。
-    print(f"summary selected={len(selected)} ok={processed} failed={failed}")
+    print(
+        f"summary selected={len(selected)} ok={processed} failed={failed} "
+        f"eventPicks={len(event_picks)} eventRequests={event_requests}"
+    )
     if last_remaining is not None:
         print(f"edinetdb日次残量: {last_remaining:,}")
     print(f"状態保存: {args.state}")

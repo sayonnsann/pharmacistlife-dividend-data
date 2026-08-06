@@ -8,6 +8,7 @@ import csv
 import io
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import tempfile
@@ -20,7 +21,11 @@ from zoneinfo import ZoneInfo
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FINANCIALS = REPOSITORY_ROOT / "data" / "all_financials.json"
 DEFAULT_SECTORS = REPOSITORY_ROOT / "data" / "sector_stats.json"
-DEFAULT_DIVIDENDS = REPOSITORY_ROOT / "data" / "dividends.json"
+DEFAULT_TICKERS = REPOSITORY_ROOT / "data" / "tickers.json"
+DEFAULT_FISCAL_DIVIDENDS = REPOSITORY_ROOT / "data" / "fiscal_dividends.json"
+DEFAULT_CALENDAR_DIVIDENDS = (
+    REPOSITORY_ROOT / "data" / "calendar_dividends_frozen.json"
+)
 DEFAULT_STOCK_ACTIONS = REPOSITORY_ROOT / "data" / "stock_actions_manual.json"
 DEFAULT_FORECASTS = REPOSITORY_ROOT / "forecasts_state.json"
 DEFAULT_OUTPUT = REPOSITORY_ROOT / "stocks.sqlite"
@@ -35,7 +40,19 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--financials", type=Path, default=DEFAULT_FINANCIALS)
     parser.add_argument("--sectors", type=Path, default=DEFAULT_SECTORS)
-    parser.add_argument("--dividends", type=Path, default=DEFAULT_DIVIDENDS)
+    parser.add_argument("--tickers", type=Path, default=DEFAULT_TICKERS)
+    parser.add_argument(
+        "--fiscal-dividends", type=Path, default=DEFAULT_FISCAL_DIVIDENDS
+    )
+    parser.add_argument(
+        "--calendar-dividends",
+        type=Path,
+        default=DEFAULT_CALENDAR_DIVIDENDS,
+        help=(
+            "事業年度の系列を作れなかった銘柄の、暦年ベースの凍結スナップショット。"
+            "無ければその銘柄の配当グラフだけが空になる（ビルドは通る）。"
+        ),
+    )
     parser.add_argument(
         "--stock-actions", type=Path, default=DEFAULT_STOCK_ACTIONS
     )
@@ -112,6 +129,258 @@ def bounded(value: Any, low: float, high: float) -> float | int | None:
     if number is None or not low <= number <= high:
         return None
     return number
+
+
+def load_fiscal_dividends(path: Path) -> dict[str, dict[str, Any]]:
+    """事業年度ベースの配当系列（edinet-direct/data/fiscal_dividends.json）を読む。
+
+    暦年の系列（yfinance）では、3月決算の会社で「前期の期末配当＋当期の中間配当」が
+    同じ暦年に入るため、実在しない横ばいが生まれて連続増配が途切れる
+    （例: KDDIが連続増配1年と表示されていた）。事業年度で区切った系列に置き換える。
+
+    値が空・壊れている銘柄は黙って落とし、その銘柄は暦年の系列のまま残す。
+
+    このファイルはリポジトリに入れない。半分近くの年が haitoukin-checker 由来で、
+    利用の許可はもらっているが再配布の許可ではないため。このリポジトリは
+    jsDelivr 配信のため Public で、置くと誰でもダウンロードできてしまう。
+    置き場所は ConoHa の非公開 data ディレクトリで、日次ワークフローが
+    FTPS で取ってきて SQLite に入れる。詳しくは README の
+    「事業年度の配当系列」を参照。
+    """
+    if not path.exists():
+        raise FileNotFoundError(
+            f"事業年度の配当系列が見つかりません: {path}\n"
+            "このファイルはリポジトリに含めない運用です。"
+            "ConoHaの非公開dataディレクトリから取得するか、"
+            "edinet-direct/data/fiscal_dividends.json をコピーしてください。"
+        )
+    document = load_json(path, dict)
+
+    result: dict[str, dict[str, Any]] = {}
+    for raw_code, record in document.items():
+        if not isinstance(record, dict):
+            raise ValueError(f"{path}: {raw_code} がobjectではありません")
+        try:
+            code = normalized_code(raw_code)
+        except ValueError:
+            continue
+
+        raw_series = record.get("series")
+        if not isinstance(raw_series, dict) or not raw_series:
+            continue
+        series: dict[int, float] = {}
+        for raw_year, raw_value in raw_series.items():
+            try:
+                year = int(raw_year)
+            except (TypeError, ValueError):
+                continue
+            value = finite_number(raw_value)
+            if value is None or value < 0:
+                continue
+            series[year] = float(value)
+        if not series:
+            continue
+
+        connection = record.get("connection")
+        connection = connection if isinstance(connection, dict) else {}
+        external_years = record.get("externalYears")
+        external_years = [
+            int(year)
+            for year in external_years
+            if isinstance(year, int) or (isinstance(year, str) and year.isdigit())
+        ] if isinstance(external_years, list) else []
+
+        # 株式分割の基準がそろっていない年があり、連続増配年数を数えられない銘柄。
+        # edinet-direct/scripts/annotate_split_basis.py が付ける印。
+        # 印が無い（古い版のファイル）場合は、判定できるものとして扱う。
+        streak_basis = record.get("streakBasis")
+        streak_basis = streak_basis if isinstance(streak_basis, dict) else {}
+        streak_reliable = streak_basis.get("reliable") is not False
+        break_years = streak_basis.get("breakYears")
+        break_years = [
+            int(year) for year in break_years if isinstance(year, int)
+        ] if isinstance(break_years, list) else []
+
+        result[code] = {
+            "series": series,
+            "fiscalMonth": finite_number(record.get("fiscalMonth")),
+            "connectionStatus": connection.get("status"),
+            "connectionReason": connection.get("reason"),
+            "externalSource": record.get("externalSource"),
+            "externalYears": sorted(set(external_years) & set(series)),
+            "streakReliable": streak_reliable,
+            "streakUnreliableReason": (
+                None if streak_reliable else streak_basis.get("reason")
+            ),
+            "streakUnreliableNote": (
+                None if streak_reliable else streak_basis.get("note")
+            ),
+            "streakBreakYears": [] if streak_reliable else sorted(break_years),
+        }
+    return result
+
+
+def load_calendar_dividends(path: Path | None) -> dict[str, dict[str, Any]]:
+    """暦年ベースの配当系列の凍結スナップショットを読む。
+
+    EDINETにも haitoukin-checker にも配当の記載が無く、事業年度の系列を
+    作れなかった銘柄だけが入っている（2026-08時点で14銘柄）。中身は
+    Yahoo(yfinance)由来のため再配布できず、Publicのこのリポジトリには置かない。
+    置き場所は ConoHa の非公開 data ディレクトリ。凍結なので更新はしない。
+
+    ファイルが無くてもビルドは通す。無い場合、この14銘柄の配当グラフだけが
+    「配当データがありません」になる（他の3,794銘柄は事業年度の系列で出る）。
+    """
+    if path is None or not path.exists():
+        print(f"暦年の凍結スナップショットなし（該当銘柄の配当グラフは空）: {path}")
+        return {}
+    document = load_json(path, dict)
+    stocks = document.get("stocks")
+    if not isinstance(stocks, dict):
+        raise ValueError(f"{path}: stocksがobjectではありません")
+
+    result: dict[str, dict[str, Any]] = {}
+    for raw_code, record in stocks.items():
+        if not isinstance(record, dict):
+            raise ValueError(f"{path}: {raw_code} がobjectではありません")
+        try:
+            code = normalized_code(raw_code)
+        except ValueError:
+            continue
+        series: dict[int, float] = {}
+        for raw_year, raw_value in (record.get("annual") or {}).items():
+            try:
+                year = int(raw_year)
+            except (TypeError, ValueError):
+                continue
+            value = finite_number(raw_value)
+            if value is None or value < 0:
+                continue
+            series[year] = float(value)
+        if not series:
+            continue
+        result[code] = {"name": record.get("name"), "series": series}
+    print(f"暦年の凍結スナップショット: {len(result)}銘柄（{path}）")
+    return result
+
+
+def load_tickers(path: Path) -> dict[str, dict[str, Any]]:
+    """JPX由来の銘柄マスタ（名称・市場・業種）を読む。
+
+    以前はこの3項目も dividends.json から取っていたが、あちらはYahoo由来で
+    再配布できない。tickers.json は同じ値をJPXの公式一覧から作っていて、
+    このリポジトリに入れてよいので、そちらへ寄せた。
+    """
+    records = load_json(path, list)
+    result, _ = index_by_code(records, "tickers", skip_nonstandard=True)
+    return result
+
+
+def _streak_from_series(
+    series: dict[int, float], years: list[int], *, allow_equal: bool
+) -> tuple[int, bool]:
+    """最新年から遡って連続増配（または連続非減配）の年数と、天井かどうかを返す。
+
+    天井 = 系列の最も古い年まで途切れずに続いている状態。それより前は
+    データが無くて確認できないので、画面では「N年以上」と出す必要がある。
+
+    途中で止める条件:
+      - 年が飛んでいる（欠測年をまたいで比較すると連続性を確認できない）
+      - どちらかの年が無配（0円）。減配で0になった年も、無配から復配した年も、
+        「連続して増配してきた」とは言えないので、そこで区切る。
+        暦年の系列（yfinance）は無配年のデータ自体を持たないので、
+        この扱いにすると従来の数え方と結果が揃う。
+    """
+    count = 0
+    index = len(years) - 1
+    while index > 0:
+        current_year, previous_year = years[index], years[index - 1]
+        if current_year - previous_year != 1:
+            break
+        current, previous = series[current_year], series[previous_year]
+        if current <= 0 or previous <= 0:
+            break
+        if not (current >= previous if allow_equal else current > previous):
+            break
+        count += 1
+        index -= 1
+    return count, count > 0 and index == 0
+
+
+def fiscal_dividend_stats(
+    series: dict[int, float],
+    *,
+    streak_reliable: bool = True,
+    break_years: list[int] | tuple[int, ...] = (),
+) -> dict[str, Any]:
+    """事業年度の配当系列から連続増配年数と平均増配率を出す。
+
+    streak_reliable=False は、株式分割の基準がそろっていない年があって
+    連続増配を数えられない銘柄（edinet-direct が印を付ける）。この場合は
+    「0年」ではなくNULLにする。0年で出すと、実際には増配が続いている会社を
+    ランキングの最下位に並べてしまい、事実と反対の印象を与えるため。
+
+    平均増配率も、基準がまたがる区間は同じ理由で使えない。たとえば
+    イエローハット(9882)は2025年度100円→2026年度62円と並ぶので、
+    3年増配率が0%になってしまう（実際は分割後の基準で62円＝124円相当）。
+    基準の切れ目をまたぐ区間だけNULLにし、またがない区間は残す。
+    """
+    years = sorted(series)
+    streak_increase, increase_capped = _streak_from_series(
+        series, years, allow_equal=False
+    )
+    streak_non_decrease, non_decrease_capped = _streak_from_series(
+        series, years, allow_equal=True
+    )
+
+    def cagr(span: int) -> float | None:
+        # 「n年前の事業年度」と比べる。年が飛んでいる銘柄で
+        # 実際には5年離れていない値を5年増配率と呼ばないため、
+        # 件数ではなく年で数える。
+        if not years:
+            return None
+        latest_year = years[-1]
+        base_year = latest_year - span
+        if base_year not in series:
+            return None
+        if not streak_reliable and _crosses_break(
+            base_year, latest_year, break_years
+        ):
+            return None
+        first, last = series[base_year], series[latest_year]
+        if first <= 0 or last <= 0:
+            return None
+        return round(((last / first) ** (1 / span) - 1) * 100, 2)
+
+    if not streak_reliable:
+        streak_increase = None
+        streak_non_decrease = None
+        increase_capped = False
+        non_decrease_capped = False
+
+    return {
+        "streakIncrease": streak_increase,
+        "streakIncreaseCapped": increase_capped,
+        "streakNonDecrease": streak_non_decrease,
+        "streakNonDecreaseCapped": non_decrease_capped,
+        "cagr3": cagr(3),
+        "cagr5": cagr(5),
+        "cagr10": cagr(10),
+    }
+
+
+def _crosses_break(
+    base_year: int, latest_year: int, break_years: list[int] | tuple[int, ...]
+) -> bool:
+    """base_year〜latest_year の区間が、基準の切れ目をまたぐか。
+
+    切れ目の年が分からない場合（印はあるが年が無い）は、
+    どの区間が安全か判断できないのでまたぐものとして扱う。
+    """
+    if not break_years:
+        return True
+    ordered = sorted(break_years)
+    return base_year <= ordered[0] and ordered[-1] <= latest_year
 
 
 def load_stock_actions(
@@ -239,14 +508,310 @@ def latest_number(series: Any) -> float | int | None:
     return max(candidates, default=(0, None), key=lambda item: item[0])[1]
 
 
-def payout_value(
-    financial: dict[str, Any], dividend: dict[str, Any]
-) -> float | int | None:
+def payout_series(financial: dict[str, Any]) -> dict[str, Any]:
+    """配当性向の系列（EDINET由来・事業年度キー）を返す。
+
+    以前はグラフの折れ線に dividends.json の暦年ベースの値を使っていたが、
+    棒グラフを事業年度に切り替えたので軸が合わなくなった。EDINET由来の
+    payoutRatioTotalBased は事業年度キーなので、棒と同じ年の上に点が乗る。
+    年数も暦年版の中央値3年に対して10年前後と長い。
+    """
+    for key in ("payoutRatioTotalBased", "payoutRatioConsolidated"):
+        series = financial.get(key)
+        if not isinstance(series, dict):
+            continue
+        # 利益がほぼゼロの年は配当性向が数千%になる。折れ線の縦軸は
+        # 最大値に合わせて伸びるので、1年の外れ値で他の年が全部つぶれる。
+        # ランキング用の payout 列と同じ 0〜1000% の範囲だけ描く。
+        bounded_series = {
+            str(year): value
+            for year, value in series.items()
+            if bounded(value, 0, 1000) is not None
+        }
+        if bounded_series:
+            return bounded_series
+    return {}
+
+
+def payout_value(financial: dict[str, Any]) -> float | int | None:
     for key in ("payoutRatioTotalBased", "payoutRatioConsolidated"):
         value = latest_number(financial.get(key))
         if value is not None:
             return value
-    return latest_number(dividend.get("payoutRatio"))
+    return None
+
+
+def forecast_fiscal_year(record: dict[str, Any]) -> int | None:
+    """会社発表の予想が「どの事業年度のものか」を年で返す。
+
+    fetch_forecasts.py が forecastFiscalYear を入れてくれていればそれを使う。
+    無い場合（この項目を入れる前に取得したstate）は、表示用に組み立ててある
+    forecastPeriod（例: 「2027年3月期(予)」「FY2027」）から年を拾う。
+
+    事業年度の配当系列のキーは決算期末の暦年（2027年3月期＝2027）なので、
+    ここで返す年をそのまま棒グラフの年として使える。
+    """
+    explicit = record.get("forecastFiscalYear")
+    if isinstance(explicit, int) and not isinstance(explicit, bool):
+        return explicit
+    period = record.get("forecastPeriod")
+    if not isinstance(period, str):
+        return None
+    match = re.search(r"(\d{4})\s*年", period) or re.search(
+        r"FY\s*(\d{4})", period, re.IGNORECASE
+    )
+    return int(match.group(1)) if match else None
+
+
+def forecast_split_factor(record: dict[str, Any]) -> float | None:
+    """予想に付いてくる分割係数（1株→N株のN）。計算に使えない値はNone。"""
+    factor = finite_number(record.get("forecastSplitFactor"))
+    if factor is None or factor <= 0:
+        return None
+    return float(factor)
+
+
+def reported_share_basis(record: dict[str, Any]) -> str:
+    """APIが申告している「予想値がどの株数基準か」。無ければ空文字。"""
+    value = record.get("forecastShareBasis")
+    return str(value).strip().lower() if isinstance(value, str) else ""
+
+
+def forecast_split_effective_date(record: dict[str, Any]) -> date | None:
+    raw = record.get("forecastSplitEffectiveDate")
+    if not isinstance(raw, str):
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        return None
+
+
+def legs_match_annual(
+    interim: float | int | None,
+    final: float | int | None,
+    annual: float | int | None,
+) -> bool:
+    """中間＋期末が会社発表の年間値と一致するか。
+
+    一致するなら、その期の予想は中間も期末も年間値も同じ株数で書かれている
+    （＝どこかの一つの基準で揃っている）。一致しないなら、中間と期末が別々の
+    株数に対する金額で、足しても意味のある数にならない期だと分かる。
+
+      東計電算のQ2開示: 86.5 + 97.5 = 184.0 ≠ 97.5   → 混在
+      同じ銘柄のQ1開示: 62.5 + 110.5 = 173.0 = 173.0 → 単一基準
+
+    円未満の端数と、まとめて出すときの丸めを吸収するため、0.01円と
+    年間値の0.5%の大きいほうまでは同じとみなす。
+    """
+    if interim is None or final is None or annual is None:
+        return False
+    tolerance = max(0.01, abs(float(annual)) * 0.005)
+    return abs(float(interim) + float(final) - float(annual)) <= tolerance
+
+
+def forecast_on_price_basis(record: Any, *, today: date) -> dict[str, Any]:
+    """予想配当を、株価と同じ株数基準に揃えて返す。
+
+    分割日をまたぐ期は、中間配当と期末配当が別々の株数に対して支払われる。
+    東計電算(4746)なら中間86.5円は分割前の1株に、期末97.5円は分割後の1株に
+    対して払われるので、単純に足した184円はどの株数の話でもない。
+    株価は分割日に市場が1/4にするので、配当も同じ日に基準を切り替えれば
+    利回りが連続する。
+
+      分割日より前: 中間 + 期末×係数 = 86.5 + 97.5×4 = 476.5円（分割前の1株）
+      分割日以降  : 中間÷係数 + 期末 = 86.5÷4 + 97.5 = 119.125円（分割後の1株）
+
+    どちらも株価と組み合わせると利回りは8.46%で一致する。API側の
+    adjusted_forecast_dividend_per_share は常に分割後基準なので、分割前の
+    株価と組み合わせると利回りが1/4になってしまう。分割日を過ぎてからなら
+    基準が合うのでそのまま使える。
+
+    ただし、分割日をまたぐ期でも会社が予想を一つの基準に揃えて出している
+    ことがある。組み立てるかどうかは中間＋期末が年間値と一致するかで決める
+    （legs_match_annual 参照）。合っているなら組み立て直さない。
+
+    返す辞書:
+      value   … 表示・利回り計算に使う年間予想
+      basis   … どの経路で決めたか
+                  single_basis_as_reported … 内訳の合計が年間値と一致した
+                                              ので、会社発表の年間値のまま
+                  pre_split_composed  … 分割日前。中間 + 期末×係数
+                  pre_split_reported  … 内訳が無く、申告が pre_split
+                  post_split_adjusted … 分割日以降。API側の分割後年間値
+                  post_split_composed … 分割日以降。中間÷係数 + 期末
+                  raw                 … 分割の予定なし、または判断材料なし
+      interim … value と同じ株数基準に揃えた中間（取れなければNone）
+      final   … 同じく期末
+    """
+    if not isinstance(record, dict):
+        return {"value": None, "basis": "raw", "interim": None, "final": None}
+
+    raw_value = bounded(record.get("forecastDividend"), 0, 1_000_000)
+    interim = bounded(record.get("forecastInterimDividend"), 0, 1_000_000)
+    final = bounded(record.get("forecastFinalDividend"), 0, 1_000_000)
+
+    def as_raw() -> dict[str, Any]:
+        return {
+            "value": raw_value,
+            "basis": "raw",
+            "interim": interim,
+            "final": final,
+        }
+
+    effective = forecast_split_effective_date(record)
+    factor = forecast_split_factor(record)
+    # 分割の予定が無い（大多数）、または係数が使えない値なら今までどおり。
+    if effective is None or factor is None:
+        return as_raw()
+
+    if today < effective:
+        # まずデータ自身で確かめる。中間＋期末が年間値と一致するなら、その期の
+        # 予想は一つの株数基準で書かれているので、組み立て直すと係数が二重に
+        # 掛かる（東計電算のQ1開示なら 62.5+110.5×4 = 504.5円。正しくは173円で、
+        # API側の adjusted 43.25×4 = 173 とも合う）。
+        if legs_match_annual(interim, final, raw_value):
+            return {
+                "value": raw_value,
+                "basis": "single_basis_as_reported",
+                "interim": interim,
+                "final": final,
+            }
+        # 合計が合わないのは、中間と期末が別々の株数に対する金額だから。
+        # forecast_share_basis が何と申告していても（post_split でも）、
+        # ここはデータ自身の検算を優先して組み立てる。混在期は会社も年間値と
+        # して意味のある一つの数字を出せていない（東計電算のQ2開示なら
+        # forecast_dividend_per_share=97.5 は期末だけの額）ので、内訳から
+        # 組み立てるほうが根拠がはっきりする。
+        if interim is None or final is None:
+            # 内訳が無いと検算できない。申告が pre_split なら、生の年間値が
+            # 分割前の株価と同じ基準だと分かるので、そのまま使ってよい。
+            if reported_share_basis(record) == "pre_split":
+                return {
+                    "value": raw_value,
+                    "basis": "pre_split_reported",
+                    "interim": interim,
+                    "final": final,
+                }
+            return as_raw()
+        composed_final = float(final) * factor
+        total = bounded(round(float(interim) + composed_final, 4), 0, 1_000_000)
+        if total is None:
+            return as_raw()
+        return {
+            "value": total,
+            "basis": "pre_split_composed",
+            "interim": interim,
+            "final": round(composed_final, 4),
+        }
+
+    adjusted = bounded(record.get("forecastDividendAdjusted"), 0, 1_000_000)
+    if adjusted is not None:
+        composed_interim = (
+            round(float(interim) / factor, 4) if interim is not None else None
+        )
+        return {
+            "value": adjusted,
+            "basis": "post_split_adjusted",
+            "interim": composed_interim,
+            "final": final,
+        }
+    if interim is None or final is None:
+        return as_raw()
+    composed_interim = float(interim) / factor
+    total = bounded(round(composed_interim + float(final), 4), 0, 1_000_000)
+    if total is None:
+        return as_raw()
+    return {
+        "value": total,
+        "basis": "post_split_composed",
+        "interim": round(composed_interim, 4),
+        "final": final,
+    }
+
+
+def pending_dividends(
+    forecast_record: Any,
+    series_years: set[int],
+    *,
+    today: date,
+    factor: float = 1.0,
+) -> dict[str, dict[str, Any]]:
+    """まだ配当系列に載っていない事業年度を、会社発表の値で組み立てる。
+
+    出どころは edinetdb.jp（決算短信ベース）。以前この枠に出していた
+    「集計中」は、Yahooの権利落ちベースの暦年途中累計だった。事業年度の
+    棒グラフには混ぜられない値なので、会社が発表した予想・確定額に置き換える。
+
+    kind は "confirmed"（会社発表の確定額）と "forecast"（予想）の2種類。
+    同じ年に両方あるときは確定を優先する。EDINETの有報から実績を取れた年
+    （series_years）は、そちらが正なのでここには出さない。
+    """
+    if not isinstance(forecast_record, dict):
+        return {}
+    latest_year = max(series_years) if series_years else None
+    # 決算期末から有報が出るまで最長でも1年程度。それより先の年が来たら
+    # 取得元の値がおかしいので捨てる（未来の年に棒が伸びると事故に見える）。
+    upper_year = today.year + 2
+
+    def acceptable(year: int | None) -> bool:
+        return (
+            year is not None
+            and year not in series_years
+            and (latest_year is None or year > latest_year)
+            and 1990 <= year <= upper_year
+        )
+
+    result: dict[str, dict[str, Any]] = {}
+
+    confirmed = bounded(forecast_record.get("confirmedDividend"), 0, 1_000_000)
+    fiscal_year_end = forecast_record.get("confirmedFiscalYearEnd")
+    confirmed_year = None
+    if isinstance(fiscal_year_end, str) and fiscal_year_end[:4].isdigit():
+        confirmed_year = int(fiscal_year_end[:4])
+    if confirmed is not None and confirmed > 0 and acceptable(confirmed_year):
+        result[str(confirmed_year)] = {
+            "value": round(float(confirmed) * factor, 4),
+            "kind": "confirmed",
+            "label": "確定",
+            "fiscalYearEnd": fiscal_year_end,
+            "source": "edinetdb",
+        }
+
+    # 分割日をまたぐ期は、中間と期末が別の株数に対する金額なので、
+    # 株価と同じ基準に揃えてから棒にする。
+    resolved = forecast_on_price_basis(forecast_record, today=today)
+    forecast = resolved["value"]
+    forecast_year = forecast_fiscal_year(forecast_record)
+    if (
+        forecast is not None
+        and forecast > 0
+        and acceptable(forecast_year)
+        and str(forecast_year) not in result
+    ):
+        entry: dict[str, Any] = {
+            "value": round(float(forecast) * factor, 4),
+            "kind": "forecast",
+            "label": "予想",
+            "source": "edinetdb",
+        }
+        # どの経路で決めた値かを残す（分割がある銘柄だけ）。
+        if resolved["basis"] != "raw":
+            entry["basis"] = resolved["basis"]
+        period = forecast_record.get("forecastPeriod")
+        if isinstance(period, str) and period.strip():
+            entry["period"] = period.strip()[:100]
+        for name in ("interim", "final"):
+            value = resolved[name]
+            if value is not None:
+                entry[name] = round(float(value) * factor, 4)
+        result[str(forecast_year)] = entry
+
+    fetched_at = forecast_record.get("lastFetchedAt")
+    if isinstance(fetched_at, str):
+        for entry in result.values():
+            entry["fetchedAt"] = fetched_at[:40]
+    return result
 
 
 def json_text(value: Any) -> str:
@@ -316,11 +881,17 @@ def load_daily_prices(url: str) -> tuple[dict[str, float], dict[str, float], str
 
 
 def forecast_values(
-    record: Any, price: float | int | None
-) -> tuple[float | int | None, float | None, str | None, str | None]:
+    record: Any, price: float | int | None, *, today: date
+) -> tuple[float | int | None, float | None, str | None, str | None, str | None]:
+    """表示用の予想配当・予想利回りと、その値をどう決めたかの根拠を返す。
+
+    株価と同じ株数基準に揃えた値を使う（forecast_on_price_basis 参照）。
+    分割の予定が無い銘柄では今までどおり forecastDividend がそのまま出る。
+    """
     if not isinstance(record, dict):
-        return None, None, None, None
-    dividend = bounded(record.get("forecastDividend"), 0, 1_000_000)
+        return None, None, None, None, None
+    resolved = forecast_on_price_basis(record, today=today)
+    dividend = resolved["value"]
     forecast_yield = None
     if dividend is not None and price is not None and price > 0:
         forecast_yield = bounded(
@@ -333,6 +904,7 @@ def forecast_values(
         forecast_yield,
         str(period)[:100] if period is not None else None,
         str(fetched_at)[:40] if fetched_at is not None else None,
+        resolved["basis"],
     )
 
 
@@ -340,23 +912,28 @@ def create_database(
     database_path: Path,
     financials: list[dict[str, Any]],
     sectors: dict[str, Any],
-    dividends: list[dict[str, Any]],
+    tickers: dict[str, dict[str, Any]],
     forecasts: dict[str, Any],
     source_paths: list[Path],
     prices_url: str,
     stock_actions_by_code: dict[str, list[dict[str, Any]]] | None = None,
     stock_actions_path: Path | None = None,
+    fiscal_by_code: dict[str, dict[str, Any]] | None = None,
+    fiscal_path: Path | None = None,
+    calendar_by_code: dict[str, dict[str, Any]] | None = None,
+    calendar_path: Path | None = None,
+    today: date | None = None,
 ) -> tuple[int, int, int]:
     financial_by_code, skipped_financials = index_by_code(
         financials, "all_financials"
     )
     if skipped_financials:
         raise ValueError("all_financialsに4桁英数でないコードがあります")
-    dividend_by_code, skipped_dividends = index_by_code(
-        dividends, "dividends", skip_nonstandard=True
-    )
     daily_prices, daily_dividends, prices_updated = load_daily_prices(prices_url)
     stock_actions_by_code = stock_actions_by_code or {}
+    fiscal_by_code = fiscal_by_code or {}
+    calendar_by_code = calendar_by_code or {}
+    today = today or datetime.now(JST).date()
     breakdown_path = REPOSITORY_ROOT / "data" / "dividend_breakdown.json"
     dividend_breakdown: dict = {}
     if breakdown_path.exists():
@@ -386,6 +963,12 @@ def create_database(
                     forecast_yield REAL,
                     streak INTEGER,
                     streak_nd INTEGER,
+                    streak_capped INTEGER NOT NULL DEFAULT 0,
+                    streak_nd_capped INTEGER NOT NULL DEFAULT 0,
+                    -- 1なら「株式分割の基準がそろわず年数を判定できない」。
+                    -- streak / streak_nd はNULLになる。NULLは比較条件に
+                    -- 一致しないので、絞り込み（streak >= N）からは自動的に外れる。
+                    streak_unreliable INTEGER NOT NULL DEFAULT 0,
                     cagr3 REAL,
                     roe REAL,
                     equity_ratio REAL,
@@ -417,22 +1000,28 @@ def create_database(
             )
 
             rows = []
-            matched_dividends = 0
+            matched_tickers = 0
             adjusted_stocks = 0
             applied_events = 0
+            fiscal_based_stocks = 0
+            calendar_based_stocks = 0
+            frozen_calendar_stocks = 0
+            streak_unreliable_stocks = 0
+            pending_stocks = 0
+            pending_confirmed = 0
+            pending_forecast = 0
+            payout_line_stocks = 0
             for code, financial in financial_by_code.items():
-                dividend = dividend_by_code.get(code, {})
-                if dividend:
-                    matched_dividends += 1
+                ticker = tickers.get(code, {})
+                if ticker:
+                    matched_tickers += 1
 
                 daily_price = daily_prices.get(code)
                 adjustment = split_adjustment(stock_actions_by_code.get(code, []))
                 if adjustment is not None:
                     adjusted_stocks += 1
                     applied_events += len(adjustment["events"])
-                effective_price = daily_price or bounded(
-                    dividend.get("price"), 0.1, 10_000_000
-                )
+                effective_price = daily_price
                 daily_yield = None
                 # 分子はkouhaitou-dbの年間配当を最優先で使い、既知の分割は
                 # stock_actions_manual.jsonの係数でこの後に現在株価基準へ揃える。
@@ -441,10 +1030,6 @@ def create_database(
                 # この場合は過去の配当履歴に遡らない（東電の2010年60円のような
                 # 十数年前の金額で利回りを出してしまうため）。
                 currently_unpaid = numerator is not None and float(numerator) <= 0
-                if numerator is None:
-                    annual = dividend.get("annual") or {}
-                    if isinstance(annual, dict) and annual:
-                        numerator = latest_number(annual)
                 if adjustment is not None and finite_number(numerator) is not None:
                     numerator = (
                         float(numerator) * adjustment["dividendFactor"]
@@ -456,10 +1041,19 @@ def create_database(
                     forecast_yield,
                     forecast_period,
                     forecast_fetched_at,
-                ) = forecast_values(forecasts.get(code), effective_price)
+                    forecast_basis,
+                ) = forecast_values(
+                    forecasts.get(code), effective_price, today=today
+                )
 
                 payload = dict(financial)
-                payload.update(dividend)
+                for key in ("name", "market", "sector", "sector17"):
+                    if ticker.get(key):
+                        payload[key] = ticker[key]
+                # グラフの折れ線。EDINET由来・事業年度キーなので棒と軸が揃う。
+                payload["payoutRatio"] = payout_series(financial)
+                if payload["payoutRatio"]:
+                    payout_line_stocks += 1
                 if adjustment is not None:
                     dividend_factor = adjustment["dividendFactor"]
                     eps_bps_factor = adjustment["epsBpsFactor"]
@@ -476,6 +1070,144 @@ def create_database(
                                     financial[key], eps_bps_factor
                                 )
                     payload["splitAdjustment"] = adjustment
+
+                # 配当系列を事業年度ベースへ差し替える。
+                # 系列が取れなかった銘柄だけ、暦年の系列のまま残す。
+                fiscal = fiscal_by_code.get(code)
+                if fiscal is not None:
+                    fiscal_based_stocks += 1
+                    series = fiscal["series"]
+                    if adjustment is not None:
+                        # dividendPerShare と同じく、系列全体を現在の株式数基準へ揃える。
+                        series = {
+                            year: round(
+                                value * adjustment["dividendFactor"], 4
+                            )
+                            for year, value in series.items()
+                        }
+                    streak_reliable = fiscal.get("streakReliable", True)
+                    stats = fiscal_dividend_stats(
+                        series,
+                        streak_reliable=streak_reliable,
+                        break_years=fiscal.get("streakBreakYears", []),
+                    )
+                    if not streak_reliable:
+                        streak_unreliable_stocks += 1
+                    payload["annual"] = {
+                        str(year): series[year] for year in sorted(series)
+                    }
+                    payload["streakIncrease"] = stats["streakIncrease"]
+                    payload["streakNonDecrease"] = stats["streakNonDecrease"]
+                    payload["streakIncreaseCapped"] = stats[
+                        "streakIncreaseCapped"
+                    ]
+                    payload["streakNonDecreaseCapped"] = stats[
+                        "streakNonDecreaseCapped"
+                    ]
+                    payload["cagr3"] = stats["cagr3"]
+                    payload["cagr5"] = stats["cagr5"]
+                    payload["cagr10"] = stats["cagr10"]
+                    payload["dividendSeries"] = {
+                        "basis": "fiscal",
+                        "fiscalMonth": fiscal["fiscalMonth"],
+                        "startYear": min(series),
+                        "endYear": max(series),
+                        # 出典。externalYears に無い年はすべてEDINET由来。
+                        "externalSource": fiscal["externalSource"],
+                        "externalYears": fiscal["externalYears"],
+                        "connectionStatus": fiscal["connectionStatus"],
+                        "connectionReason": fiscal["connectionReason"],
+                    }
+                    # 画面で「株式分割の影響で判定できません」と出せるようにする印。
+                    # 年数がNULLなのが「データが無い」からなのか
+                    # 「基準がそろわず数えられない」からなのかを区別するため。
+                    payload["streakUnreliable"] = (
+                        None
+                        if streak_reliable
+                        else {
+                            "reason": fiscal.get("streakUnreliableReason"),
+                            "note": fiscal.get("streakUnreliableNote"),
+                            "breakYears": fiscal.get("streakBreakYears", []),
+                        }
+                    )
+                else:
+                    # 事業年度の系列を作れなかった銘柄。EDINETにも
+                    # haitoukin-checkerにも配当の記載が無い会社で、実質的な
+                    # 配当履歴があるのは14銘柄だけ（東京電力など、十数年前に
+                    # 配当をやめた会社が中心）。その分だけ暦年の凍結
+                    # スナップショットから出す。残りは配当履歴そのものが無い。
+                    calendar_based_stocks += 1
+                    frozen = calendar_by_code.get(code)
+                    series = frozen["series"] if frozen else {}
+                    if series and adjustment is not None:
+                        series = {
+                            year: round(
+                                value * adjustment["dividendFactor"], 4
+                            )
+                            for year, value in series.items()
+                        }
+                    stats = fiscal_dividend_stats(series) if series else {}
+                    if series:
+                        frozen_calendar_stocks += 1
+                        payload["annual"] = {
+                            str(year): series[year] for year in sorted(series)
+                        }
+                    payload["streakIncrease"] = stats.get("streakIncrease")
+                    payload["streakNonDecrease"] = stats.get("streakNonDecrease")
+                    payload["cagr3"] = stats.get("cagr3")
+                    payload["cagr5"] = stats.get("cagr5")
+                    payload["cagr10"] = stats.get("cagr10")
+                    payload["streakIncreaseCapped"] = bool(
+                        stats.get("streakIncreaseCapped")
+                    )
+                    payload["streakNonDecreaseCapped"] = bool(
+                        stats.get("streakNonDecreaseCapped")
+                    )
+                    payload["streakUnreliable"] = None
+                    payload["dividendSeries"] = {
+                        "basis": "calendar",
+                        "frozen": bool(series),
+                        "startYear": min(series) if series else None,
+                        "endYear": max(series) if series else None,
+                        "externalSource": "yfinance" if series else None,
+                        "externalYears": sorted(series),
+                    }
+
+                # まだ系列に載っていない事業年度を、会社発表の予想・確定額で足す。
+                # 以前ここに出していたYahooの「集計中」（権利落ちベースの暦年
+                # 途中累計）の置き換え。
+                series_years = {
+                    int(year)
+                    for year in (payload.get("annual") or {})
+                    if str(year).isdigit()
+                }
+                pending = pending_dividends(
+                    forecasts.get(code),
+                    series_years,
+                    today=today,
+                    factor=(
+                        adjustment["dividendFactor"]
+                        if adjustment is not None
+                        else 1.0
+                    ),
+                )
+                payload["annualPending"] = pending
+                # 既存の表示コードが読む形。値だけの {年: 円}。
+                payload["annualPartial"] = {
+                    year: entry["value"] for year, entry in pending.items()
+                }
+                if pending:
+                    pending_stocks += 1
+                    pending_confirmed += sum(
+                        1 for e in pending.values() if e["kind"] == "confirmed"
+                    )
+                    pending_forecast += sum(
+                        1 for e in pending.values() if e["kind"] == "forecast"
+                    )
+                streak_value = finite_number(payload.get("streakIncrease"))
+                streak_nd_value = finite_number(payload.get("streakNonDecrease"))
+                cagr3_value = finite_number(payload.get("cagr3"))
+
                 payload["code"] = code
                 payload["industry"] = financial.get("industry")
                 breakdown_entry = dividend_breakdown.get(code)
@@ -492,7 +1224,13 @@ def create_database(
                 payload["forecastYield"] = forecast_yield
                 payload["forecastPeriod"] = forecast_period
                 payload["forecastFetchedAt"] = forecast_fetched_at
-                # 会社発表の確定年度配当（edinetdb由来）。集計中のYahoo値の裏付けに使う
+                # forecastDividend をどう決めたかの根拠。分割日をまたぐ期は
+                # 生の値ではなく中間・期末から組み立てているので、後から
+                # 表示の裏を取れるようにしておく。
+                payload["forecastBasis"] = forecast_basis
+                # 会社発表の確定年度配当（edinetdb由来）。
+                # annualPending の「確定」バーと同じ値で、旧い表示コードが
+                # こちらを読むので残してある。
                 forecast_record = forecasts.get(code) or {}
                 confirmed = bounded(forecast_record.get("confirmedDividend"), 0, 1_000_000)
                 if confirmed is not None:
@@ -500,31 +1238,24 @@ def create_database(
                     payload["confirmedFiscalYearEnd"] = forecast_record.get("confirmedFiscalYearEnd")
 
                 name = str(
-                    dividend.get("name") or financial.get("name") or code
+                    ticker.get("name") or financial.get("name") or code
                 ).strip()
                 rows.append(
                     (
                         code,
                         name,
                         financial.get("industry"),
-                        bounded(
-                            daily_yield
-                            if daily_yield is not None
-                            else (
-                                None
-                                if currently_unpaid
-                                else dividend.get("dividendYield")
-                            ),
-                            0,
-                            30,
-                        ),
+                        bounded(daily_yield, 0, 30),
                         forecast_yield,
-                        finite_number(dividend.get("streakIncrease")),
-                        finite_number(dividend.get("streakNonDecrease")),
-                        finite_number(dividend.get("cagr3")),
+                        streak_value,
+                        streak_nd_value,
+                        1 if payload.get("streakIncreaseCapped") else 0,
+                        1 if payload.get("streakNonDecreaseCapped") else 0,
+                        1 if payload.get("streakUnreliable") else 0,
+                        cagr3_value,
                         latest_number(financial.get("roe")),
                         latest_number(financial.get("equityRatio")),
-                        bounded(payout_value(financial, dividend), 0, 1000),
+                        bounded(payout_value(financial), 0, 1000),
                         bounded(effective_price, 0.1, 10_000_000),
                         json_text(payload),
                     )
@@ -534,8 +1265,10 @@ def create_database(
                 """
                 INSERT INTO stocks (
                     code, name, industry, yield, forecast_yield, streak,
-                    streak_nd, cagr3, roe, equity_ratio, payout, price, payload
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    streak_nd, streak_capped, streak_nd_capped,
+                    streak_unreliable, cagr3,
+                    roe, equity_ratio, payout, price, payload
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 rows,
             )
@@ -546,15 +1279,24 @@ def create_database(
             metadata = {
                 "updated": updated,
                 "stock_count": str(len(rows)),
-                "dividend_match_count": str(matched_dividends),
-                "dividend_skipped_nonstandard_count": str(skipped_dividends),
+                "ticker_match_count": str(matched_tickers),
                 "financials_source": str(source_paths[0]),
                 "sectors_source": str(source_paths[1]),
-                "dividends_source": str(source_paths[2]),
+                "tickers_source": str(source_paths[2]),
                 "forecasts_source": str(source_paths[3]),
                 "stock_actions_source": str(stock_actions_path or ""),
                 "split_adjusted_stock_count": str(adjusted_stocks),
                 "split_adjustment_event_count": str(applied_events),
+                "fiscal_dividends_source": str(fiscal_path or ""),
+                "fiscal_based_stock_count": str(fiscal_based_stocks),
+                "calendar_based_stock_count": str(calendar_based_stocks),
+                "calendar_dividends_source": str(calendar_path or ""),
+                "frozen_calendar_stock_count": str(frozen_calendar_stocks),
+                "streak_unreliable_stock_count": str(streak_unreliable_stocks),
+                "pending_stock_count": str(pending_stocks),
+                "pending_confirmed_count": str(pending_confirmed),
+                "pending_forecast_count": str(pending_forecast),
+                "payout_line_stock_count": str(payout_line_stocks),
                 "daily_prices_source": prices_url,
                 "daily_prices_updated": prices_updated,
             }
@@ -567,6 +1309,20 @@ def create_database(
                 f"株式分割補正: {adjusted_stocks:,}銘柄"
                 f"（{applied_events:,}イベント）"
             )
+            print(
+                f"配当系列: 事業年度 {fiscal_based_stocks:,}銘柄 / "
+                f"暦年（凍結） {frozen_calendar_stocks:,}銘柄 / "
+                f"配当履歴なし {calendar_based_stocks - frozen_calendar_stocks:,}銘柄"
+            )
+            print(
+                f"連続増配を判定できない銘柄（株式分割の基準ズレ）: "
+                f"{streak_unreliable_stocks:,}銘柄"
+            )
+            print(
+                f"進行中の事業年度のバー: {pending_stocks:,}銘柄"
+                f"（確定 {pending_confirmed:,} / 予想 {pending_forecast:,}）"
+            )
+            print(f"配当性向の折れ線: {payout_line_stocks:,}銘柄")
         finally:
             connection.close()
 
@@ -576,36 +1332,42 @@ def create_database(
         temporary_path.unlink(missing_ok=True)
         raise
 
-    return len(rows), matched_dividends, skipped_dividends
+    return len(rows), matched_tickers, frozen_calendar_stocks
 
 
 def main() -> None:
     args = parse_args()
     financials = load_json(args.financials, list)
     sectors = load_json(args.sectors, dict)
-    dividends = load_json(args.dividends, list)
+    tickers = load_tickers(args.tickers)
+    fiscal_dividends = load_fiscal_dividends(args.fiscal_dividends)
+    calendar_dividends = load_calendar_dividends(args.calendar_dividends)
     stock_actions = load_stock_actions(args.stock_actions)
     forecasts = load_forecasts(args.forecasts)
-    count, matched, skipped = create_database(
+    count, matched, frozen = create_database(
         args.output,
         financials,
         sectors,
-        dividends,
+        tickers,
         forecasts,
         [
             args.financials,
             args.sectors,
-            args.dividends,
+            args.tickers,
             args.forecasts,
         ],
         args.prices_url,
         stock_actions,
         args.stock_actions,
+        fiscal_dividends,
+        args.fiscal_dividends,
+        calendar_dividends,
+        args.calendar_dividends,
     )
     size = args.output.stat().st_size
     print(f"生成完了: {args.output}")
-    print(f"銘柄数: {count:,}（配当データ突合: {matched:,}）")
-    print(f"4桁英数でない配当側コードの除外: {skipped:,}")
+    print(f"銘柄数: {count:,}（銘柄マスタ突合: {matched:,}）")
+    print(f"暦年の凍結スナップショットを使った銘柄: {frozen:,}")
     print(f"業種数: {len(sectors):,}")
     print(f"ファイルサイズ: {size:,} bytes ({size / 1024 / 1024:.2f} MiB)")
 

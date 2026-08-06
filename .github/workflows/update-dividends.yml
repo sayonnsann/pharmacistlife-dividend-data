@@ -3,12 +3,19 @@ name: 配当データの自動更新
 # 実行タイミング:
 #   - 毎週月曜の早朝(日本時間 6:00 ≒ 日曜 21:00 UTC)に自動実行
 #   - GitHubの Actions 画面から手動でも実行できる(workflow_dispatch)
+#
+# データの行き先:
+#   data/tickers.json    … JPX公式の銘柄一覧が出どころ。このリポジトリへcommit/push
+#   data/dividends.json  … Yahoo(yfinance)由来＋haitoukin-checker由来の補完入り。
+#                          リポジトリには入れず、ConoHaの非公開dataディレクトリへ
+#                          FTPSで送る。日次ワークフロー(daily-store.yml)がそこから
+#                          取ってきてSQLiteに入れる。
 on:
   schedule:
     - cron: "0 21 * * 0"
   workflow_dispatch: {}
 
-# ワークフローがリポジトリへ commit/push できるように書き込み権限を付与
+# tickers.json を commit/push するための書き込み権限
 permissions:
   contents: write
 
@@ -17,6 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     # 全銘柄取得は1〜2時間かかるため、余裕をもって上限を設定
     timeout-minutes: 240
+    env:
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASS: ${{ secrets.FTP_PASS }}
+      FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
 
     steps:
       - name: リポジトリを取得
@@ -30,6 +42,87 @@ jobs:
       - name: 依存ライブラリをインストール
         run: pip install -r scripts/requirements.txt
 
+      - name: 外部由来データがリポジトリに入っていないか確認
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 公開してよいのはEDINET原本から作った2次資料まで。以下は外部サイト由来の
+          # 値そのものを含むので、Publicのこのリポジトリには絶対に入れない。
+          # 利用の許可はあるが再配布の許可ではない。
+          tracked=0
+          for path in \
+            data/fiscal_dividends.json \
+            data/haitoukin_fills.json \
+            data/dividends.json
+          do
+            if git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
+              echo "::error::${path} がリポジトリに入っています。外部サイト由来のデータをPublicリポジトリに置くことはできません。git rm --cached で外してください。"
+              tracked=1
+            fi
+          done
+          if [[ "$tracked" -ne 0 ]]; then
+            exit 1
+          fi
+          echo "外部由来データはリポジトリに入っていません。"
+
+      - name: FTPS設定を検証
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in FTP_HOST FTP_USER FTP_PASS FTP_REMOTE_DIR; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Secret ${name} が未設定です。"
+              exit 1
+            fi
+          done
+          if [[ "$FTP_HOST" == *"://"* || "$FTP_HOST" == */* ]]; then
+            echo "::error::FTP_HOST はホスト名だけを設定してください。"
+            exit 1
+          fi
+          if [[ "$FTP_REMOTE_DIR" != /* ]]; then
+            echo "::error::FTP_REMOTE_DIR は / から始めてください。"
+            exit 1
+          fi
+
+      - name: 非公開ファイルのパスを設定
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 補完用ファイルはランナーの一時領域にだけ置く（作業ツリーに置かない）。
+          # dividends.json は fetch_dividends.py が data/ に書く仕様なので
+          # 作業ツリーに残るが、.gitignore の対象なのでcommitされることはない。
+          echo "FILLS_FILE=${RUNNER_TEMP}/haitoukin_fills.json" >> "$GITHUB_ENV"
+          echo "DIVIDENDS_FILE=${GITHUB_WORKSPACE}/data/dividends.json" >> "$GITHUB_ENV"
+
+      - name: haitoukin補完データをFTPSから取得
+        shell: bash
+        run: |
+          set -euo pipefail
+          # haitoukin-checker から取り込んだ配当額そのもの。再配布はできないので
+          # ConoHaの非公開dataディレクトリにだけ置いてある（静的ファイルなので
+          # 更新はオーナーの手作業）。
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          curl \
+            --ssl-reqd \
+            --fail \
+            --silent \
+            --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$FILLS_FILE" \
+            "ftp://${FTP_HOST}${remote_dir}/haitoukin_fills.json"
+          python - <<'PY'
+          import json
+          import os
+          path = os.environ["FILLS_FILE"]
+          with open(path, encoding="utf-8") as source:
+              document = json.load(source)
+          if not isinstance(document, dict) or len(document) < 400:
+              raise SystemExit(
+                  f"補完データが不足しています（{len(document) if isinstance(document, dict) else 0}銘柄）"
+              )
+          print(f"補完データを取得しました: {len(document):,}銘柄")
+          PY
+
       - name: 銘柄マスタを最新化
         working-directory: scripts
         run: python build_master.py
@@ -40,19 +133,76 @@ jobs:
 
       - name: 過去年の補完データを適用（haitoukin-checker照合済み分）
         working-directory: scripts
-        run: python apply_haitoukin_fills.py
+        run: python apply_haitoukin_fills.py --fills "$FILLS_FILE"
 
-      - name: 変更があれば commit して push
+      - name: 配当データをFTPSでConoHaへ送信
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 送る前に中身を確認する。銘柄数が少なすぎるファイルを送ると
+          # 翌朝の日次ワークフローがそのまま本番に反映してしまう。
+          python - <<'PY'
+          import json
+          import os
+          path = os.environ["DIVIDENDS_FILE"]
+          with open(path, encoding="utf-8") as source:
+              document = json.load(source)
+          records = document["stocks"] if isinstance(document, dict) else document
+          if not isinstance(records, list) or len(records) < 3000:
+              raise SystemExit(
+                  f"配当履歴が不足しています（{len(records) if isinstance(records, list) else 0}銘柄）"
+              )
+          print(f"送るファイル: {len(records):,}銘柄")
+          PY
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          base_url="ftp://${FTP_HOST}${remote_dir}"
+          # まず .new という名前で全体を送り、サイズを確認してから差し替える。
+          # 日次ワークフローが取得中でも、途中までのファイルを掴むことはない。
+          curl --ssl-reqd --fail --silent --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --upload-file "$DIVIDENDS_FILE" \
+            "${base_url}/dividends.json.new"
+          local_size=$(wc -c < "$DIVIDENDS_FILE" | tr -d ' ')
+          remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
+            "${base_url}/dividends.json.new" | awk '/Content-Length/ {print $2}' | tr -d '\r')
+          if [ "$local_size" != "$remote_size" ]; then
+            echo "::error::dividends.json のアップロード検証に失敗（local=$local_size remote=$remote_size）"
+            exit 1
+          fi
+          # 今のファイルがあれば .bak へ退避する（初回は無いので飛ばす）。
+          # 頭の * は「失敗しても続ける」印で、まだ .bak が無い初回のDELE用。
+          if curl --ssl-reqd --fail --silent --head \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            "${base_url}/dividends.json" >/dev/null; then
+            curl --ssl-reqd --fail --silent --show-error \
+              --user "${FTP_USER}:${FTP_PASS}" \
+              --quote "*DELE ${remote_dir}/dividends.json.bak" \
+              --quote "RNFR ${remote_dir}/dividends.json" \
+              --quote "RNTO ${remote_dir}/dividends.json.bak" \
+              "${base_url}/"
+          fi
+          curl --ssl-reqd --fail --silent --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --quote "RNFR ${remote_dir}/dividends.json.new" \
+            --quote "RNTO ${remote_dir}/dividends.json" \
+            "${base_url}/"
+          echo "dividends.json を検証つきで差し替えました（$local_size bytes）"
+
+      # 1〜2時間かけて作った配当データを先にConoHaへ届けてから、
+      # 銘柄マスタのcommitに進む（push側で失敗しても配当データは残る）。
+      - name: 銘柄マスタに変更があれば commit して push
         id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/tickers.json data/dividends.json
+          # 配当データ(dividends.json)はここに入れない。このリポジトリへ
+          # 入れてよいのはJPX由来の銘柄マスタまで。
+          git add data/tickers.json
           if git diff --cached --quiet; then
             echo "変更なし。commit をスキップします。"
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
-            git commit -m "配当データ自動更新 ($(date -u '+%Y-%m-%d'))"
+            git commit -m "銘柄マスタ自動更新 ($(date -u '+%Y-%m-%d'))"
             git push
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -60,5 +210,4 @@ jobs:
       - name: jsDelivr のキャッシュを更新
         if: steps.commit.outputs.changed == 'true'
         run: |
-          curl -s "https://purge.jsdelivr.net/gh/sayonnsann/pharmacistlife-dividend-data@main/data/dividends.json" || true
           curl -s "https://purge.jsdelivr.net/gh/sayonnsann/pharmacistlife-dividend-data@main/data/tickers.json" || true

@@ -12,5 +12,42 @@ forecasts_state.json
 stocks.sqlite
 stocks.sqlite.*
 
+# ---------------------------------------------------------------------------
+# 外部サイト由来のデータ(このリポジトリはPublicなので絶対に入れない)
+# ---------------------------------------------------------------------------
+# haitoukin-checker から取り込んだ配当額を含むファイル。運営者から
+# 「利用してよい」との回答は得ているが、それは再配布の許諾ではない。
+# このリポジトリは jsDelivr 配信のため Public で、置けば誰でもダウンロードできる。
+# 中身は ConoHa の非公開 data ディレクトリにだけ置き、日次ワークフローが
+# FTPS で取ってきて SQLite に入れる(.github/workflows/daily-store.yml)。
+# ローカルで作業するときも、この名前で置けば git add できない。
+data/fiscal_dividends.json
+data/fiscal_dividends*.json
+data/haitoukin_raw*.json
+data/haitoukin_checker*.json
+data/haitoukin_fetch*.json
+fiscal_dividends.json
+
+# haitoukin-checker から取り込んだ配当額そのもの(440銘柄・1,660年分)。
+# 上と同じ理由で置けない。ConoHa の非公開 data ディレクトリにだけ置き、
+# 週次ワークフローが FTPS で取ってきて補完に使う。
+data/haitoukin_fills.json
+data/haitoukin_fills*.json
+haitoukin_fills.json
+
+# 暦年の配当履歴。出どころは Yahoo Finance(yfinance)で、そこへ
+# haitoukin-checker 由来の補完(上のファイル)を重ねている。どちらも
+# 再配布してよいデータではないため、リポジトリには置かない。
+# 週次ワークフローが作って ConoHa へ送り、日次ワークフローが取ってくる。
+data/dividends.json
+dividends.json
+
+# 上の dividends.json から切り出した凍結スナップショット(14銘柄)。
+# 事業年度の配当系列を作れなかった銘柄の配当グラフに使う。中身はYahoo由来の
+# 値そのものなので、同じ理由でリポジトリには置けない。ConoHa の非公開 data
+# ディレクトリに置き、日次ワークフローが FTPS で取ってくる。
+data/calendar_dividends_frozen.json
+calendar_dividends_frozen.json
+
 # OS
 .DS_Store

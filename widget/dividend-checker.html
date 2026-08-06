@@ -145,7 +145,12 @@
 
 <script>
 (function () {
-  // ここをデータホスト先のURLに書き換える(例: jsDelivr経由のGitHub raw URL)
+  // 【注意】このURLは現在404です。dividends.json はYahoo由来と
+  // haitoukin-checker由来の値を含み、再配布の許諾は無いため、
+  // Publicのこのリポジトリから外してjsDelivr配信をやめました
+  // (READMEの「非公開データの取り扱い方針」を参照)。
+  // 本番の配当チェッカーはConoHa上のPHP APIから表示に必要な項目だけを
+  // 受け取る構成に移行済みで、このファイルは経緯の記録用に残しています。
   var DATA_URL = "https://cdn.jsdelivr.net/gh/sayonnsann/pharmacistlife-dividend-data@main/data/dividends.json";
 
   var state = {

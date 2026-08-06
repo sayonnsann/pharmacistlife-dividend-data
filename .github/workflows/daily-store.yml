@@ -21,6 +21,11 @@ jobs:
       EDINETDB_API_KEY: ${{ secrets.EDINETDB_API_KEY }}
       PRIORITY_CODES: ${{ secrets.PRIORITY_CODES }}
       DVC_FORECAST_DAILY: "95"
+      # 増配・分割の開示を見て割り込ませる社数の上限（会社数で数える）。
+      # イベント取得に使ったリクエストの分だけ、上のDVC_FORECAST_DAILYから
+      # 自動的に差し引かれる。0にするとイベントAPIを一切呼ばず、
+      # 決算月からの近似日だけで動く従来の挙動に戻る。
+      DVC_EVENT_SLOTS: "20"
       FTP_HOST: ${{ secrets.FTP_HOST }}
       FTP_USER: ${{ secrets.FTP_USER }}
       FTP_PASS: ${{ secrets.FTP_PASS }}

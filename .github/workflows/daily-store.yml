@@ -288,5 +288,33 @@ jobs:
             "ftp://${FTP_HOST}"
           echo "stocks.sqlite を検証つきで差し替えました（$local_size bytes）"
 
+      - name: 連続した取得枠切れを通知
+        if: ${{ success() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 1日だけなら手動更新との重なりなどでも起こり得るため許容する。
+          # 2日続いたら枠の使い方・APIキー・取得対象を人が確認できるよう、
+          # state/DBの配信が終わった後にジョブを失敗させて通知メールを発生させる。
+          alert_after_days=2
+          rate_limit_days=$(python - "$STATE_FILE" <<'PY'
+          import json
+          import sys
+
+          with open(sys.argv[1], encoding="utf-8") as source:
+              state = json.load(source)
+          block = state.get("rateLimit")
+          days = block.get("consecutiveDays", 0) if isinstance(block, dict) else 0
+          if isinstance(days, bool) or not isinstance(days, int) or days < 0:
+              raise SystemExit("rateLimit.consecutiveDays が不正です")
+          print(days)
+          PY
+          )
+          echo "取得枠切れの連続日数: ${rate_limit_days}日"
+          if (( rate_limit_days >= alert_after_days )); then
+            echo "::error::取得枠切れが${rate_limit_days}日続いています。API枠の使用状況を確認してください。"
+            exit 1
+          fi
+
       - name: 完了
         run: echo "配当チェッカーDBの日次更新が完了しました。"

@@ -205,12 +205,17 @@ def empty_event_state() -> dict[str, Any]:
     }
 
 
+def empty_rate_limit_state() -> dict[str, Any]:
+    return {"consecutiveDays": 0, "lastStoppedAt": None}
+
+
 def empty_state() -> dict[str, Any]:
     return {
         "version": STATE_VERSION,
         "queuePosition": 0,
         "stocks": {},
         "events": empty_event_state(),
+        "rateLimit": empty_rate_limit_state(),
     }
 
 
@@ -232,6 +237,54 @@ def event_state(state: dict[str, Any]) -> dict[str, Any]:
     return block
 
 
+def rate_limit_state(state: dict[str, Any]) -> dict[str, Any]:
+    """429打ち切りの連続日数を保持する。古いstateには後付けする。"""
+    block = state.get("rateLimit")
+    if not isinstance(block, dict):
+        block = empty_rate_limit_state()
+        state["rateLimit"] = block
+    days = block.get("consecutiveDays", 0)
+    if isinstance(days, bool) or not isinstance(days, int) or days < 0:
+        block["consecutiveDays"] = 0
+    if block.get("lastStoppedAt") is not None and not isinstance(
+        block.get("lastStoppedAt"), str
+    ):
+        block["lastStoppedAt"] = None
+    return block
+
+
+def update_rate_limit_streak(
+    state: dict[str, Any], today: date, stopped: bool
+) -> int:
+    """今日の429打ち切り結果を記録し、連続日数を返す。"""
+    block = rate_limit_state(state)
+    if not stopped:
+        block["consecutiveDays"] = 0
+        block["lastStoppedAt"] = None
+        return 0
+
+    days = block["consecutiveDays"]
+    last_text = block.get("lastStoppedAt")
+    try:
+        last = (
+            date.fromisoformat(last_text[:10])
+            if isinstance(last_text, str)
+            else None
+        )
+    except ValueError:
+        last = None
+    if last == today:
+        # 同じ日を再実行しても1日分として数える。
+        days = max(days, 1)
+    elif last == today - timedelta(days=1):
+        days += 1
+    else:
+        days = 1
+    block["consecutiveDays"] = days
+    block["lastStoppedAt"] = today.isoformat()
+    return days
+
+
 def load_state(path: Path) -> dict[str, Any]:
     if not path.exists():
         return empty_state()
@@ -247,6 +300,7 @@ def load_state(path: Path) -> dict[str, Any]:
     # そのまま読める。versionは上げない：上げると稼働中の日次更新が
     # 「未対応のstate version」で止まってしまう。
     event_state(state)
+    rate_limit_state(state)
     return state
 
 
@@ -1561,7 +1615,7 @@ def main() -> None:
             print(f"取得失敗（続行）: {error}", file=sys.stderr)
             # 失敗した銘柄でも待ち行列は進める（次回は次の銘柄から始める）。
             # イベント枠側は「処理済み」にしないので、翌日また拾われる。
-            if counts_towards_rotation:
+            if counts_towards_rotation and not error.is_rate_limited:
                 normal_processed += 1
             if error.is_fatal:
                 fatal = error
@@ -1622,6 +1676,9 @@ def main() -> None:
         if last_remaining is not None and last_remaining <= 5:
             break
 
+    rate_limit_days = update_rate_limit_streak(
+        state, args.today, rate_limit_stopped
+    )
     save_progress()
     print(
         f"予想取得完了: {processed:,}件 "
@@ -1634,7 +1691,8 @@ def main() -> None:
     print(
         f"summary selected={len(selected)} ok={processed} failed={failed} "
         f"eventPicks={len(event_picks)} eventRequests={event_requests} "
-        f"rateLimitStopped={'true' if rate_limit_stopped else 'false'}"
+        f"rateLimitStopped={'true' if rate_limit_stopped else 'false'} "
+        f"rateLimitDays={rate_limit_days}"
     )
     if last_remaining is not None:
         print(f"edinetdb日次残量: {last_remaining:,}")

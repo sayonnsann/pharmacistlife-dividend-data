@@ -374,6 +374,16 @@ class FetchLoopResilienceTest(unittest.TestCase):
             self.state()["stocks"][self.CODES[0]]["lastFailureKind"], "http"
         )
 
+    def test_rate_limit_failure_does_not_advance_the_queue(self) -> None:
+        self.prime_all_as_already_fetched()
+        with mock.patch.object(
+            fetch_forecasts, "CONSECUTIVE_FAILURE_LIMIT", 3
+        ):
+            self.run_main(
+                self.failing_fetch(*self.CODES, status=429), daily_limit=3
+            )
+        self.assertEqual(self.state()["queuePosition"], 0)
+
     def test_a_success_resets_the_consecutive_counter(self) -> None:
         with mock.patch.object(
             fetch_forecasts, "CONSECUTIVE_FAILURE_LIMIT", 3
@@ -449,6 +459,7 @@ class FetchOneErrorTypeTest(unittest.TestCase):
         self.assertEqual(caught.exception.kind, "http")
         self.assertFalse(caught.exception.is_fatal)
 
+
     def test_authentication_errors_are_fatal(self) -> None:
         for status in (401, 403):
             with self.subTest(status=status):
@@ -493,6 +504,40 @@ class FetchOneErrorTypeTest(unittest.TestCase):
         self.assertEqual(caught.exception.kind, "parse")
         self.assertIsNone(caught.exception.status)
         self.assertFalse(caught.exception.is_fatal)
+
+
+class RateLimitStreakTest(unittest.TestCase):
+    def test_two_consecutive_days_are_counted_and_a_normal_day_resets(self) -> None:
+        state = fetch_forecasts.empty_state()
+        first = fetch_forecasts.date(2026, 8, 7)
+        second = fetch_forecasts.date(2026, 8, 8)
+        self.assertEqual(
+            fetch_forecasts.update_rate_limit_streak(state, first, True), 1
+        )
+        self.assertEqual(
+            fetch_forecasts.update_rate_limit_streak(state, second, True), 2
+        )
+        self.assertEqual(state["rateLimit"]["lastStoppedAt"], "2026-08-08")
+        self.assertEqual(
+            fetch_forecasts.update_rate_limit_streak(
+                state, fetch_forecasts.date(2026, 8, 9), False
+            ),
+            0,
+        )
+        self.assertEqual(state["rateLimit"]["lastStoppedAt"], None)
+
+    def test_the_daily_workflow_checks_after_both_uploads(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "daily-store.yml").read_text(
+            encoding="utf-8"
+        )
+        uploads_done = workflow.index("stocks.sqlite を検証つきで差し替えました")
+        alert_start = workflow.index("連続した取得枠切れを通知")
+        complete = workflow.index("- name: 完了", alert_start)
+        self.assertLess(uploads_done, alert_start)
+        self.assertLess(alert_start, complete)
+        alert_block = workflow[alert_start:complete]
+        self.assertIn("alert_after_days=2", alert_block)
+        self.assertIn("exit 1", alert_block)
 
 
 # ---------------------------------------------------------------------------

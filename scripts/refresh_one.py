@@ -192,6 +192,7 @@ def main() -> None:
     stocks = state["stocks"]
     fetched_at = args.today.isoformat()
     failures: list[str] = []
+    blocking_failures: list[str] = []
 
     for target in targets:
         try:
@@ -199,6 +200,10 @@ def main() -> None:
         except fetch_forecasts.FetchError as error:
             # 1銘柄が失敗しても残りは進める。既存の保存値には触らない。
             failures.append(str(error))
+            if not error.is_rate_limited:
+                # 429だけは、成功した銘柄をstateへ反映するために許容する。
+                # それ以外は従来どおり手動実行を異常終了させる。
+                blocking_failures.append(str(error))
             print(f"取得失敗: {error}", file=sys.stderr)
             if error.remaining is not None:
                 print(f"（失敗時点のedinetdb日次残量={error.remaining}）")
@@ -223,9 +228,14 @@ def main() -> None:
         fetch_forecasts.write_state(args.state, state)
         print(f"状態保存: {args.state}")
 
-    print(f"summary targets={len(targets)} failed={len(failures)}")
-    if failures:
-        raise SystemExit(f"{len(failures)}銘柄の取得に失敗しました")
+    print(
+        f"summary targets={len(targets)} failed={len(failures)} "
+        f"blocking={len(blocking_failures)}"
+    )
+    if blocking_failures:
+        raise SystemExit(
+            f"429以外の失敗が{len(blocking_failures)}銘柄で発生しました"
+        )
 
 
 if __name__ == "__main__":

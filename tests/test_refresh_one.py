@@ -265,6 +265,28 @@ class RefreshOneMainTest(unittest.TestCase):
             self.run_main("4746,9433", mock.Mock(side_effect=side_effect))
         self.assertEqual(self.state()["stocks"]["9433"]["forecastDividend"], 210.0)
 
+    def test_a_rate_limit_failure_still_allows_successful_stocks_to_be_saved(
+        self,
+    ) -> None:
+        def side_effect(candidate, api_key):
+            if candidate.code == "4746":
+                raise fetch_forecasts.FetchError(
+                    "4746: edinetdb HTTP 429", kind="http", status=429
+                )
+            return {"forecastDividend": 210.0}, 61
+
+        self.run_main("4746,9433", mock.Mock(side_effect=side_effect))
+        self.assertEqual(self.state()["stocks"]["9433"]["forecastDividend"], 210.0)
+
+    def test_an_authentication_failure_still_exits_non_zero(self) -> None:
+        failing = mock.Mock(
+            side_effect=fetch_forecasts.FetchError(
+                "4746: edinetdb HTTP 401", kind="http", status=401
+            )
+        )
+        with self.assertRaises(SystemExit):
+            self.run_main("4746", failing)
+
     def test_an_unknown_code_stops_before_spending_the_quota(self) -> None:
         fetch = self.succeeding()
         with self.assertRaises(ValueError):

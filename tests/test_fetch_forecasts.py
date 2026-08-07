@@ -360,6 +360,30 @@ class FetchLoopResilienceTest(unittest.TestCase):
         self.assertNotIn(caught.exception.code, (0, None))
         self.assertEqual(fetch.call_count, 3)
 
+    def test_consecutive_rate_limit_failures_stop_normally(self) -> None:
+        """429だけは枠切れとして扱い、後続のDB構築を止めない。"""
+        buffer = io.StringIO()
+        with mock.patch.object(
+            fetch_forecasts, "CONSECUTIVE_FAILURE_LIMIT", 3
+        ), contextlib.redirect_stderr(buffer):
+            fetch = self.failing_fetch(*self.CODES, status=429)
+            self.run_main(fetch)
+        self.assertEqual(fetch.call_count, 3)
+        self.assertIn("取得枠を使い切ったため、本日はここまで", buffer.getvalue())
+        self.assertEqual(
+            self.state()["stocks"][self.CODES[0]]["lastFailureKind"], "http"
+        )
+
+    def test_rate_limit_failure_does_not_advance_the_queue(self) -> None:
+        self.prime_all_as_already_fetched()
+        with mock.patch.object(
+            fetch_forecasts, "CONSECUTIVE_FAILURE_LIMIT", 3
+        ):
+            self.run_main(
+                self.failing_fetch(*self.CODES, status=429), daily_limit=3
+            )
+        self.assertEqual(self.state()["queuePosition"], 0)
+
     def test_a_success_resets_the_consecutive_counter(self) -> None:
         with mock.patch.object(
             fetch_forecasts, "CONSECUTIVE_FAILURE_LIMIT", 3
@@ -435,6 +459,7 @@ class FetchOneErrorTypeTest(unittest.TestCase):
         self.assertEqual(caught.exception.kind, "http")
         self.assertFalse(caught.exception.is_fatal)
 
+
     def test_authentication_errors_are_fatal(self) -> None:
         for status in (401, 403):
             with self.subTest(status=status):
@@ -479,6 +504,40 @@ class FetchOneErrorTypeTest(unittest.TestCase):
         self.assertEqual(caught.exception.kind, "parse")
         self.assertIsNone(caught.exception.status)
         self.assertFalse(caught.exception.is_fatal)
+
+
+class RateLimitStreakTest(unittest.TestCase):
+    def test_two_consecutive_days_are_counted_and_a_normal_day_resets(self) -> None:
+        state = fetch_forecasts.empty_state()
+        first = fetch_forecasts.date(2026, 8, 7)
+        second = fetch_forecasts.date(2026, 8, 8)
+        self.assertEqual(
+            fetch_forecasts.update_rate_limit_streak(state, first, True), 1
+        )
+        self.assertEqual(
+            fetch_forecasts.update_rate_limit_streak(state, second, True), 2
+        )
+        self.assertEqual(state["rateLimit"]["lastStoppedAt"], "2026-08-08")
+        self.assertEqual(
+            fetch_forecasts.update_rate_limit_streak(
+                state, fetch_forecasts.date(2026, 8, 9), False
+            ),
+            0,
+        )
+        self.assertEqual(state["rateLimit"]["lastStoppedAt"], None)
+
+    def test_the_daily_workflow_checks_after_both_uploads(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "daily-store.yml").read_text(
+            encoding="utf-8"
+        )
+        uploads_done = workflow.index("stocks.sqlite を検証つきで差し替えました")
+        alert_start = workflow.index("連続した取得枠切れを通知")
+        complete = workflow.index("- name: 完了", alert_start)
+        self.assertLess(uploads_done, alert_start)
+        self.assertLess(alert_start, complete)
+        alert_block = workflow[alert_start:complete]
+        self.assertIn("alert_after_days=2", alert_block)
+        self.assertIn("exit 1", alert_block)
 
 
 # ---------------------------------------------------------------------------
@@ -956,6 +1015,14 @@ class PlanEventSlotsTest(unittest.TestCase):
         )
         self.assertEqual([pick.code for pick in picks], ["9433", "4746"])
 
+    def test_a_pending_event_beats_a_new_event(self) -> None:
+        old = disclosure("4746", "dividend_revision", "2026-08-03")
+        fresh = disclosure("9433", "dividend_revision", "2026-08-05")
+        picks, _, _ = fetch_forecasts.plan_event_slots(
+            [fresh, old], self.CANDIDATES, {}, 1, {old.event_id}
+        )
+        self.assertEqual([pick.code for pick in picks], ["4746"])
+
 
 class PruneSeenTest(unittest.TestCase):
     TODAY = fetch_forecasts.date(2026, 8, 6)
@@ -977,6 +1044,29 @@ class PruneSeenTest(unittest.TestCase):
             fetch_forecasts.prune_seen(seen, self.TODAY)
         self.assertEqual(len(seen), 3)
         self.assertIn("newest", seen)
+
+
+class PendingEventTest(unittest.TestCase):
+    TODAY = fetch_forecasts.date(2026, 8, 20)
+
+    def test_pending_event_is_discarded_after_the_attempt_limit_with_a_log(
+        self,
+    ) -> None:
+        event = disclosure("4746", "dividend_revision", "2026-08-03")
+        block = {
+            "seen": {},
+            "pending": {
+                event.event_id: fetch_forecasts.pending_record(
+                    event, fetch_forecasts.date(2026, 8, 6), attempts=5
+                )
+            },
+        }
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            pending = fetch_forecasts.load_pending_events(block, self.TODAY)
+        self.assertEqual(pending, {})
+        self.assertEqual(block["pending"], {})
+        self.assertIn("イベント持ち越しを諦めました", output.getvalue())
 
 
 class EventDrivenQueueTest(unittest.TestCase):
@@ -1022,7 +1112,7 @@ class EventDrivenQueueTest(unittest.TestCase):
     def state(self) -> dict:
         return json.loads(self.state_path.read_text(encoding="utf-8"))
 
-    def argv(self) -> list[str]:
+    def argv(self, today: str = "2026-08-06") -> list[str]:
         return [
             "fetch_forecasts.py",
             "--fiscal-dividends",
@@ -1034,7 +1124,7 @@ class EventDrivenQueueTest(unittest.TestCase):
             "--state",
             str(self.state_path),
             "--today",
-            "2026-08-06",
+            today,
         ]
 
     def run_main(
@@ -1047,6 +1137,7 @@ class EventDrivenQueueTest(unittest.TestCase):
         fetch: mock.Mock | None = None,
         slots: str = "20",
         collect: mock.Mock | None = None,
+        today: str = "2026-08-06",
     ) -> mock.Mock:
         fetch = fetch or mock.Mock(
             return_value=({"forecastDividend": 97.5}, None)
@@ -1063,7 +1154,7 @@ class EventDrivenQueueTest(unittest.TestCase):
                 "DVC_FORECAST_DAILY": str(daily_limit),
                 "DVC_EVENT_SLOTS": slots,
             },
-        ), mock.patch.object(sys, "argv", self.argv()), mock.patch.object(
+        ), mock.patch.object(sys, "argv", self.argv(today)), mock.patch.object(
             fetch_forecasts, "load_dividend_yields", return_value={}
         ), mock.patch.object(
             fetch_forecasts, "collect_events", collect
@@ -1147,6 +1238,27 @@ class EventDrivenQueueTest(unittest.TestCase):
         self.run_main([event], daily_limit=1, fetch=failing)
         # 取れていないので「見た」にはしない
         self.assertEqual(self.state()["events"]["seen"], {})
+
+    def test_a_failed_event_is_retried_after_it_leaves_the_search_window(
+        self,
+    ) -> None:
+        """検索窓から消えた後もstateの持ち越しから優先して拾う。"""
+        event = disclosure("9433", "dividend_revision", "2026-08-03")
+        failing = mock.Mock(
+            side_effect=fetch_forecasts.FetchError(
+                "9433: edinetdb HTTP 503", kind="http", status=503
+            )
+        )
+        self.run_main([event], daily_limit=5, fetch=failing)
+        self.assertIn(event.event_id, self.state()["events"]["pending"])
+
+        # 8/20には8/3のイベントはAPIの検索窓外（持ち越しの上限日内）。
+        fetch = self.run_main([], daily_limit=5, today="2026-08-20")
+        self.assertEqual(self.fetched_codes(fetch)[0], "9433")
+        self.assertNotIn(event.event_id, self.state()["events"]["pending"])
+        self.assertEqual(
+            self.state()["stocks"]["9433"]["lastEventAt"], "2026-08-03"
+        )
 
     def test_the_window_start_is_remembered(self) -> None:
         self.run_main([], daily_limit=5)

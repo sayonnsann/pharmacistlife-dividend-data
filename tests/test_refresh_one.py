@@ -226,6 +226,14 @@ class RefreshOneMainTest(unittest.TestCase):
         self.assertIn("97.5", output)
         self.assertIn("E05066", output)
 
+    def test_a_low_remaining_quota_is_warned_about(self) -> None:
+        fetch = mock.Mock(
+            return_value=({"forecastDividend": 97.5}, 5)
+        )
+        output = self.run_main("4746", fetch)
+        self.assertIn("edinetdb日次残量=5", output)
+        self.assertIn("警告: edinetdbの本日残量が少ない", output)
+
     def test_a_dry_run_writes_nothing(self) -> None:
         before = self.state_path.read_text(encoding="utf-8")
         output = self.run_main("4746", self.succeeding(), dry_run=True)
@@ -256,6 +264,28 @@ class RefreshOneMainTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self.run_main("4746,9433", mock.Mock(side_effect=side_effect))
         self.assertEqual(self.state()["stocks"]["9433"]["forecastDividend"], 210.0)
+
+    def test_a_rate_limit_failure_still_allows_successful_stocks_to_be_saved(
+        self,
+    ) -> None:
+        def side_effect(candidate, api_key):
+            if candidate.code == "4746":
+                raise fetch_forecasts.FetchError(
+                    "4746: edinetdb HTTP 429", kind="http", status=429
+                )
+            return {"forecastDividend": 210.0}, 61
+
+        self.run_main("4746,9433", mock.Mock(side_effect=side_effect))
+        self.assertEqual(self.state()["stocks"]["9433"]["forecastDividend"], 210.0)
+
+    def test_an_authentication_failure_still_exits_non_zero(self) -> None:
+        failing = mock.Mock(
+            side_effect=fetch_forecasts.FetchError(
+                "4746: edinetdb HTTP 401", kind="http", status=401
+            )
+        )
+        with self.assertRaises(SystemExit):
+            self.run_main("4746", failing)
 
     def test_an_unknown_code_stops_before_spending_the_quota(self) -> None:
         fetch = self.succeeding()

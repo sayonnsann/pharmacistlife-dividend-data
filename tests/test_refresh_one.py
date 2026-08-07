@@ -226,6 +226,14 @@ class RefreshOneMainTest(unittest.TestCase):
         self.assertIn("97.5", output)
         self.assertIn("E05066", output)
 
+    def test_a_low_remaining_quota_is_warned_about(self) -> None:
+        fetch = mock.Mock(
+            return_value=({"forecastDividend": 97.5}, 5)
+        )
+        output = self.run_main("4746", fetch)
+        self.assertIn("edinetdb日次残量=5", output)
+        self.assertIn("警告: edinetdbの本日残量が少ない", output)
+
     def test_a_dry_run_writes_nothing(self) -> None:
         before = self.state_path.read_text(encoding="utf-8")
         output = self.run_main("4746", self.succeeding(), dry_run=True)

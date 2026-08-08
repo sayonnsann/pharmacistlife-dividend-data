@@ -1,11 +1,15 @@
 import importlib.util
+import io
 import json
 import re
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from contextlib import redirect_stdout
 from unittest import mock
 
 
@@ -137,6 +141,12 @@ class SplitAdjustmentTest(unittest.TestCase):
             tirad["splitAdjustment"]["events"][0]["sourceUrl"],
             "https://example.com/ten-for-one.pdf",
         )
+        self.assertEqual(
+            tirad["splitAdjustment"]["events"][0]["status"], "confirmed"
+        )
+        self.assertTrue(tirad["splitAdjustment"]["events"][0]["dpsAdjusted"])
+        self.assertFalse(tirad["splitAdjustment"]["events"][0]["epsAdjusted"])
+        self.assertFalse(tirad["splitAdjustment"]["hasProvisional"])
 
         kameda = after["2220"][2]
         self.assertEqual(after["2220"][0], 1.73)
@@ -181,8 +191,43 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertEqual(tirad["bps"], before["7236"][2]["bps"])
         self.assertEqual(tirad["per"], before["7236"][2]["per"])
         self.assertEqual(tirad["splitAdjustment"]["epsBpsFactor"], 1.0)
+        self.assertTrue(tirad["splitAdjustment"]["hasProvisional"])
+        self.assertEqual(
+            tirad["splitAdjustment"]["events"][0]["status"], "provisional"
+        )
+        self.assertTrue(
+            tirad["splitAdjustment"]["events"][0]["dpsAdjusted"]
+        )
+        self.assertIsNone(
+            tirad["splitAdjustment"]["events"][0]["epsAdjusted"]
+        )
 
-    def test_confirmed_with_unconfirmed_eps_adjustment_stops_the_build(self) -> None:
+    def test_dps_adjusted_has_three_states(self) -> None:
+        omitted = event("1234", "dps-omitted", 1, 2, eps_adjusted=True)
+        explicit_false = event(
+            "1234", "dps-false", 1, 2, eps_adjusted=True
+        )
+        explicit_false["dpsAdjusted"] = False
+        explicit_null = event(
+            "1234", "dps-null", 1, 2, eps_adjusted=True
+        )
+        explicit_null["dpsAdjusted"] = None
+        fallbacks: list[dict] = []
+        adjustment = build_store.split_adjustment(
+            [omitted, explicit_false, explicit_null],
+            fallback_events=fallbacks,
+        )
+        assert adjustment is not None
+        self.assertEqual(adjustment["dividendFactor"], 0.5)
+        self.assertEqual(adjustment["epsBpsFactor"], 1.0)
+        self.assertEqual(
+            [item["dpsAdjusted"] for item in adjustment["events"]],
+            [True, False, None],
+        )
+        self.assertEqual(len(fallbacks), 1)
+        self.assertEqual(fallbacks[0]["eventId"], "dps-null")
+
+    def test_confirmed_with_unconfirmed_eps_adjustment_falls_back_safely(self) -> None:
         actions = {
             "7236": [
                 event(
@@ -194,26 +239,45 @@ class SplitAdjustmentTest(unittest.TestCase):
                 )
             ]
         }
-        with self.assertRaisesRegex(
-            ValueError,
-            r"epsAdjustedが未確認\(null\)のままconfirmedです.*"
-            "決算書類で.*provisionalのままにしてください",
-        ):
-            build_store.split_adjustment(actions["7236"])
+        output = io.StringIO()
+        with redirect_stdout(output):
+            adjustment = build_store.split_adjustment(actions["7236"])
+        assert adjustment is not None
+        self.assertEqual(adjustment["dividendFactor"], 0.1)
+        self.assertEqual(adjustment["epsBpsFactor"], 1.0)
+        self.assertIn("confirmedなのにepsAdjustedがnull", output.getvalue())
 
         with tempfile.TemporaryDirectory() as directory:
+            baseline = Path(directory) / "baseline.sqlite"
+            fallback = Path(directory) / "fallback.sqlite"
+            self.build(baseline, {})
+            self.build(fallback, actions)
+            before = self.rows(baseline)
+            after = self.rows(fallback)
             path = Path(directory) / "actions.json"
             path.write_text(
                 json.dumps({"events": actions["7236"]}), encoding="utf-8"
             )
-            with self.assertRaisesRegex(
-                ValueError,
-                r"epsAdjustedが未確認\(null\)のままconfirmedです.*"
-                "決算書類で.*provisionalのままにしてください",
-            ):
-                build_store.load_stock_actions(path, as_of=date(2026, 8, 3))
+            fallbacks: list[dict] = []
+            loaded = build_store.load_stock_actions(
+                path, as_of=date(2026, 8, 3), fallback_events=fallbacks
+            )
+            with sqlite3.connect(fallback) as connection:
+                metadata = dict(connection.execute("SELECT key, value FROM meta"))
 
-    def test_eps_adjusted_rejects_unexpected_values(self) -> None:
+        self.assertEqual(len(fallbacks), 1)
+        self.assertIsNone(loaded["7236"][0]["epsAdjusted"])
+        self.assertEqual(after["7236"][0], 3.78)
+        self.assertEqual(after["7236"][2]["eps"], before["7236"][2]["eps"])
+        self.assertEqual(after["7236"][2]["bps"], before["7236"][2]["bps"])
+        self.assertEqual(
+            after["7236"][2]["splitAdjustment"]["events"][0]["status"],
+            "confirmed",
+        )
+        self.assertEqual(metadata["split_adjustment_fallback_count"], "1")
+        self.assertIn("confirmedなのにepsAdjustedがnull", metadata["split_adjustment_fallbacks"])
+
+    def test_eps_adjusted_unexpected_values_fall_back_to_null(self) -> None:
         document = {
             "events": [
                 event(
@@ -229,10 +293,12 @@ class SplitAdjustmentTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "actions.json"
             path.write_text(json.dumps(document), encoding="utf-8")
-            with self.assertRaisesRegex(
-                ValueError, "epsAdjustedはtrue、false、nullのいずれか"
-            ):
-                build_store.load_stock_actions(path, as_of=date(2026, 8, 3))
+            fallbacks: list[dict] = []
+            loaded = build_store.load_stock_actions(
+                path, as_of=date(2026, 8, 3), fallback_events=fallbacks
+            )
+        self.assertIsNone(loaded["7236"][0]["epsAdjusted"])
+        self.assertEqual(fallbacks[0]["field"], "epsAdjusted")
 
     def test_unknown_status_is_ignored(self) -> None:
         actions = {
@@ -343,7 +409,59 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertEqual(toukei["newShares"], 4)
         self.assertEqual(toukei["effectiveDate"], "2026-10-01")
         self.assertEqual(toukei["status"], "provisional")
+        self.assertTrue(toukei["dpsAdjusted"])
         self.assertIsNone(toukei["epsAdjusted"])
+
+
+class SplitFallbackNotificationTest(unittest.TestCase):
+    SCRIPT = ROOT / "scripts" / "check_split_fallback.py"
+
+    def run_check(
+        self, count: int, fallbacks: list[dict[str, str]]
+    ) -> subprocess.CompletedProcess[str]:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            with sqlite3.connect(path) as connection:
+                connection.execute(
+                    "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+                )
+                connection.executemany(
+                    "INSERT INTO meta(key, value) VALUES (?, ?)",
+                    [
+                        ("split_adjustment_fallback_count", str(count)),
+                        (
+                            "split_adjustment_fallbacks",
+                            json.dumps(fallbacks, ensure_ascii=False),
+                        ),
+                    ],
+                )
+                connection.commit()
+            return subprocess.run(
+                [sys.executable, str(self.SCRIPT), str(path)],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+    def test_no_fallback_keeps_the_job_successful(self) -> None:
+        result = self.run_check(0, [])
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("株式分割補正フォールバック: 0件", result.stdout)
+
+    def test_fallback_fails_after_delivery_with_actionable_error(self) -> None:
+        result = self.run_check(
+            1,
+            [
+                {
+                    "eventId": "confirmed-without-eps-check",
+                    "securityCode": "7236",
+                    "field": "epsAdjusted",
+                    "reason": "confirmedなのにepsAdjustedがnull",
+                }
+            ],
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("::error::株式分割補正にフォールバックが発生しました", result.stdout)
 
 
 if __name__ == "__main__":

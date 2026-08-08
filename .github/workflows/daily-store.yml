@@ -226,14 +226,6 @@ jobs:
             fi
           fi
 
-      - name: SQLiteストアを構築
-        run: >-
-          python scripts/build_store.py
-          --forecasts "$STATE_FILE"
-          --fiscal-dividends "$FISCAL_FILE"
-          --calendar-dividends "$CALENDAR_FILE"
-          --output "$SQLITE_FILE"
-
       - name: 予想stateをFTPSへ書き戻す
         shell: bash
         run: |
@@ -261,7 +253,16 @@ jobs:
             "ftp://${FTP_HOST}"
           echo "forecasts_state.json を検証つきで差し替えました（$local_size bytes）"
 
+      - name: SQLiteストアを構築
+        run: >-
+          python scripts/build_store.py
+          --forecasts "$STATE_FILE"
+          --fiscal-dividends "$FISCAL_FILE"
+          --calendar-dividends "$CALENDAR_FILE"
+          --output "$SQLITE_FILE"
+
       - name: SQLiteをFTPSへ原子的に反映
+        id: publish_store
         shell: bash
         run: |
           set -euo pipefail
@@ -315,6 +316,13 @@ jobs:
             echo "::error::取得枠切れが${rate_limit_days}日続いています。API枠の使用状況を確認してください。"
             exit 1
           fi
+
+      - name: 分割補正のフォールバックを通知
+        if: ${{ always() && steps.publish_store.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_split_fallback.py "$SQLITE_FILE"
 
       - name: 完了
         run: echo "配当チェッカーDBの日次更新が完了しました。"

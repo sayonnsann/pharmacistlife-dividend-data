@@ -26,6 +26,7 @@ def event(
     *,
     eps_adjusted: bool,
     effective_date: str = "2026-07-01",
+    status: str = "confirmed",
 ) -> dict:
     return {
         "eventId": event_id,
@@ -34,7 +35,7 @@ def event(
         "oldShares": old_shares,
         "newShares": new_shares,
         "effectiveDate": effective_date,
-        "status": "confirmed",
+        "status": status,
         "epsAdjusted": eps_adjusted,
         "source": {
             "url": f"https://example.com/{event_id}.pdf",
@@ -152,6 +153,60 @@ class SplitAdjustmentTest(unittest.TestCase):
             kameda["dividendYield"], before["2220"][2]["dividendYield"]
         )
 
+    def test_provisional_adjusts_dividend_but_not_eps_or_bps(self) -> None:
+        actions = {
+            "7236": [
+                event(
+                    "7236",
+                    "provisional-ten-for-one",
+                    1,
+                    10,
+                    eps_adjusted=False,
+                    status="provisional",
+                )
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            baseline = Path(directory) / "baseline.sqlite"
+            provisional = Path(directory) / "provisional.sqlite"
+            self.build(baseline, {})
+            self.build(provisional, actions)
+            before = self.rows(baseline)
+            after = self.rows(provisional)
+
+        tirad = after["7236"][2]
+        self.assertEqual(after["7236"][0], 3.78)
+        self.assertEqual(tirad["dividendPerShare"]["2026"], 56.0)
+        self.assertEqual(tirad["eps"], before["7236"][2]["eps"])
+        self.assertEqual(tirad["bps"], before["7236"][2]["bps"])
+        self.assertEqual(tirad["per"], before["7236"][2]["per"])
+        self.assertEqual(tirad["splitAdjustment"]["epsBpsFactor"], 1.0)
+
+    def test_unknown_status_is_ignored(self) -> None:
+        actions = {
+            "7236": [
+                event(
+                    "7236",
+                    "unknown-status",
+                    1,
+                    10,
+                    eps_adjusted=False,
+                    status="unknown",
+                )
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            path.write_text(json.dumps({"events": actions["7236"]}), encoding="utf-8")
+            loaded = build_store.load_stock_actions(path, as_of=date(2026, 8, 3))
+            self.assertEqual(loaded, {})
+
+            baseline = Path(directory) / "baseline.sqlite"
+            ignored = Path(directory) / "ignored.sqlite"
+            self.build(baseline, {})
+            self.build(ignored, actions)
+            self.assertEqual(self.rows(ignored), self.rows(baseline))
+
     def test_multiple_events_multiply_factors(self) -> None:
         adjustment = build_store.split_adjustment(
             [
@@ -211,6 +266,20 @@ class SplitAdjustmentTest(unittest.TestCase):
                 for item in events
             )
         )
+
+    def test_manual_actions_include_toukei_as_provisional_after_effective_date(
+        self,
+    ) -> None:
+        loaded = build_store.load_stock_actions(
+            ROOT / "data" / "stock_actions_manual.json",
+            as_of=date(2026, 10, 1),
+        )
+        self.assertIn("4746", loaded)
+        toukei = loaded["4746"][0]
+        self.assertEqual(toukei["oldShares"], 1)
+        self.assertEqual(toukei["newShares"], 4)
+        self.assertEqual(toukei["effectiveDate"], "2026-10-01")
+        self.assertEqual(toukei["status"], "provisional")
 
 
 if __name__ == "__main__":

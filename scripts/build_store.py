@@ -386,7 +386,11 @@ def _crosses_break(
 def load_stock_actions(
     path: Path, *, as_of: date | None = None
 ) -> dict[str, list[dict[str, Any]]]:
-    """有効日を迎えた、確認済みの株式分割を銘柄コード別に返す。"""
+    """有効日を迎えた、適用可能な株式分割を銘柄コード別に返す。
+
+    provisional は分割の事実・比率・効力発生日を先に反映する段階で、
+    配当だけを補正する。EPS/BPSへの適用は confirmed になるまで行わない。
+    """
     document = load_json(path, dict)
     events = document.get("events")
     if not isinstance(events, list):
@@ -409,7 +413,7 @@ def load_stock_actions(
 
         if event.get("action") != "split":
             raise ValueError(f"{label}.actionがsplitではありません")
-        if event.get("status") != "confirmed":
+        if event.get("status") not in ("confirmed", "provisional"):
             continue
 
         code = normalized_code(event.get("securityCode", ""))
@@ -445,7 +449,16 @@ def load_stock_actions(
 
 
 def split_adjustment(events: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """複数イベントの補正係数と、画面注記用の根拠を組み立てる。"""
+    """複数イベントの補正係数と、画面注記用の根拠を組み立てる。
+
+    配当は confirmed / provisional の両方で補正する。EPS/BPSは、会社の
+    遡及調整の有無を決算書類で確認できた confirmed イベントだけを対象にする。
+    """
+    events = [
+        event
+        for event in events
+        if event.get("status", "confirmed") in ("confirmed", "provisional")
+    ]
     if not events:
         return None
 
@@ -457,7 +470,9 @@ def split_adjustment(events: list[dict[str, Any]]) -> dict[str, Any] | None:
         new_shares = float(event["newShares"])
         factor = old_shares / new_shares
         dividend_factor *= factor
-        if not event["epsAdjusted"]:
+        if event.get("status", "confirmed") == "confirmed" and not event[
+            "epsAdjusted"
+        ]:
             eps_bps_factor *= factor
         source = event["source"]
         payload_events.append(

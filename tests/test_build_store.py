@@ -28,7 +28,7 @@ def event(
     old_shares: int,
     new_shares: int,
     *,
-    eps_adjusted: bool | None,
+    eps_adjusted_by_issuer: bool | None,
     effective_date: str = "2026-07-01",
     status: str = "confirmed",
 ) -> dict:
@@ -40,7 +40,7 @@ def event(
         "newShares": new_shares,
         "effectiveDate": effective_date,
         "status": status,
-        "epsAdjusted": eps_adjusted,
+        "epsAdjustedByIssuer": eps_adjusted_by_issuer,
         "source": {
             "url": f"https://example.com/{event_id}.pdf",
             "type": "issuer_ir",
@@ -117,10 +117,10 @@ class SplitAdjustmentTest(unittest.TestCase):
     def test_eps_adjusted_branch_and_eventless_stock(self) -> None:
         actions = {
             "7236": [
-                event("7236", "ten-for-one", 1, 10, eps_adjusted=False)
+                event("7236", "ten-for-one", 1, 10, eps_adjusted_by_issuer=False)
             ],
             "2220": [
-                event("2220", "three-for-one", 1, 3, eps_adjusted=True)
+                event("2220", "three-for-one", 1, 3, eps_adjusted_by_issuer=True)
             ],
         }
         with tempfile.TemporaryDirectory() as directory:
@@ -144,8 +144,12 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertEqual(
             tirad["splitAdjustment"]["events"][0]["status"], "confirmed"
         )
-        self.assertTrue(tirad["splitAdjustment"]["events"][0]["dpsAdjusted"])
-        self.assertFalse(tirad["splitAdjustment"]["events"][0]["epsAdjusted"])
+        self.assertTrue(
+            tirad["splitAdjustment"]["events"][0]["applyDividendAdjustment"]
+        )
+        self.assertFalse(
+            tirad["splitAdjustment"]["events"][0]["epsAdjustedByIssuer"]
+        )
         self.assertFalse(tirad["splitAdjustment"]["hasProvisional"])
 
         kameda = after["2220"][2]
@@ -171,7 +175,7 @@ class SplitAdjustmentTest(unittest.TestCase):
                     "provisional-ten-for-one",
                     1,
                     10,
-                    eps_adjusted=None,
+                    eps_adjusted_by_issuer=None,
                     status="provisional",
                 )
             ]
@@ -196,22 +200,24 @@ class SplitAdjustmentTest(unittest.TestCase):
             tirad["splitAdjustment"]["events"][0]["status"], "provisional"
         )
         self.assertTrue(
-            tirad["splitAdjustment"]["events"][0]["dpsAdjusted"]
+            tirad["splitAdjustment"]["events"][0]["applyDividendAdjustment"]
         )
         self.assertIsNone(
-            tirad["splitAdjustment"]["events"][0]["epsAdjusted"]
+            tirad["splitAdjustment"]["events"][0]["epsAdjustedByIssuer"]
         )
 
     def test_dps_adjusted_has_three_states(self) -> None:
-        omitted = event("1234", "dps-omitted", 1, 2, eps_adjusted=True)
+        omitted = event(
+            "1234", "dps-omitted", 1, 2, eps_adjusted_by_issuer=True
+        )
         explicit_false = event(
-            "1234", "dps-false", 1, 2, eps_adjusted=True
+            "1234", "dps-false", 1, 2, eps_adjusted_by_issuer=True
         )
-        explicit_false["dpsAdjusted"] = False
+        explicit_false["applyDividendAdjustment"] = False
         explicit_null = event(
-            "1234", "dps-null", 1, 2, eps_adjusted=True
+            "1234", "dps-null", 1, 2, eps_adjusted_by_issuer=True
         )
-        explicit_null["dpsAdjusted"] = None
+        explicit_null["applyDividendAdjustment"] = None
         fallbacks: list[dict] = []
         adjustment = build_store.split_adjustment(
             [omitted, explicit_false, explicit_null],
@@ -221,7 +227,7 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertEqual(adjustment["dividendFactor"], 0.5)
         self.assertEqual(adjustment["epsBpsFactor"], 1.0)
         self.assertEqual(
-            [item["dpsAdjusted"] for item in adjustment["events"]],
+            [item["applyDividendAdjustment"] for item in adjustment["events"]],
             [True, False, None],
         )
         self.assertEqual(len(fallbacks), 1)
@@ -235,7 +241,7 @@ class SplitAdjustmentTest(unittest.TestCase):
                     "confirmed-without-eps-check",
                     1,
                     10,
-                    eps_adjusted=None,
+                    eps_adjusted_by_issuer=None,
                 )
             ]
         }
@@ -245,7 +251,9 @@ class SplitAdjustmentTest(unittest.TestCase):
         assert adjustment is not None
         self.assertEqual(adjustment["dividendFactor"], 0.1)
         self.assertEqual(adjustment["epsBpsFactor"], 1.0)
-        self.assertIn("confirmedなのにepsAdjustedがnull", output.getvalue())
+        self.assertIn(
+            "confirmedなのにepsAdjustedByIssuerがnull", output.getvalue()
+        )
 
         with tempfile.TemporaryDirectory() as directory:
             baseline = Path(directory) / "baseline.sqlite"
@@ -266,7 +274,7 @@ class SplitAdjustmentTest(unittest.TestCase):
                 metadata = dict(connection.execute("SELECT key, value FROM meta"))
 
         self.assertEqual(len(fallbacks), 1)
-        self.assertIsNone(loaded["7236"][0]["epsAdjusted"])
+        self.assertIsNone(loaded["7236"][0]["epsAdjustedByIssuer"])
         self.assertEqual(after["7236"][0], 3.78)
         self.assertEqual(after["7236"][2]["eps"], before["7236"][2]["eps"])
         self.assertEqual(after["7236"][2]["bps"], before["7236"][2]["bps"])
@@ -275,7 +283,10 @@ class SplitAdjustmentTest(unittest.TestCase):
             "confirmed",
         )
         self.assertEqual(metadata["split_adjustment_fallback_count"], "1")
-        self.assertIn("confirmedなのにepsAdjustedがnull", metadata["split_adjustment_fallbacks"])
+        self.assertIn(
+            "confirmedなのにepsAdjustedByIssuerがnull",
+            metadata["split_adjustment_fallbacks"],
+        )
 
     def test_eps_adjusted_unexpected_values_fall_back_to_null(self) -> None:
         document = {
@@ -285,7 +296,7 @@ class SplitAdjustmentTest(unittest.TestCase):
                     "string-eps-flag",
                     1,
                     10,
-                    eps_adjusted="false",
+                    eps_adjusted_by_issuer="false",
                     status="provisional",
                 )
             ]
@@ -297,8 +308,42 @@ class SplitAdjustmentTest(unittest.TestCase):
             loaded = build_store.load_stock_actions(
                 path, as_of=date(2026, 8, 3), fallback_events=fallbacks
             )
-        self.assertIsNone(loaded["7236"][0]["epsAdjusted"])
-        self.assertEqual(fallbacks[0]["field"], "epsAdjusted")
+        self.assertIsNone(loaded["7236"][0]["epsAdjustedByIssuer"])
+        self.assertEqual(fallbacks[0]["field"], "epsAdjustedByIssuer")
+
+    def test_legacy_field_names_are_rejected_with_migration_guidance(self) -> None:
+        legacy_eps_name = "".join(("eps", "Adjusted"))
+        legacy_dps_name = "".join(("dps", "Adjusted"))
+        legacy_fields = (
+            (legacy_eps_name, "epsAdjustedByIssuer"),
+            (legacy_dps_name, "applyDividendAdjustment"),
+        )
+        for index, (legacy_field, replacement) in enumerate(legacy_fields):
+            with self.subTest(legacy_field=legacy_field):
+                action = event(
+                    "7236",
+                    f"legacy-field-{index}",
+                    1,
+                    10,
+                    eps_adjusted_by_issuer=False,
+                )
+                if legacy_field == legacy_eps_name:
+                    action[legacy_field] = action.pop(replacement)
+                else:
+                    action[legacy_field] = True
+                message = re.escape(f"新しいフィールド名 '{replacement}'")
+                with self.assertRaisesRegex(ValueError, message):
+                    build_store.split_adjustment([action])
+
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "actions.json"
+                    path.write_text(
+                        json.dumps({"events": [action]}), encoding="utf-8"
+                    )
+                    with self.assertRaisesRegex(ValueError, message):
+                        build_store.load_stock_actions(
+                            path, as_of=date(2026, 8, 3)
+                        )
 
     def test_unknown_status_is_ignored(self) -> None:
         actions = {
@@ -308,7 +353,7 @@ class SplitAdjustmentTest(unittest.TestCase):
                     "unknown-status",
                     1,
                     10,
-                    eps_adjusted=False,
+                    eps_adjusted_by_issuer=False,
                     status="unknown",
                 )
             ]
@@ -331,7 +376,7 @@ class SplitAdjustmentTest(unittest.TestCase):
             "missing-status",
             1,
             10,
-            eps_adjusted=False,
+            eps_adjusted_by_issuer=False,
         )
         del action["status"]
         self.assertIsNone(build_store.split_adjustment([action]))
@@ -339,8 +384,8 @@ class SplitAdjustmentTest(unittest.TestCase):
     def test_multiple_events_multiply_factors(self) -> None:
         adjustment = build_store.split_adjustment(
             [
-                event("1234", "one-to-two", 1, 2, eps_adjusted=False),
-                event("1234", "one-to-five", 1, 5, eps_adjusted=True),
+                event("1234", "one-to-two", 1, 2, eps_adjusted_by_issuer=False),
+                event("1234", "one-to-five", 1, 5, eps_adjusted_by_issuer=True),
             ]
         )
         assert adjustment is not None
@@ -356,7 +401,7 @@ class SplitAdjustmentTest(unittest.TestCase):
                     "future",
                     1,
                     2,
-                    eps_adjusted=False,
+                    eps_adjusted_by_issuer=False,
                     effective_date="2026-09-01",
                 ),
                 event(
@@ -364,7 +409,7 @@ class SplitAdjustmentTest(unittest.TestCase):
                     "effective",
                     1,
                     2,
-                    eps_adjusted=False,
+                    eps_adjusted_by_issuer=False,
                     effective_date="2026-07-01",
                 ),
             ]
@@ -386,10 +431,10 @@ class SplitAdjustmentTest(unittest.TestCase):
         )
         self.assertEqual(len(loaded), 21)
         self.assertEqual(sum(map(len, loaded.values())), 21)
-        self.assertTrue(loaded["2220"][0]["epsAdjusted"])
+        self.assertTrue(loaded["2220"][0]["epsAdjustedByIssuer"])
         self.assertTrue(
             all(
-                not item["epsAdjusted"]
+                not item["epsAdjustedByIssuer"]
                 for code, events in loaded.items()
                 if code != "2220"
                 for item in events
@@ -409,8 +454,8 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertEqual(toukei["newShares"], 4)
         self.assertEqual(toukei["effectiveDate"], "2026-10-01")
         self.assertEqual(toukei["status"], "provisional")
-        self.assertTrue(toukei["dpsAdjusted"])
-        self.assertIsNone(toukei["epsAdjusted"])
+        self.assertTrue(toukei["applyDividendAdjustment"])
+        self.assertIsNone(toukei["epsAdjustedByIssuer"])
 
 
 class SplitFallbackNotificationTest(unittest.TestCase):
@@ -455,8 +500,8 @@ class SplitFallbackNotificationTest(unittest.TestCase):
                 {
                     "eventId": "confirmed-without-eps-check",
                     "securityCode": "7236",
-                    "field": "epsAdjusted",
-                    "reason": "confirmedなのにepsAdjustedがnull",
+                    "field": "epsAdjustedByIssuer",
+                    "reason": "confirmedなのにepsAdjustedByIssuerがnull",
                 }
             ],
         )
@@ -787,7 +832,9 @@ class FiscalSeriesInStoreTest(unittest.TestCase):
             }
         }
         actions = {
-            "9433": [event("9433", "one-to-two", 1, 2, eps_adjusted=False)]
+            "9433": [
+                event("9433", "one-to-two", 1, 2, eps_adjusted_by_issuer=False)
+            ]
         }
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "store.sqlite"

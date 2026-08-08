@@ -412,6 +412,22 @@ def register_split_fallback(
         )
 
 
+def reject_legacy_split_field_names(
+    event: dict[str, Any], context: str
+) -> None:
+    legacy_names = {
+        "".join(("eps", "Adjusted")): "epsAdjustedByIssuer",
+        "".join(("dps", "Adjusted")): "applyDividendAdjustment",
+    }
+    for legacy_name, replacement in legacy_names.items():
+        if legacy_name in event:
+            raise ValueError(
+                f"{context}に旧フィールド名 {legacy_name!r} が含まれています。"
+                f"新しいフィールド名 {replacement!r} に直してください。"
+                "旧名を別名としては受け付けません。"
+            )
+
+
 def load_stock_actions(
     path: Path,
     *,
@@ -445,6 +461,7 @@ def load_stock_actions(
 
         if event.get("action") != "split":
             raise ValueError(f"{label}.actionがsplitではありません")
+        reject_legacy_split_field_names(event, label)
         if event.get("status") not in ("confirmed", "provisional"):
             continue
 
@@ -458,34 +475,39 @@ def load_stock_actions(
             event_fallbacks.append(record)
             register_split_fallback(fallback_events, record, log=True)
 
-        eps_adjusted = event.get("epsAdjusted")
-        if "epsAdjusted" not in event or (
-            eps_adjusted is not None and not isinstance(eps_adjusted, bool)
+        eps_adjusted_by_issuer = event.get("epsAdjustedByIssuer")
+        if "epsAdjustedByIssuer" not in event or (
+            eps_adjusted_by_issuer is not None
+            and not isinstance(eps_adjusted_by_issuer, bool)
         ):
-            event["epsAdjusted"] = None
+            event["epsAdjustedByIssuer"] = None
             mark_fallback(
-                "epsAdjusted",
-                "epsAdjustedがtrue/false/nullではないためEPS/BPSを補正しません",
+                "epsAdjustedByIssuer",
+                "epsAdjustedByIssuerがtrue/false/nullではないためEPS/BPSを補正しません",
             )
-            eps_adjusted = None
-        elif event.get("status") == "confirmed" and eps_adjusted is None:
+            eps_adjusted_by_issuer = None
+        elif (
+            event.get("status") == "confirmed"
+            and eps_adjusted_by_issuer is None
+        ):
             mark_fallback(
-                "epsAdjusted",
-                "confirmedなのにepsAdjustedがnullのためEPS/BPSを補正しません",
+                "epsAdjustedByIssuer",
+                "confirmedなのにepsAdjustedByIssuerがnullのためEPS/BPSを補正しません",
             )
 
-        dps_adjusted = event.get("dpsAdjusted", True)
-        if dps_adjusted is not None and not isinstance(dps_adjusted, bool):
-            event["dpsAdjusted"] = None
+        apply_dividend_adjustment = event.get("applyDividendAdjustment", True)
+        if apply_dividend_adjustment is not None and not isinstance(
+            apply_dividend_adjustment, bool
+        ):
+            event["applyDividendAdjustment"] = None
             mark_fallback(
-                "dpsAdjusted",
-                "dpsAdjustedがtrue/false/nullではないため配当を補正しません",
+                "applyDividendAdjustment",
+                "applyDividendAdjustmentがtrue/false/nullではないため配当を補正しません",
             )
-            dps_adjusted = None
-        elif dps_adjusted is None:
+            apply_dividend_adjustment = None
+        elif apply_dividend_adjustment is None:
             mark_fallback(
-                "dpsAdjusted",
-                "dpsAdjustedがnullのため配当を補正しません",
+                "applyDividendAdjustmentがnullのため配当を補正しません",
             )
 
         code = normalized_code(event.get("securityCode", ""))
@@ -503,15 +525,18 @@ def load_stock_actions(
             event["newShares"] = None
             new_shares = None
         if old_shares is None or new_shares is None:
-            if dps_adjusted is True:
-                event["dpsAdjusted"] = None
+            if apply_dividend_adjustment is True:
+                event["applyDividendAdjustment"] = None
                 mark_fallback(
-                    "dpsAdjusted",
+                    "applyDividendAdjustment",
                     "分割比率が不明のため配当を補正しません",
                 )
-            if event.get("status") == "confirmed" and eps_adjusted is False:
+            if (
+                event.get("status") == "confirmed"
+                and eps_adjusted_by_issuer is False
+            ):
                 mark_fallback(
-                    "epsAdjusted",
+                    "epsAdjustedByIssuer",
                     "分割比率が不明のためEPS/BPSを補正しません",
                 )
         source = event.get("source")
@@ -543,6 +568,10 @@ def split_adjustment(
     配当は confirmed / provisional の両方で補正する。EPS/BPSは、会社の
     遡及調整の有無を決算書類で確認できた confirmed イベントだけを対象にする。
     """
+    for event in events:
+        reject_legacy_split_field_names(
+            event, f"株式分割イベント {event.get('eventId', '<unknown>')}"
+        )
     events = [
         event
         for event in events
@@ -573,35 +602,41 @@ def split_adjustment(
             adjustment_fallbacks.append(record)
             register_split_fallback(fallback_events, record, log=True)
 
-        eps_adjusted = event.get("epsAdjusted")
-        if "epsAdjusted" not in event:
-            eps_adjusted = None
+        eps_adjusted_by_issuer = event.get("epsAdjustedByIssuer")
+        if "epsAdjustedByIssuer" not in event:
+            eps_adjusted_by_issuer = None
             mark_fallback(
-                "epsAdjusted",
-                "epsAdjustedがないためEPS/BPSを補正しません",
+                "epsAdjustedByIssuer",
+                "epsAdjustedByIssuerがないためEPS/BPSを補正しません",
             )
-        if eps_adjusted is not None and not isinstance(eps_adjusted, bool):
-            eps_adjusted = None
+        if eps_adjusted_by_issuer is not None and not isinstance(
+            eps_adjusted_by_issuer, bool
+        ):
+            eps_adjusted_by_issuer = None
             mark_fallback(
-                "epsAdjusted",
-                "epsAdjustedがtrue/false/nullではないためEPS/BPSを補正しません",
+                "epsAdjustedByIssuer",
+                "epsAdjustedByIssuerがtrue/false/nullではないためEPS/BPSを補正しません",
             )
-        if status == "confirmed" and eps_adjusted is None:
+        if status == "confirmed" and eps_adjusted_by_issuer is None:
             mark_fallback(
-                "epsAdjusted",
-                "confirmedなのにepsAdjustedがnullのためEPS/BPSを補正しません",
+                "epsAdjustedByIssuer",
+                "confirmedなのにepsAdjustedByIssuerがnullのためEPS/BPSを補正しません",
             )
-        dps_adjusted = event.get("dpsAdjusted", True)
-        if dps_adjusted is not None and not isinstance(dps_adjusted, bool):
-            dps_adjusted = None
+        apply_dividend_adjustment = event.get(
+            "applyDividendAdjustment", True
+        )
+        if apply_dividend_adjustment is not None and not isinstance(
+            apply_dividend_adjustment, bool
+        ):
+            apply_dividend_adjustment = None
             mark_fallback(
-                "dpsAdjusted",
-                "dpsAdjustedがtrue/false/nullではないため配当を補正しません",
+                "applyDividendAdjustment",
+                "applyDividendAdjustmentがtrue/false/nullではないため配当を補正しません",
             )
-        if dps_adjusted is None:
+        if apply_dividend_adjustment is None:
             mark_fallback(
-                "dpsAdjusted",
-                "dpsAdjustedがnullのため配当を補正しません",
+                "applyDividendAdjustment",
+                "applyDividendAdjustmentがnullのため配当を補正しません",
             )
         old_shares = finite_number(event.get("oldShares"))
         new_shares = finite_number(event.get("newShares"))
@@ -614,20 +649,24 @@ def split_adjustment(
             else None
         )
         if factor is None:
-            if dps_adjusted is True:
-                dps_adjusted = None
+            if apply_dividend_adjustment is True:
+                apply_dividend_adjustment = None
                 mark_fallback(
-                    "dpsAdjusted",
+                    "applyDividendAdjustment",
                     "分割比率が不明のため配当を補正しません",
                 )
-            if status == "confirmed" and eps_adjusted is False:
+            if status == "confirmed" and eps_adjusted_by_issuer is False:
                 mark_fallback(
-                    "epsAdjusted",
+                    "epsAdjustedByIssuer",
                     "分割比率が不明のためEPS/BPSを補正しません",
                 )
-        if dps_adjusted is True and factor is not None:
+        if apply_dividend_adjustment is True and factor is not None:
             dividend_factor *= factor
-        if status == "confirmed" and eps_adjusted is False and factor is not None:
+        if (
+            status == "confirmed"
+            and eps_adjusted_by_issuer is False
+            and factor is not None
+        ):
             eps_bps_factor *= factor
         source = event["source"]
         payload_events.append(
@@ -638,8 +677,8 @@ def split_adjustment(
                 "newShares": event.get("newShares"),
                 "adjustmentFactor": factor,
                 "status": status,
-                "dpsAdjusted": dps_adjusted,
-                "epsAdjusted": eps_adjusted,
+                "applyDividendAdjustment": apply_dividend_adjustment,
+                "epsAdjustedByIssuer": eps_adjusted_by_issuer,
                 "sourceUrl": source["url"],
                 "sourceType": source.get("type"),
             }

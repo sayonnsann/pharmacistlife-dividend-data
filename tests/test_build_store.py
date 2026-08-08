@@ -24,7 +24,7 @@ def event(
     old_shares: int,
     new_shares: int,
     *,
-    eps_adjusted: bool,
+    eps_adjusted: bool | None,
     effective_date: str = "2026-07-01",
     status: str = "confirmed",
 ) -> dict:
@@ -161,7 +161,7 @@ class SplitAdjustmentTest(unittest.TestCase):
                     "provisional-ten-for-one",
                     1,
                     10,
-                    eps_adjusted=False,
+                    eps_adjusted=None,
                     status="provisional",
                 )
             ]
@@ -181,6 +181,58 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertEqual(tirad["bps"], before["7236"][2]["bps"])
         self.assertEqual(tirad["per"], before["7236"][2]["per"])
         self.assertEqual(tirad["splitAdjustment"]["epsBpsFactor"], 1.0)
+
+    def test_confirmed_with_unconfirmed_eps_adjustment_stops_the_build(self) -> None:
+        actions = {
+            "7236": [
+                event(
+                    "7236",
+                    "confirmed-without-eps-check",
+                    1,
+                    10,
+                    eps_adjusted=None,
+                )
+            ]
+        }
+        with self.assertRaisesRegex(
+            ValueError,
+            r"epsAdjustedが未確認\(null\)のままconfirmedです.*"
+            "決算書類で.*provisionalのままにしてください",
+        ):
+            build_store.split_adjustment(actions["7236"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            path.write_text(
+                json.dumps({"events": actions["7236"]}), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                r"epsAdjustedが未確認\(null\)のままconfirmedです.*"
+                "決算書類で.*provisionalのままにしてください",
+            ):
+                build_store.load_stock_actions(path, as_of=date(2026, 8, 3))
+
+    def test_eps_adjusted_rejects_unexpected_values(self) -> None:
+        document = {
+            "events": [
+                event(
+                    "7236",
+                    "string-eps-flag",
+                    1,
+                    10,
+                    eps_adjusted="false",
+                    status="provisional",
+                )
+            ]
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "actions.json"
+            path.write_text(json.dumps(document), encoding="utf-8")
+            with self.assertRaisesRegex(
+                ValueError, "epsAdjustedはtrue、false、nullのいずれか"
+            ):
+                build_store.load_stock_actions(path, as_of=date(2026, 8, 3))
 
     def test_unknown_status_is_ignored(self) -> None:
         actions = {
@@ -206,6 +258,17 @@ class SplitAdjustmentTest(unittest.TestCase):
             self.build(baseline, {})
             self.build(ignored, actions)
             self.assertEqual(self.rows(ignored), self.rows(baseline))
+
+    def test_missing_status_is_ignored_by_split_adjustment(self) -> None:
+        action = event(
+            "7236",
+            "missing-status",
+            1,
+            10,
+            eps_adjusted=False,
+        )
+        del action["status"]
+        self.assertIsNone(build_store.split_adjustment([action]))
 
     def test_multiple_events_multiply_factors(self) -> None:
         adjustment = build_store.split_adjustment(
@@ -280,6 +343,7 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertEqual(toukei["newShares"], 4)
         self.assertEqual(toukei["effectiveDate"], "2026-10-01")
         self.assertEqual(toukei["status"], "provisional")
+        self.assertIsNone(toukei["epsAdjusted"])
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "note": "一次資料で確認した株式分割イベント。有報からの自動抽出(stock_actions.json)で拾えなかった分を人手で補う。有報は年1回しか出ないため、提出後に決議・実施された分割は自動抽出では原理的に拾えない（3月決算以外で顕著）。半期報告書(160)の取得で将来的に自動化できる見込み。決算書類でEPS/BPSの遡及調整を確認できる前のイベントはstatus=provisionalで登録し、配当だけを先に補正する。",
-  "adjustmentRule": "現在株価の基準に揃える場合、effectiveDate より前の1株当たり値に oldShares/newShares を掛ける。status=confirmed は従来どおり配当とEPS/BPSを補正し、epsAdjusted=true の銘柄はEPS/BPSが既に遡及調整済みなので再調整しない。status=provisional は配当だけを補正し、EPS/BPSは触らない（決算書類で確認後にconfirmedへ更新する）。それ以外のstatusは無視する。",
+  "adjustmentRule": "現在株価の基準に揃える場合、effectiveDate より前の1株当たり値に oldShares/newShares を掛ける。status=confirmed は従来どおり配当とEPS/BPSを補正し、epsAdjusted=true の銘柄はEPS/BPSが既に遡及調整済みなので再調整しない。status=provisional は配当だけを補正し、EPS/BPSは触らない。それ以外のstatusは無視する。provisionalからconfirmedへ格上げするときは、先に決算書類でEPS/BPSの遡及調整有無を確認し、epsAdjustedをtrueまたはfalseに更新してからstatusをconfirmedに変更する。epsAdjustedがnullのままconfirmedにするとビルドが停止する。",
   "confirmedBy": "confirmedイベントはCodex(GPT-5.6 Sol)によるWeb調査、2026-08-02。provisionalイベントは各checkedAt時点のWeb調査。各eventのsource.urlが一次資料",
   "events": [
     {
@@ -158,7 +158,7 @@
     {
       "eventId": "4746-2026-10-01-split-1-to-4", "securityCode": "4746", "name": "東計電算",
       "action": "split", "oldShares": 1, "newShares": 4, "effectiveDate": "2026-10-01",
-      "status": "provisional", "epsAdjusted": false,
+      "status": "provisional", "epsAdjusted": null,
       "source": {"url": "https://www.toukei.co.jp/wp-content/uploads/2026/08/260803-ir-news.pdf", "type": "issuer_ir"},
       "note": "基準日は2026年9月30日。発行体IRで1株→4株、効力発生日2026年10月1日を確認。EPS/BPSの遡及調整有無は取得不能（決算書類確認前）のため、provisional中は配当だけ補正する。",
       "checkedAt": "2026-08-08"

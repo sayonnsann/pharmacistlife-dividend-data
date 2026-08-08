@@ -416,6 +416,24 @@ def load_stock_actions(
         if event.get("status") not in ("confirmed", "provisional"):
             continue
 
+        if "epsAdjusted" not in event:
+            raise ValueError(
+                f"{label}.epsAdjustedがありません。true、false、nullのいずれかを"
+                "設定してください（文字列ではなくJSONの値）。"
+            )
+        eps_adjusted = event["epsAdjusted"]
+        if eps_adjusted is not None and not isinstance(eps_adjusted, bool):
+            raise ValueError(
+                f"{label}.epsAdjustedはtrue、false、nullのいずれかにしてください。"
+            )
+        if event.get("status") == "confirmed" and eps_adjusted is None:
+            raise ValueError(
+                f"{label}.epsAdjustedが未確認(null)のままconfirmedです。"
+                "決算書類でEPS/BPSの遡及調整有無を確認し、epsAdjustedをtrueまたは"
+                "falseに更新してからconfirmedにするか、確認前ならstatusを"
+                "provisionalのままにしてください。"
+            )
+
         code = normalized_code(event.get("securityCode", ""))
         try:
             effective_date = date.fromisoformat(str(event.get("effectiveDate", "")))
@@ -428,9 +446,6 @@ def load_stock_actions(
             raise ValueError(f"{label}.oldSharesが正の数ではありません")
         if new_shares is None or new_shares <= 0:
             raise ValueError(f"{label}.newSharesが正の数ではありません")
-        if not isinstance(event.get("epsAdjusted"), bool):
-            raise ValueError(f"{label}.epsAdjustedがbooleanではありません")
-
         source = event.get("source")
         if not isinstance(source, dict):
             raise ValueError(f"{label}.sourceがobjectではありません")
@@ -457,7 +472,7 @@ def split_adjustment(events: list[dict[str, Any]]) -> dict[str, Any] | None:
     events = [
         event
         for event in events
-        if event.get("status", "confirmed") in ("confirmed", "provisional")
+        if event.get("status") in ("confirmed", "provisional")
     ]
     if not events:
         return None
@@ -466,13 +481,31 @@ def split_adjustment(events: list[dict[str, Any]]) -> dict[str, Any] | None:
     eps_bps_factor = 1.0
     payload_events = []
     for event in events:
+        status = event["status"]
+        if "epsAdjusted" not in event:
+            raise ValueError(
+                f"株式分割イベント {event.get('eventId', '<unknown>')} の"
+                "epsAdjustedがありません。true、false、nullのいずれかを設定してください。"
+            )
+        eps_adjusted = event["epsAdjusted"]
+        if eps_adjusted is not None and not isinstance(eps_adjusted, bool):
+            raise ValueError(
+                f"株式分割イベント {event.get('eventId', '<unknown>')} の"
+                "epsAdjustedはtrue、false、nullのいずれかにしてください。"
+            )
+        if status == "confirmed" and eps_adjusted is None:
+            raise ValueError(
+                f"株式分割イベント {event.get('eventId', '<unknown>')} は"
+                "epsAdjustedが未確認(null)のままconfirmedです。決算書類で"
+                "EPS/BPSの遡及調整有無を確認し、epsAdjustedをtrueまたはfalseに"
+                "更新してからconfirmedにするか、確認前ならstatusをprovisionalの"
+                "ままにしてください。"
+            )
         old_shares = float(event["oldShares"])
         new_shares = float(event["newShares"])
         factor = old_shares / new_shares
         dividend_factor *= factor
-        if event.get("status", "confirmed") == "confirmed" and not event[
-            "epsAdjusted"
-        ]:
+        if status == "confirmed" and not eps_adjusted:
             eps_bps_factor *= factor
         source = event["source"]
         payload_events.append(

@@ -530,14 +530,28 @@ class RateLimitStreakTest(unittest.TestCase):
         workflow = (ROOT / ".github" / "workflows" / "daily-store.yml").read_text(
             encoding="utf-8"
         )
+        state_saved = workflow.index("forecasts_state.json を検証つきで差し替えました")
+        build_start = workflow.index("- name: SQLiteストアを構築")
         uploads_done = workflow.index("stocks.sqlite を検証つきで差し替えました")
         alert_start = workflow.index("連続した取得枠切れを通知")
+        fallback_alert = workflow.index("分割補正のフォールバックを通知")
         complete = workflow.index("- name: 完了", alert_start)
+        self.assertLess(state_saved, build_start)
+        self.assertLess(build_start, uploads_done)
         self.assertLess(uploads_done, alert_start)
-        self.assertLess(alert_start, complete)
+        self.assertLess(alert_start, fallback_alert)
+        self.assertLess(fallback_alert, complete)
         alert_block = workflow[alert_start:complete]
         self.assertIn("alert_after_days=2", alert_block)
         self.assertIn("exit 1", alert_block)
+        store_upload = workflow.index("- name: SQLiteをFTPSへ原子的に反映")
+        self.assertIn("id: publish_store", workflow[store_upload:uploads_done])
+        fallback_block = workflow[fallback_alert:complete]
+        self.assertIn(
+            "always() && steps.publish_store.outcome == 'success'",
+            fallback_block,
+        )
+        self.assertIn("python scripts/check_split_fallback.py \"$SQLITE_FILE\"", fallback_block)
 
 
 # ---------------------------------------------------------------------------

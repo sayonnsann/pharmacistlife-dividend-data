@@ -393,6 +393,37 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertAlmostEqual(adjustment["epsBpsFactor"], 0.5)
         self.assertEqual(len(adjustment["events"]), 2)
 
+    def test_multiple_events_adjust_each_fiscal_period_only_after_its_split(self) -> None:
+        adjustment = build_store.split_adjustment(
+            [
+                event(
+                    "7466",
+                    "spk-2020",
+                    1,
+                    2,
+                    eps_adjusted_by_issuer=True,
+                    effective_date="2020-04-01",
+                ),
+                event(
+                    "7466",
+                    "spk-2026",
+                    1,
+                    2,
+                    eps_adjusted_by_issuer=True,
+                    effective_date="2026-04-01",
+                ),
+            ]
+        )
+        assert adjustment is not None
+        adjusted = build_store.adjust_per_share_series(
+            {"2020": 72, "2021": 37, "2026": 73},
+            adjustment,
+            fiscal_month=3,
+        )
+        self.assertEqual(adjusted["2020"], 18.0)
+        self.assertEqual(adjusted["2021"], 18.5)
+        self.assertEqual(adjusted["2026"], 36.5)
+
     def test_loader_excludes_future_events(self) -> None:
         document = {
             "events": [
@@ -424,22 +455,23 @@ class SplitAdjustmentTest(unittest.TestCase):
             [item["eventId"] for item in loaded["1234"]], ["effective"]
         )
 
-    def test_manual_actions_have_21_stocks_and_kameda_eps_flag(self) -> None:
+    def test_manual_actions_have_expected_stocks_and_kameda_eps_flag(self) -> None:
         loaded = build_store.load_stock_actions(
             ROOT / "data" / "stock_actions_manual.json",
             as_of=date(2026, 8, 3),
         )
-        self.assertEqual(len(loaded), 21)
-        self.assertEqual(sum(map(len, loaded.values())), 21)
+        self.assertEqual(len(loaded), 30)
+        self.assertEqual(sum(map(len, loaded.values())), 30)
         self.assertTrue(loaded["2220"][0]["epsAdjustedByIssuer"])
         self.assertTrue(
             all(
-                not item["epsAdjustedByIssuer"]
-                for code, events in loaded.items()
-                if code != "2220"
+                item["epsAdjustedByIssuer"] in (True, False, None)
+                for events in loaded.values()
                 for item in events
             )
         )
+        self.assertTrue(loaded["2897"][0]["epsAdjustedByIssuer"])
+        self.assertIsNone(loaded["6516"][0]["epsAdjustedByIssuer"])
 
     def test_manual_actions_include_toukei_as_provisional_after_effective_date(
         self,
@@ -456,6 +488,74 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertEqual(toukei["status"], "provisional")
         self.assertTrue(toukei["applyDividendAdjustment"])
         self.assertIsNone(toukei["epsAdjustedByIssuer"])
+
+
+class StockActionIntegrationTest(unittest.TestCase):
+    MANUAL = ROOT / "data" / "stock_actions_manual.json"
+    EXTRACTED = ROOT / "data" / "stock_actions_extracted.json"
+
+    def test_extracted_file_is_exactly_the_audited_split_pass_set(self) -> None:
+        document = json.loads(self.EXTRACTED.read_text(encoding="utf-8"))
+        events = document["events"]
+        # 監査に合格した1,138件から、発行体が当社でないと分かった3件を除いた数。
+        # 監査は文言の内部整合だけを見るため、会社分割・株式交換の記述から拾った
+        # 他法人の分割（NTTの1→49など）を弾けない。除いた3件はexcludedに残す。
+        self.assertEqual(len(events), 1135)
+        self.assertEqual(len(document.get("excluded", [])), 3)
+        excluded = {
+            (str(item["securityCode"]), item["effectiveDate"])
+            for item in document["excluded"]
+        }
+        self.assertEqual(
+            excluded,
+            {("9432", "2022-10-01"), ("2345", "2022-03-02"), ("5711", "2026-10-01")},
+        )
+        present = {
+            (str(event["securityCode"]), event["effectiveDate"]) for event in events
+        }
+        self.assertTrue(excluded.isdisjoint(present))
+        self.assertTrue(all(event["action"] == "split" for event in events))
+        self.assertTrue(
+            all(event["status"] == "confirmed" for event in events)
+        )
+        self.assertFalse(
+            any(event["action"] == "consolidation" for event in events)
+        )
+        self.assertTrue(
+            all(
+                event["source"]["audit"]["decision"] == "合格"
+                for event in events
+            )
+        )
+        self.assertEqual(
+            {event["eventId"] for event in events},
+            {
+                event["eventId"]
+                for event in document["events"]
+                if event["source"]["audit"]["decision"] == "合格"
+            },
+        )
+
+    def test_manual_event_wins_when_event_id_is_duplicated(self) -> None:
+        loaded = build_store.load_stock_actions(
+            [self.MANUAL, self.EXTRACTED], as_of=date(2026, 8, 3)
+        )
+        event = loaded["8053"][0]
+        self.assertEqual(
+            event["source"]["url"],
+            "https://www.sumitomocorp.com/-/media/Files/hq/ir/report/summary/2025/2603Tanshin.pdf?sc_lang=ja",
+        )
+        self.assertNotEqual(event["source"].get("type"), "edinet")
+
+    def test_loader_maps_eps_flag_and_keeps_audit_provenance(self) -> None:
+        loaded = build_store.load_stock_actions(
+            [self.MANUAL, self.EXTRACTED], as_of=date(2026, 8, 9)
+        )
+        event = loaded["8309"][0]
+        self.assertFalse(event["epsAdjustedByIssuer"])
+        self.assertEqual(event["source"]["type"], "edinet")
+        self.assertEqual(event["source"]["audit"]["decision"], "合格")
+        self.assertTrue(event["source"]["docID"].startswith("S"))
 
 
 class SplitFallbackNotificationTest(unittest.TestCase):

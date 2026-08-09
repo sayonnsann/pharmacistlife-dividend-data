@@ -156,6 +156,69 @@
       "checkedAt": "2026-08-02"
     },
     {
+      "eventId": "2897-2024-01-01-split-1-to-3", "securityCode": "2897", "name": "日清食品ホールディングス",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2024-01-01",
+      "status": "confirmed", "epsAdjustedByIssuer": true,
+      "source": {"url": "https://www.nissin.com/jp/company/news/12074/", "type": "issuer_ir"},
+      "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "4023-2024-01-01-split-1-to-3", "securityCode": "4023", "name": "クレハ",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2024-01-01",
+      "status": "confirmed", "epsAdjustedByIssuer": true,
+      "source": {"url": "https://www.kureha.co.jp/newsrelease/uploads/Stock%20Split_jp.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "6594-2024-10-01-split-1-to-2", "securityCode": "6594", "name": "ニデック",
+      "action": "split", "oldShares": 1, "newShares": 2, "effectiveDate": "2024-10-01",
+      "status": "confirmed", "epsAdjustedByIssuer": true,
+      "source": {"url": "https://www.nidec.com/jp/ir/stockholder/issue-sprit/", "type": "issuer_ir"},
+      "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "277A-2025-03-01-split-1-to-5", "securityCode": "277A", "name": "グロービング",
+      "action": "split", "oldShares": 1, "newShares": 5, "effectiveDate": "2025-03-01",
+      "status": "confirmed", "epsAdjustedByIssuer": true,
+      "source": {"url": "https://www2.jpx.co.jp/disc/277A0/140120250123554343.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "5401-2025-10-01-split-1-to-5", "securityCode": "5401", "name": "日本製鉄",
+      "action": "split", "oldShares": 1, "newShares": 5, "effectiveDate": "2025-10-01",
+      "status": "confirmed", "epsAdjustedByIssuer": true,
+      "source": {"url": "https://www.nipponsteel.com/newsroom/news/2025/__icsFiles/afieldfile/2025/09/10/20250801_200.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "6516-2025-10-01-split-1-to-3", "securityCode": "6516", "name": "山洋電気",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2025-10-01",
+      "status": "confirmed", "epsAdjustedByIssuer": null,
+      "source": {"url": "https://www2.jpx.co.jp/disc/65160/140120250820544787.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "7781-2026-07-01-split-1-to-2", "securityCode": "7781", "name": "平山ホールディングス",
+      "action": "split", "oldShares": 1, "newShares": 2, "effectiveDate": "2026-07-01",
+      "status": "confirmed", "epsAdjustedByIssuer": false,
+      "source": {"url": "https://www2.jpx.co.jp/disc/77810/140120260216562891.pdf", "type": "jpx"},
+      "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "9305-2025-06-01-split-1-to-2", "securityCode": "9305", "name": "ヤマタネ",
+      "action": "split", "oldShares": 1, "newShares": 2, "effectiveDate": "2025-06-01",
+      "status": "confirmed", "epsAdjustedByIssuer": true,
+      "source": {"url": "https://pdf.irpocket.com/C9305/dRUj/kiZH/Y3Cp.pdf", "type": "issuer_ir"},
+      "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "7327-2025-10-01-split-1-to-3", "securityCode": "7327", "name": "第四北越フィナンシャルグループ",
+      "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2025-10-01",
+      "status": "confirmed", "epsAdjustedByIssuer": true,
+      "source": {"url": "https://www.dhfg.co.jp/financial/stock/", "type": "issuer_ir"},
+      "checkedAt": "2026-08-09"
+    },
+    {
       "eventId": "4746-2026-10-01-split-1-to-4", "securityCode": "4746", "name": "東計電算",
       "action": "split", "oldShares": 1, "newShares": 4, "effectiveDate": "2026-10-01",
       "status": "provisional", "applyDividendAdjustment": true, "epsAdjustedByIssuer": null,

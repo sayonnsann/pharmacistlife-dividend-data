@@ -1,0 +1,8 @@
+{
+  "tests/test_build_store.py::NoYahooDependencyTest::test_scripts_do_not_mention_the_retired_file": true,
+  "tests/test_build_store.py::ForecastLegsSelfCheckTest::test_composes_after_the_split_when_the_api_value_is_missing": true,
+  "tests/test_build_store.py::ForecastLegsSelfCheckTest::test_pending_bar_switches_basis_on_the_split_day": true,
+  "tests/test_fetch_forecasts.py::EndToEndEventTest::test_the_same_disclosure_is_not_chased_twice": true,
+  "tests/test_build_store.py::SplitAdjustmentTest::test_confirmed_with_unconfirmed_eps_adjustment_stops_the_build": true,
+  "tests/test_build_store.py::SplitAdjustmentTest::test_eps_adjusted_rejects_unexpected_values": true
+}

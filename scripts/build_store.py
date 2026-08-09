@@ -12,7 +12,8 @@ import re
 import sqlite3
 import subprocess
 import tempfile
-from datetime import date, datetime
+from collections.abc import Sequence
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -27,6 +28,9 @@ DEFAULT_CALENDAR_DIVIDENDS = (
     REPOSITORY_ROOT / "data" / "calendar_dividends_frozen.json"
 )
 DEFAULT_STOCK_ACTIONS = REPOSITORY_ROOT / "data" / "stock_actions_manual.json"
+DEFAULT_EXTRACTED_STOCK_ACTIONS = (
+    REPOSITORY_ROOT / "data" / "stock_actions_extracted.json"
+)
 DEFAULT_FORECASTS = REPOSITORY_ROOT / "forecasts_state.json"
 DEFAULT_OUTPUT = REPOSITORY_ROOT / "stocks.sqlite"
 DAILY_PRICE_CSV_URL = (
@@ -55,6 +59,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--stock-actions", type=Path, default=DEFAULT_STOCK_ACTIONS
+    )
+    parser.add_argument(
+        "--stock-actions-extracted",
+        type=Path,
+        default=DEFAULT_EXTRACTED_STOCK_ACTIONS,
+        help="監査合格分の自動取り込み台帳（manual側を優先して統合）",
     )
     parser.add_argument("--forecasts", type=Path, default=DEFAULT_FORECASTS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
@@ -92,6 +102,27 @@ def normalized_code(value: Any) -> str:
     if len(code) != 4 or not code.isalnum() or not code.isascii():
         raise ValueError(f"不正な銘柄コードです: {value!r}")
     return code
+
+
+def stock_action_paths(
+    path: Path | Sequence[Path],
+) -> list[Path]:
+    """株式アクション台帳のパスを、優先順位順のリストにする。"""
+    if isinstance(path, Path):
+        paths = [path]
+    else:
+        paths = list(path)
+    if not paths or not all(isinstance(item, Path) for item in paths):
+        raise ValueError("株式アクション台帳のパスが空、またはPathではありません")
+    return paths
+
+
+def stock_action_source_label(
+    path: Path | Sequence[Path] | None,
+) -> str:
+    if path is None:
+        return ""
+    return ",".join(str(item) for item in stock_action_paths(path))
 
 
 def index_by_code(
@@ -429,7 +460,7 @@ def reject_legacy_split_field_names(
 
 
 def load_stock_actions(
-    path: Path,
+    path: Path | Sequence[Path],
     *,
     as_of: date | None = None,
     fallback_events: list[dict[str, Any]] | None = None,
@@ -439,119 +470,126 @@ def load_stock_actions(
     provisional は分割の事実・比率・効力発生日を先に反映する段階で、
     配当だけを補正する。EPS/BPSへの適用は confirmed になるまで行わない。
     """
-    document = load_json(path, dict)
-    events = document.get("events")
-    if not isinstance(events, list):
-        raise ValueError(f"{path}: eventsがarrayではありません")
-
     effective_as_of = as_of or datetime.now(JST).date()
     result: dict[str, list[dict[str, Any]]] = {}
     event_ids: set[str] = set()
-    for index, event in enumerate(events):
-        label = f"{path}: events[{index}]"
-        if not isinstance(event, dict):
-            raise ValueError(f"{label}がobjectではありません")
+    for source_path in stock_action_paths(path):
+        document = load_json(source_path, dict)
+        events = document.get("events")
+        if not isinstance(events, list):
+            raise ValueError(f"{source_path}: eventsがarrayではありません")
+        source_event_ids: set[str] = set()
+        for index, event in enumerate(events):
+            label = f"{source_path}: events[{index}]"
+            if not isinstance(event, dict):
+                raise ValueError(f"{label}がobjectではありません")
 
-        event_id = event.get("eventId")
-        if not isinstance(event_id, str) or not event_id.strip():
-            raise ValueError(f"{label}.eventIdが空です")
-        if event_id in event_ids:
-            raise ValueError(f"{path}: eventId {event_id!r} が重複しています")
-        event_ids.add(event_id)
-
-        if event.get("action") != "split":
-            raise ValueError(f"{label}.actionがsplitではありません")
-        reject_legacy_split_field_names(event, label)
-        if event.get("status") not in ("confirmed", "provisional"):
-            continue
-
-        event = dict(event)
-        event_fallbacks: list[dict[str, Any]] = []
-
-        def mark_fallback(field: str, reason: str) -> None:
-            if any(item["field"] == field for item in event_fallbacks):
-                return
-            record = split_fallback_record(event, field, reason)
-            event_fallbacks.append(record)
-            register_split_fallback(fallback_events, record, log=True)
-
-        eps_adjusted_by_issuer = event.get("epsAdjustedByIssuer")
-        if "epsAdjustedByIssuer" not in event or (
-            eps_adjusted_by_issuer is not None
-            and not isinstance(eps_adjusted_by_issuer, bool)
-        ):
-            event["epsAdjustedByIssuer"] = None
-            mark_fallback(
-                "epsAdjustedByIssuer",
-                "epsAdjustedByIssuerがtrue/false/nullではないためEPS/BPSを補正しません",
-            )
-            eps_adjusted_by_issuer = None
-        elif (
-            event.get("status") == "confirmed"
-            and eps_adjusted_by_issuer is None
-        ):
-            mark_fallback(
-                "epsAdjustedByIssuer",
-                "confirmedなのにepsAdjustedByIssuerがnullのためEPS/BPSを補正しません",
-            )
-
-        apply_dividend_adjustment = event.get("applyDividendAdjustment", True)
-        if apply_dividend_adjustment is not None and not isinstance(
-            apply_dividend_adjustment, bool
-        ):
-            event["applyDividendAdjustment"] = None
-            mark_fallback(
-                "applyDividendAdjustment",
-                "applyDividendAdjustmentがtrue/false/nullではないため配当を補正しません",
-            )
-            apply_dividend_adjustment = None
-        elif apply_dividend_adjustment is None:
-            mark_fallback(
-                "applyDividendAdjustmentがnullのため配当を補正しません",
-            )
-
-        code = normalized_code(event.get("securityCode", ""))
-        try:
-            effective_date = date.fromisoformat(str(event.get("effectiveDate", "")))
-        except ValueError as error:
-            raise ValueError(f"{label}.effectiveDateがISO日付ではありません") from error
-
-        old_shares = finite_number(event.get("oldShares"))
-        new_shares = finite_number(event.get("newShares"))
-        if old_shares is None or old_shares <= 0:
-            event["oldShares"] = None
-            old_shares = None
-        if new_shares is None or new_shares <= 0:
-            event["newShares"] = None
-            new_shares = None
-        if old_shares is None or new_shares is None:
-            if apply_dividend_adjustment is True:
-                event["applyDividendAdjustment"] = None
-                mark_fallback(
-                    "applyDividendAdjustment",
-                    "分割比率が不明のため配当を補正しません",
+            event_id = event.get("eventId")
+            if not isinstance(event_id, str) or not event_id.strip():
+                raise ValueError(f"{label}.eventIdが空です")
+            if event_id in source_event_ids:
+                raise ValueError(
+                    f"{source_path}: eventId {event_id!r} が重複しています"
                 )
-            if (
+            source_event_ids.add(event_id)
+            # manualを先に渡すことで、同じeventIdの自動抽出値を捨てる。
+            if event_id in event_ids:
+                continue
+            event_ids.add(event_id)
+
+            if event.get("action") != "split":
+                raise ValueError(f"{label}.actionがsplitではありません")
+            reject_legacy_split_field_names(event, label)
+            if event.get("status") not in ("confirmed", "provisional"):
+                continue
+
+            event = dict(event)
+            event_fallbacks: list[dict[str, Any]] = []
+
+            def mark_fallback(field: str, reason: str) -> None:
+                if any(item["field"] == field for item in event_fallbacks):
+                    return
+                record = split_fallback_record(event, field, reason)
+                event_fallbacks.append(record)
+                register_split_fallback(fallback_events, record, log=True)
+
+            eps_adjusted_by_issuer = event.get("epsAdjustedByIssuer")
+            if "epsAdjustedByIssuer" not in event or (
+                eps_adjusted_by_issuer is not None
+                and not isinstance(eps_adjusted_by_issuer, bool)
+            ):
+                event["epsAdjustedByIssuer"] = None
+                mark_fallback(
+                    "epsAdjustedByIssuer",
+                    "epsAdjustedByIssuerがtrue/false/nullではないためEPS/BPSを補正しません",
+                )
+                eps_adjusted_by_issuer = None
+            elif (
                 event.get("status") == "confirmed"
-                and eps_adjusted_by_issuer is False
+                and eps_adjusted_by_issuer is None
             ):
                 mark_fallback(
                     "epsAdjustedByIssuer",
-                    "分割比率が不明のためEPS/BPSを補正しません",
+                    "confirmedなのにepsAdjustedByIssuerがnullのためEPS/BPSを補正しません",
                 )
-        source = event.get("source")
-        if not isinstance(source, dict):
-            raise ValueError(f"{label}.sourceがobjectではありません")
-        source_url = source.get("url")
-        if not isinstance(source_url, str) or not source_url.strip():
-            raise ValueError(f"{label}.source.urlが空です")
 
-        # 将来の分割は、現在株価がまだ旧株式数基準なので適用しない。
-        if effective_date > effective_as_of:
-            continue
-        if event_fallbacks:
-            event["_splitAdjustmentFallbacks"] = event_fallbacks
-        result.setdefault(code, []).append(event)
+            apply_dividend_adjustment = event.get("applyDividendAdjustment", True)
+            if apply_dividend_adjustment is not None and not isinstance(
+                apply_dividend_adjustment, bool
+            ):
+                event["applyDividendAdjustment"] = None
+                mark_fallback(
+                    "applyDividendAdjustment",
+                    "applyDividendAdjustmentがtrue/false/nullではないため配当を補正しません",
+                )
+                apply_dividend_adjustment = None
+            elif apply_dividend_adjustment is None:
+                mark_fallback(
+                    "applyDividendAdjustmentがnullのため配当を補正しません",
+                )
+
+            code = normalized_code(event.get("securityCode", ""))
+            try:
+                effective_date = date.fromisoformat(str(event.get("effectiveDate", "")))
+            except ValueError as error:
+                raise ValueError(f"{label}.effectiveDateがISO日付ではありません") from error
+
+            old_shares = finite_number(event.get("oldShares"))
+            new_shares = finite_number(event.get("newShares"))
+            if old_shares is None or old_shares <= 0:
+                event["oldShares"] = None
+                old_shares = None
+            if new_shares is None or new_shares <= 0:
+                event["newShares"] = None
+                new_shares = None
+            if old_shares is None or new_shares is None:
+                if apply_dividend_adjustment is True:
+                    event["applyDividendAdjustment"] = None
+                    mark_fallback(
+                        "applyDividendAdjustment",
+                        "分割比率が不明のため配当を補正しません",
+                    )
+                if (
+                    event.get("status") == "confirmed"
+                    and eps_adjusted_by_issuer is False
+                ):
+                    mark_fallback(
+                        "epsAdjustedByIssuer",
+                        "分割比率が不明のためEPS/BPSを補正しません",
+                    )
+            source = event.get("source")
+            if not isinstance(source, dict):
+                raise ValueError(f"{label}.sourceがobjectではありません")
+            source_url = source.get("url")
+            if not isinstance(source_url, str) or not source_url.strip():
+                raise ValueError(f"{label}.source.urlが空です")
+
+            # 将来の分割は、現在株価がまだ旧株式数基準なので適用しない。
+            if effective_date > effective_as_of:
+                continue
+            if event_fallbacks:
+                event["_splitAdjustmentFallbacks"] = event_fallbacks
+            result.setdefault(code, []).append(event)
 
     for code_events in result.values():
         code_events.sort(key=lambda event: (event["effectiveDate"], event["eventId"]))
@@ -669,6 +707,9 @@ def split_adjustment(
         ):
             eps_bps_factor *= factor
         source = event["source"]
+        audit = source.get("audit")
+        if not isinstance(audit, dict):
+            audit = {}
         payload_events.append(
             {
                 "eventId": event["eventId"],
@@ -681,6 +722,11 @@ def split_adjustment(
                 "epsAdjustedByIssuer": eps_adjusted_by_issuer,
                 "sourceUrl": source["url"],
                 "sourceType": source.get("type"),
+                "sourceDocID": source.get("docID"),
+                "sourceDocIDs": source.get("docIDs"),
+                "auditDecision": audit.get("decision"),
+                "auditReasons": audit.get("reasons", []),
+                "auditReasonLabels": audit.get("reasonLabels", []),
             }
         )
     return {
@@ -694,13 +740,110 @@ def split_adjustment(
     }
 
 
-def adjust_per_share_series(series: Any, factor: float) -> Any:
-    """時系列の数値だけを補正し、欠損などの既存表現は維持する。"""
+def adjustment_factor_for_period(
+    adjustment: dict[str, Any],
+    period: Any,
+    *,
+    fiscal_month: int | None,
+    field: str,
+) -> float:
+    """期間末より後に効力が発生した分割だけの補正係数を返す。"""
+    try:
+        period_year = int(period)
+    except (TypeError, ValueError):
+        return 1.0
+
+    factor = 1.0
+    for event in adjustment.get("events", []):
+        event_factor = finite_number(event.get("adjustmentFactor"))
+        if event_factor is None:
+            continue
+        try:
+            effective_date = date.fromisoformat(str(event["effectiveDate"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if fiscal_month is None:
+            # 事業年度末が分からない系列は、イベント年の値もイベント前の
+            # 基準で保存されている安全側として扱う。
+            applies = effective_date.year >= period_year
+        else:
+            if not 1 <= fiscal_month <= 12:
+                return 1.0
+            if fiscal_month == 12:
+                period_end = date(period_year, 12, 31)
+            else:
+                next_month = date(period_year, fiscal_month + 1, 1)
+                period_end = next_month - timedelta(days=1)
+            applies = effective_date > period_end
+        if not applies:
+            continue
+        if field == "dividend" and event.get("applyDividendAdjustment") is True:
+            factor *= event_factor
+        elif (
+            field == "epsBps"
+            and event.get("status") == "confirmed"
+            and event.get("epsAdjustedByIssuer") is False
+        ):
+            factor *= event_factor
+    return factor
+
+
+def adjustment_for_unadjusted_series(
+    adjustment: dict[str, Any],
+    series: dict[Any, Any],
+    *,
+    fiscal_month: int | None,
+) -> dict[str, Any]:
+    """既に過年度の分割を反映済みの系列へ、未反映イベントだけを渡す。"""
+    if not series:
+        return adjustment
+    years = []
+    for period in series:
+        try:
+            years.append(int(period))
+        except (TypeError, ValueError):
+            continue
+    if not years:
+        return adjustment
+    latest_year = max(years)
+    if fiscal_month is None or not 1 <= fiscal_month <= 12:
+        latest_period_end = date(latest_year, 12, 31)
+    elif fiscal_month == 12:
+        latest_period_end = date(latest_year, 12, 31)
+    else:
+        latest_period_end = (
+            date(latest_year, fiscal_month + 1, 1) - timedelta(days=1)
+        )
+    events = []
+    for event in adjustment.get("events", []):
+        try:
+            effective_date = date.fromisoformat(str(event["effectiveDate"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if effective_date > latest_period_end:
+            events.append(event)
+    return {**adjustment, "events": events}
+
+
+def adjust_per_share_series(
+    series: Any,
+    adjustment: dict[str, Any],
+    *,
+    fiscal_month: int | None = None,
+    field: str = "dividend",
+) -> Any:
+    """期間末より後の分割だけを時系列へ適用する。"""
     if not isinstance(series, dict):
         return series
     return {
         period: (
-            float(value) * factor
+            float(value)
+            * adjustment_factor_for_period(
+                adjustment,
+                period,
+                fiscal_month=fiscal_month,
+                field=field,
+            )
             if finite_number(value) is not None
             else value
         )
@@ -1132,7 +1275,7 @@ def create_database(
     source_paths: list[Path],
     prices_url: str,
     stock_actions_by_code: dict[str, list[dict[str, Any]]] | None = None,
-    stock_actions_path: Path | None = None,
+    stock_actions_path: Path | Sequence[Path] | None = None,
     fiscal_by_code: dict[str, dict[str, Any]] | None = None,
     fiscal_path: Path | None = None,
     calendar_by_code: dict[str, dict[str, Any]] | None = None,
@@ -1236,6 +1379,7 @@ def create_database(
                     matched_tickers += 1
 
                 daily_price = daily_prices.get(code)
+                fiscal_record = fiscal_by_code.get(code)
                 adjustment = split_adjustment(
                     stock_actions_by_code.get(code, []),
                     fallback_events=stock_action_fallbacks,
@@ -1281,7 +1425,14 @@ def create_database(
                     eps_bps_factor = adjustment["epsBpsFactor"]
                     if "dividendPerShare" in financial:
                         payload["dividendPerShare"] = adjust_per_share_series(
-                            financial["dividendPerShare"], dividend_factor
+                            financial["dividendPerShare"],
+                            adjustment,
+                            fiscal_month=(
+                                fiscal_record.get("fiscalMonth")
+                                if fiscal_record
+                                else None
+                            ),
+                            field="dividend",
                         )
                     # PER/PBR自体は価格と1株当たり値の比なので分割で不変。
                     # 現在価格との計算に使うEPS/BPSだけを現在基準へ揃える。
@@ -1289,21 +1440,40 @@ def create_database(
                         for key in ("eps", "bps"):
                             if key in financial:
                                 payload[key] = adjust_per_share_series(
-                                    financial[key], eps_bps_factor
+                                    financial[key],
+                                    adjustment,
+                                    fiscal_month=(
+                                        fiscal_record.get("fiscalMonth")
+                                        if fiscal_record
+                                        else None
+                                    ),
+                                    field="epsBps",
                                 )
                     payload["splitAdjustment"] = adjustment
 
                 # 配当系列を事業年度ベースへ差し替える。
                 # 系列が取れなかった銘柄だけ、暦年の系列のまま残す。
-                fiscal = fiscal_by_code.get(code)
+                fiscal = fiscal_record
                 if fiscal is not None:
                     fiscal_based_stocks += 1
                     series = fiscal["series"]
                     if adjustment is not None:
-                        # dividendPerShare と同じく、系列全体を現在の株式数基準へ揃える。
+                        series_adjustment = adjustment_for_unadjusted_series(
+                            adjustment,
+                            series,
+                            fiscal_month=fiscal.get("fiscalMonth"),
+                        )
+                        # 既存系列に未反映の分割だけを、各年度の期末基準で揃える。
                         series = {
                             year: round(
-                                value * adjustment["dividendFactor"], 4
+                                value
+                                * adjustment_factor_for_period(
+                                    series_adjustment,
+                                    year,
+                                    fiscal_month=fiscal.get("fiscalMonth"),
+                                    field="dividend",
+                                ),
+                                4,
                             )
                             for year, value in series.items()
                         }
@@ -1362,9 +1532,19 @@ def create_database(
                     frozen = calendar_by_code.get(code)
                     series = frozen["series"] if frozen else {}
                     if series and adjustment is not None:
+                        series_adjustment = adjustment_for_unadjusted_series(
+                            adjustment, series, fiscal_month=12
+                        )
                         series = {
                             year: round(
-                                value * adjustment["dividendFactor"], 4
+                                value
+                                * adjustment_factor_for_period(
+                                    series_adjustment,
+                                    year,
+                                    fiscal_month=12,
+                                    field="dividend",
+                                ),
+                                4,
                             )
                             for year, value in series.items()
                         }
@@ -1506,7 +1686,7 @@ def create_database(
                 "sectors_source": str(source_paths[1]),
                 "tickers_source": str(source_paths[2]),
                 "forecasts_source": str(source_paths[3]),
-                "stock_actions_source": str(stock_actions_path or ""),
+                "stock_actions_source": stock_action_source_label(stock_actions_path),
                 "split_adjusted_stock_count": str(adjusted_stocks),
                 "split_adjustment_event_count": str(applied_events),
                 "split_adjustment_fallback_count": str(
@@ -1580,8 +1760,9 @@ def main() -> None:
     fiscal_dividends = load_fiscal_dividends(args.fiscal_dividends)
     calendar_dividends = load_calendar_dividends(args.calendar_dividends)
     stock_action_fallbacks: list[dict[str, Any]] = []
+    stock_action_paths = [args.stock_actions, args.stock_actions_extracted]
     stock_actions = load_stock_actions(
-        args.stock_actions, fallback_events=stock_action_fallbacks
+        stock_action_paths, fallback_events=stock_action_fallbacks
     )
     forecasts = load_forecasts(args.forecasts)
     count, matched, frozen = create_database(
@@ -1598,7 +1779,7 @@ def main() -> None:
         ],
         args.prices_url,
         stock_actions,
-        args.stock_actions,
+        stock_action_paths,
         fiscal_dividends,
         args.fiscal_dividends,
         calendar_dividends,

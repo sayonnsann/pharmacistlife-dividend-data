@@ -386,6 +386,66 @@ jsDelivrから配信されていました。追跡から外して以降は
 が404になります（キャッシュが残るあいだは古い内容が返ることがあります）。
 このURLを読んでいた手元の試作品は、ローカルのファイルを読むように切り替えました。
 
+## 株式分割イベントの月次反映
+
+配信側の補正データは、別のEDINETデータ基盤にある
+`data/stock_action_ledger.json` を原本にして毎月再生成されます。正式cloneで
+`scripts/filter_extracted_stock_actions.py` を実行し、次の条件を満たす株式分割だけを
+`data/stock_actions_extracted.json` と比較します。
+
+- 効力発生日が配当系列の最終年度末より後
+- 比率が50倍未満
+- `data/tickers.json` に存在するJPX上場銘柄
+- `action=split` かつ、台帳の `duplicateOf` がない
+
+差分がある場合だけ `auto/stock-actions-YYYYMM` ブランチからPRが作られ、本文に追加・削除イベントの
+銘柄コード、効力発生日、比率が列挙されます。PR作成後は `gh pr merge --auto --squash` が予約されます。
+差分がない月はPRを作りません。
+
+### 自動マージの安全弁
+
+`.github/workflows/validate-stock-actions.yml` は、PRの全テストを実行したうえで、変更ファイルが
+`data/stock_actions_extracted.json` だけであることを検査します。また、mainとの差分でイベント追加が51件以上、
+または削除が11件以上なら `::error::` で失敗します。条件を外れたPRは自動マージされず、通常のレビュー待ちとして残ります。
+
+自動マージとrequired checkの有効化はリポジトリ設定を変更するため、内容を確認してから実行してください。
+
+```bash
+gh api --method PATCH repos/sayonnsann/pharmacistlife-dividend-data \
+  -F allow_auto_merge=true
+
+gh api --method PUT repos/sayonnsann/pharmacistlife-dividend-data/branches/main/protection \
+  -H 'Accept: application/vnd.github+json' \
+  --input - <<'JSON'
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["validate"]
+  },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+JSON
+```
+
+workflowやfilterの初回導入PRはデータ1ファイルだけという自動更新PRの制約に該当しません。
+そのため初回導入PRを通常レビューで先に取り込み、required checkを設定するのはその後にしてください。
+先に `validate` をrequiredにすると初回導入PR自身が変更ファイル検査で止まります。以後の自動更新PRは、
+データファイル以外を混ぜない限りこの検証を通ります。
+
+### launchdジョブの停止
+
+月次ジョブ自体はデータ生成側のMacでlaunchdが起動します。停止する場合は、そのMacで次を実行します。
+
+```bash
+launchctl bootout "gui/$(id -u)" \
+  "$HOME/Library/LaunchAgents/com.sayonnsann.stock-actions-monthly.plist"
+launchctl disable "gui/$(id -u)/com.sayonnsann.stock-actions-monthly"
+```
+
+ログは `~/Library/Logs/edinet-direct-stock-actions.log` と同じディレクトリのlaunchd出力に残ります。
+
 ## dividends.json（Yahoo由来の配当履歴）の廃止
 
 `data/dividends.json` は、yfinance（Yahoo Finance）から全銘柄の暦年ベースの配当履歴を

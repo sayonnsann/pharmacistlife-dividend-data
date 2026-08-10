@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """配信側で使うEDINET株式分割イベントを、配当系列に必要なものへ絞る。
 
-選別条件は次の3つをすべて満たすこと。
+選別条件は次の条件をすべて満たすこと。
 
 * 効力発生日が、fiscal_dividends.json の series 最終年度末より後
 * newShares / oldShares が50倍未満
 * tickers.json に銘柄コードが存在する
+* action が ``split``
+* 台帳が ``duplicateOf`` を付けたイベントではない
 
 入力と出力に同じパスを指定できる。除外イベントは ``excluded`` に元の
 イベント情報と理由コードを付けて残すため、台帳を更新した後も監査できる。
@@ -142,6 +144,15 @@ def exclusion_reasons(
     code = str(event.get("securityCode", "")).strip().upper()
     reasons: list[str] = []
     details: dict[str, Any] = {}
+
+    duplicate_of = event.get("duplicateOf")
+    if duplicate_of:
+        details["duplicateOf"] = duplicate_of
+        reasons.append("duplicate_of_event")
+
+    if event.get("action") != "split":
+        reasons.append("unsupported_action")
+
     fiscal = fiscal_by_code.get(code)
     effective_date = None
     try:
@@ -183,6 +194,13 @@ def japanese_reason(reason_code: str, details: dict[str, Any]) -> str:
         return f"分割比率が50倍以上または不正（{ratio if ratio is not None else '不明'}）"
     if reason_code == "not_listed":
         return "data/tickers.json に銘柄コードが存在しない"
+    if reason_code == "unsupported_action":
+        return "配信側で扱うのは株式分割（action=split）のみ"
+    if reason_code == "duplicate_of_event":
+        return (
+            "台帳で別イベントの重複候補"
+            f"（duplicateOf={details.get('duplicateOf', '不明')}）"
+        )
     return reason_code
 
 
@@ -259,28 +277,40 @@ def filter_document(
     if not isinstance(events, list):
         raise ValueError("eventsがarrayではありません")
     existing_excluded = preserve_existing_excluded(document.get("excluded"))
-    # 前回の実行でexcludedへ移した元イベントも再評価する。これにより、
-    # fiscal_dividends.jsonやtickers.jsonが更新された後に、現成果物を入力として
-    # 再実行しても、条件を満たすイベントを復活できる。
+    # 月次ジョブは必ず台帳を入力にする。すでに選別済みの成果物を手入力で
+    # 再入力した場合は、現在のeventsをスナップショットとして保ち、excluded
+    # だけを再評価する。外部のfiscal_dividends.jsonが更新されても、配信側の
+    # 既存イベントが意図せず消えることを防ぐためである。
     prior_excluded_events = [
         item
         for item in existing_excluded
         if isinstance(item.get("eventId"), str)
         and item.get("action") == "split"
     ]
-    candidates = events + prior_excluded_events
-    seen_event_ids: set[str] = set()
-    unique_candidates: list[dict[str, Any]] = []
-    for event in candidates:
-        event_id = event.get("eventId")
-        if isinstance(event_id, str) and event_id in seen_event_ids:
-            continue
-        if isinstance(event_id, str):
-            seen_event_ids.add(event_id)
-        unique_candidates.append(event)
-    selected, newly_excluded = select_events(
-        unique_candidates, fiscal_by_code, ticker_codes
+    generated_selection = (
+        isinstance(document.get("generatedFrom"), dict)
+        and isinstance(document["generatedFrom"].get("selection"), dict)
     )
+    if generated_selection:
+        unique_candidates = events + prior_excluded_events
+        selected = list(events)
+        _, newly_excluded = select_events(
+            prior_excluded_events, fiscal_by_code, ticker_codes
+        )
+    else:
+        candidates = events + prior_excluded_events
+        seen_event_ids: set[str] = set()
+        unique_candidates = []
+        for event in candidates:
+            event_id = event.get("eventId")
+            if isinstance(event_id, str) and event_id in seen_event_ids:
+                continue
+            if isinstance(event_id, str):
+                seen_event_ids.add(event_id)
+            unique_candidates.append(event)
+        selected, newly_excluded = select_events(
+            unique_candidates, fiscal_by_code, ticker_codes
+        )
     preserved_summaries = [
         item for item in existing_excluded if item not in prior_excluded_events
     ]

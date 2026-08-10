@@ -429,8 +429,10 @@ gh api --method PUT repos/sayonnsann/pharmacistlife-dividend-data/branches/main/
 JSON
 ```
 
-workflowやfilterの初回導入PRはデータ1ファイルだけという自動更新PRの制約に該当しないため、通常のレビューで先に取り込んでください。
-以後の自動更新PRは、データファイル以外を混ぜない限りこの検証を通ります。
+workflowやfilterの初回導入PRはデータ1ファイルだけという自動更新PRの制約に該当しません。
+そのため初回導入PRを通常レビューで先に取り込み、required checkを設定するのはその後にしてください。
+先に `validate` をrequiredにすると初回導入PR自身が変更ファイル検査で止まります。以後の自動更新PRは、
+データファイル以外を混ぜない限りこの検証を通ります。
 
 ### launchdジョブの停止
 

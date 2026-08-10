@@ -505,13 +505,15 @@ class StockActionIntegrationTest(unittest.TestCase):
     def test_extracted_file_is_the_filtered_audited_split_set(self) -> None:
         document = json.loads(self.EXTRACTED.read_text(encoding="utf-8"))
         events = document["events"]
-        # 現在の fiscal_dividends.json とJPX一覧で選別した実データの件数。
-        self.assertEqual(len(events), 110)
-        self.assertEqual(len(document.get("excluded", [])), 1028)
-        extracted_excluded = [
-            item for item in document["excluded"] if "eventId" in item
-        ]
-        self.assertEqual(len(extracted_excluded), 1025)
+        # 件数は台帳とfiscal_dividendsの進化で変わるため直値にしない。
+        # 「採用+除外=入力全体」という保存則と、下の性質検査で担保する。
+        self.assertGreater(len(events), 0)
+        self.assertEqual(
+            len(events) + len(document.get("excluded", [])) - len(
+                [i for i in document["excluded"] if "eventId" not in i]
+            ),
+            1135,
+        )
         issuer_excluded = {
             (str(item["securityCode"]), item["effectiveDate"])
             for item in document["excluded"]
@@ -584,8 +586,14 @@ class StockActionIntegrationTest(unittest.TestCase):
             {event.get("eventId") for event in document["excluded"]},
         )
         self.assertEqual(counts["input"], 1135)
-        self.assertEqual(counts["selected"], 110)
-        self.assertEqual(counts["newlyExcluded"], 1025)
+        # 採用件数はfiscal_dividendsの進化で変わるため、ファイルとの一致だけを見る
+        self.assertEqual(counts["selected"], len(document["events"]))
+        # 新規除外の件数も選定結果に連動する（除外合計との整合だけを見る）
+        self.assertEqual(
+            counts["newlyExcluded"],
+            len(document["excluded"])
+            - len([i for i in document["excluded"] if "eventId" not in i]),
+        )
 
     def test_spk_2026_dividend_is_adjusted_from_73_to_36_5(self) -> None:
         if not self.FISCAL.exists():
@@ -1313,6 +1321,24 @@ TOUKEI_Q2 = {
     "confirmedFiscalYearEnd": "2026-12-31",
     "lastFetchedAt": "2026-08-06",
 }
+# 併合(5株→1株)を控えた銘柄の想定データ。実在の未来イベントが台帳に0件のため
+# 合成データで検証する。forecastSplitFactor は「1株→N株のN」なので併合は0.2。
+# 中間10円は併合前の1株に、期末60円は併合後の1株に対して支払われる想定。
+# 中間+期末=70 ≠ 年間60 なので混在期と判定される（東計電算Q2と同じ構図）。
+GAPPEI_Q2 = {
+    "forecastDividend": 60.0,
+    "forecastInterimDividend": 10.0,
+    "forecastFinalDividend": 60.0,
+    "forecastDividendAdjusted": 110.0,
+    "forecastSplitFactor": 0.2,
+    "forecastSplitEffectiveDate": "2026-10-01",
+    "forecastShareBasis": "indeterminate",
+    "forecastPeriod": "2026年12月期(予)",
+    "forecastFiscalYear": 2026,
+    "confirmedDividend": None,
+    "confirmedFiscalYearEnd": "2026-12-31",
+    "lastFetchedAt": "2026-08-06",
+}
 # 同じ銘柄の2026-05-07開示(Q1)。年間予想173円が分割前の株数で揃っていると
 # API側が申告している（forecast_share_basis = pre_split）。
 TOUKEI_Q1 = {
@@ -1388,6 +1414,40 @@ class ForecastSplitBasisTest(unittest.TestCase):
             TOUKEI_Q2, TOUKEI_PRICE_BEFORE, today=self.BEFORE
         )[1]
         self.assertEqual(right, 8.46)
+
+    def test_a_reverse_split_composes_before_the_effective_date(self) -> None:
+        """併合(係数0.2)でも同じ式が成立する。併合前は期末を併合前基準へ縮める。"""
+        resolved = build_store.forecast_on_price_basis(
+            GAPPEI_Q2, today=self.BEFORE
+        )
+        # 10 + 60×0.2 = 22.0（併合前の1株基準）
+        self.assertEqual(resolved["value"], 22.0)
+        self.assertEqual(resolved["basis"], "pre_split_composed")
+        self.assertEqual(resolved["interim"], 10.0)
+        self.assertEqual(resolved["final"], 12.0)
+
+    def test_a_reverse_split_switches_to_adjusted_after_the_effective_date(
+        self,
+    ) -> None:
+        for today in (self.ON_DAY, self.AFTER):
+            with self.subTest(today=today):
+                resolved = build_store.forecast_on_price_basis(
+                    GAPPEI_Q2, today=today
+                )
+                # 10÷0.2 + 60 = 110.0（併合後の1株基準）
+                self.assertEqual(resolved["value"], 110.0)
+                self.assertEqual(resolved["basis"], "post_split_adjusted")
+                self.assertEqual(resolved["interim"], 50.0)
+                self.assertEqual(resolved["final"], 60.0)
+
+    def test_the_yield_is_continuous_across_a_reverse_split(self) -> None:
+        """併合の前後で利回りが連続する（株価は併合日に市場が5倍にする）。"""
+        before = build_store.forecast_values(GAPPEI_Q2, 100.0, today=self.BEFORE)
+        after = build_store.forecast_values(GAPPEI_Q2, 500.0, today=self.AFTER)
+        self.assertEqual(before[0], 22.0)
+        self.assertEqual(after[0], 110.0)
+        self.assertEqual(before[1], 22.0)
+        self.assertEqual(after[1], 22.0)
 
     def test_a_yearly_forecast_already_on_one_basis_is_not_recomposed(
         self,

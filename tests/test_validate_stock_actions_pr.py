@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from validate_stock_actions_pr import (
+from scripts.validate_stock_actions_pr import (
     ValidationError,
     compare_event_counts,
     validate_changed_paths,

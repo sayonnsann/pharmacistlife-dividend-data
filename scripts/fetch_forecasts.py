@@ -1177,6 +1177,21 @@ def optional_number(record: dict[str, Any], *keys: str) -> float | int | None:
     return int(value) if value.is_integer() else value
 
 
+def optional_forecast_number(
+    record: dict[str, Any], *keys: str
+) -> float | int | None:
+    """業績予想の数値を読む（赤字・EPSマイナスを許容）。
+
+    配当用の optional_number は、利回りや配当額の異常値を弾くために
+    0以上へ制限している。業績予想は営業損失・純損失・マイナスEPSが
+    正常な値として返るため、ここでは符号を保持する。
+    """
+    value = finite_number(first_present(record, *keys))
+    if value is None or abs(value) > 1_000_000_000_000_000:
+        return None
+    return int(value) if value.is_integer() else value
+
+
 def iso_date_text(value: Any) -> str | None:
     """YYYY-MM-DDの10文字に正規化する。日付として読めない値はNone。
 
@@ -1191,6 +1206,42 @@ def iso_date_text(value: Any) -> str | None:
         return date.fromisoformat(text).isoformat()
     except ValueError:
         return None
+
+
+def forecast_quarter(record: dict[str, Any]) -> int | None:
+    """決算短信の四半期区分を1〜4へ正規化する。
+
+    edinetdbの実応答は quarter を数値で返す。将来の表記揺れにも耐えるよう、
+    Q2 / 2Q / 第2四半期も受け付ける。
+    """
+    raw = first_present(
+        record,
+        "quarter",
+        "fiscal_quarter",
+        "fiscalQuarter",
+        "period_quarter",
+        "periodQuarter",
+    )
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)) and float(raw).is_integer():
+        value = int(raw)
+        return value if value in (1, 2, 3, 4) else None
+    text = str(raw or "").strip().upper()
+    match = re.fullmatch(r"(?:Q|第)?\s*([1-4])\s*(?:Q|四半期)?", text)
+    return int(match.group(1)) if match else None
+
+
+def forecast_period_type(quarter: int | None) -> str | None:
+    """forecast_* が指す期の種類を返す。
+
+    Q1〜Q3は当期通期予想、Q4は翌期通期予想というAPI仕様に対応する。
+    """
+    if quarter in (1, 2, 3):
+        return "current"
+    if quarter == 4:
+        return "next"
+    return None
 
 
 def forecast_period(
@@ -1215,7 +1266,14 @@ def forecast_period(
         fye_date = date.fromisoformat(str(fye)[:10])
     except (TypeError, ValueError):
         fye_date = None
+    numeric_quarter = forecast_quarter(record)
     if fye_date is not None:
+        # quarter が実応答にある場合はこちらを優先する。Q4短信の
+        # forecast_* は翌期を指すため、開示日と期末日の前後だけで推定すると
+        # 期ラベルを取り違える余地がある。
+        if numeric_quarter in (1, 2, 3, 4):
+            target_year = fye_date.year + (1 if numeric_quarter == 4 else 0)
+            return f"{target_year}年{fye_date.month}月期(予)"
         disclosure_raw = first_present(record, "disclosure_date", "disclosureDate")
         disclosed_after_close = False
         if disclosure_raw:
@@ -1233,16 +1291,11 @@ def forecast_period(
         return f"{target_year}年{fye_date.month}月期(予)"
 
     year = first_present(record, "fiscal_year", "fiscalYear")
-    quarter = first_present(record, "quarter")
     try:
         numeric_year = int(year)
     except (TypeError, ValueError):
         numeric_year = 0
-    quarter_text = str(quarter or "").strip().upper().replace("Q", "")
-    try:
-        numeric_quarter = int(quarter_text)
-    except ValueError:
-        numeric_quarter = 0
+    numeric_quarter = numeric_quarter or 0
     if numeric_year:
         target_year = numeric_year + 1 if numeric_quarter == 4 else numeric_year
         return f"FY{target_year}"
@@ -1344,7 +1397,49 @@ def parse_forecast_response(
         "adjustedAnnualDividendPerShare",
     )
     fiscal_year_end = first_present(latest, "fiscal_year_end", "fiscalYearEnd")
+    quarter = forecast_quarter(latest)
     period = forecast_period(latest, fiscal_month)
+    period_type = forecast_period_type(quarter)
+
+    # 業績予想は配当予想と同じ決算短信の同じ行に入っている。ここで別APIを
+    # 呼ばずに全項目と前年比を保存しておけば、Q4の翌期予想もQ1〜Q3の
+    # 当期予想も、後段で期ラベル付きの同じデータ構造として表示できる。
+    earnings_forecast = {
+        "forecastRevenue": optional_forecast_number(
+            latest, "forecast_revenue", "forecastRevenue"
+        ),
+        "forecastRevenueChange": optional_forecast_number(
+            latest, "forecast_revenue_change", "forecastRevenueChange"
+        ),
+        "forecastOperatingIncome": optional_forecast_number(
+            latest, "forecast_operating_income", "forecastOperatingIncome"
+        ),
+        "forecastOperatingIncomeChange": optional_forecast_number(
+            latest,
+            "forecast_operating_income_change",
+            "forecastOperatingIncomeChange",
+        ),
+        "forecastOrdinaryIncome": optional_forecast_number(
+            latest, "forecast_ordinary_income", "forecastOrdinaryIncome"
+        ),
+        "forecastOrdinaryIncomeChange": optional_forecast_number(
+            latest,
+            "forecast_ordinary_income_change",
+            "forecastOrdinaryIncomeChange",
+        ),
+        "forecastNetIncome": optional_forecast_number(
+            latest, "forecast_net_income", "forecastNetIncome"
+        ),
+        "forecastNetIncomeChange": optional_forecast_number(
+            latest, "forecast_net_income_change", "forecastNetIncomeChange"
+        ),
+        "forecastEps": optional_forecast_number(
+            latest, "forecast_eps", "forecastEps"
+        ),
+        "forecastEpsChange": optional_forecast_number(
+            latest, "forecast_eps_change", "forecastEpsChange"
+        ),
+    }
     return {
         "forecastDividend": annual,
         "forecastInterimDividend": interim,
@@ -1358,8 +1453,15 @@ def parse_forecast_response(
         # 予想が「どの事業年度のものか」を数値でも残す。配当グラフは事業年度で
         # 並んでいるので、表示文字列を読み直さずに棒の位置を決められる。
         "forecastFiscalYear": forecast_fiscal_year(period),
+        # quarter は「この予想を出した短信」の区分。forecastPeriodType は
+        # forecast_* が当期か翌期かを機械的に判別するための区分。
+        "forecastQuarter": quarter,
+        "forecastQuarterLabel": f"Q{quarter}" if quarter else None,
+        "forecastPeriodType": period_type,
+        "forecastKind": "forecast",
         "confirmedDividend": confirmed_adjusted if confirmed_adjusted is not None else confirmed,
         "confirmedFiscalYearEnd": str(fiscal_year_end)[:10] if fiscal_year_end else None,
+        **earnings_forecast,
     }
 
 

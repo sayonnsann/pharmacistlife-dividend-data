@@ -51,6 +51,34 @@ TOUKEI_Q1_EARNING = {
     "interim_dividend_per_share": 62.5,
     "yearend_dividend_per_share": 110.5,
 }
+FORECAST_Q2_EARNING = {
+    **TOUKEI_Q2_EARNING,
+    "forecast_revenue": 1250000,
+    "forecast_revenue_change": 5.4,
+    "forecast_operating_income": -12000,
+    "forecast_operating_income_change": -8.5,
+    "forecast_ordinary_income": 34000,
+    "forecast_ordinary_income_change": 2.1,
+    "forecast_net_income": -4500,
+    "forecast_net_income_change": -110.0,
+    "forecast_eps": -12.5,
+    "forecast_eps_change": -115.0,
+}
+FORECAST_Q4_EARNING = {
+    "disclosure_date": "2027-05-10",
+    "quarter": 4,
+    "fiscal_year_end": "2027-03-31",
+    "forecast_revenue": 2200000,
+    "forecast_revenue_change": 3.2,
+    "forecast_operating_income": 150000,
+    "forecast_operating_income_change": 6.1,
+    "forecast_ordinary_income": 155000,
+    "forecast_ordinary_income_change": 5.5,
+    "forecast_net_income": 98000,
+    "forecast_net_income_change": 4.0,
+    "forecast_eps": 101.25,
+    "forecast_eps_change": 4.2,
+}
 
 
 class ParseForecastResponseTest(unittest.TestCase):
@@ -95,6 +123,35 @@ class ParseForecastResponseTest(unittest.TestCase):
         parsed = self.parse(TOUKEI_Q2_EARNING)
         self.assertEqual(parsed["forecastPeriod"], "2026年12月期(予)")
         self.assertEqual(parsed["forecastFiscalYear"], 2026)
+
+    def test_reads_earnings_forecast_values_and_yoy_changes(self) -> None:
+        parsed = self.parse(FORECAST_Q2_EARNING)
+        self.assertEqual(parsed["forecastRevenue"], 1250000)
+        self.assertEqual(parsed["forecastRevenueChange"], 5.4)
+        self.assertEqual(parsed["forecastOperatingIncome"], -12000)
+        self.assertEqual(parsed["forecastOperatingIncomeChange"], -8.5)
+        self.assertEqual(parsed["forecastOrdinaryIncome"], 34000)
+        self.assertEqual(parsed["forecastOrdinaryIncomeChange"], 2.1)
+        self.assertEqual(parsed["forecastNetIncome"], -4500)
+        self.assertEqual(parsed["forecastNetIncomeChange"], -110)
+        self.assertEqual(parsed["forecastEps"], -12.5)
+        self.assertEqual(parsed["forecastEpsChange"], -115)
+
+    def test_q1_to_q3_forecast_is_marked_current(self) -> None:
+        parsed = self.parse(FORECAST_Q2_EARNING)
+        self.assertEqual(parsed["forecastQuarter"], 2)
+        self.assertEqual(parsed["forecastQuarterLabel"], "Q2")
+        self.assertEqual(parsed["forecastPeriodType"], "current")
+        self.assertEqual(parsed["forecastPeriod"], "2026年12月期(予)")
+        self.assertEqual(parsed["forecastKind"], "forecast")
+
+    def test_q4_forecast_is_marked_next_and_gets_next_period_label(self) -> None:
+        parsed = self.parse(FORECAST_Q4_EARNING, fiscal_month=3)
+        self.assertEqual(parsed["forecastQuarter"], 4)
+        self.assertEqual(parsed["forecastQuarterLabel"], "Q4")
+        self.assertEqual(parsed["forecastPeriodType"], "next")
+        self.assertEqual(parsed["forecastPeriod"], "2028年3月期(予)")
+        self.assertEqual(parsed["forecastFiscalYear"], 2028)
 
     def test_a_stock_without_a_split_has_empty_split_fields(self) -> None:
         parsed = self.parse(
@@ -1452,7 +1509,7 @@ class EndToEndEventTest(unittest.TestCase):
                 return FakeResponse(events_payload([TOUKEI_EVENT_RECORD], 1, None))
             return FakeResponse(events_payload([], 0, None))
         if "E05066" in url:
-            return FakeResponse({"earnings": [TOUKEI_Q2_EARNING]})
+            return FakeResponse({"earnings": [FORECAST_Q2_EARNING]})
         return FakeResponse({"earnings": [TOUKEI_Q1_EARNING]})
 
     def test_the_split_and_raise_reach_the_state_file(self) -> None:
@@ -1489,6 +1546,12 @@ class EndToEndEventTest(unittest.TestCase):
         self.assertEqual(record["forecastDividendAdjusted"], 119.125)
         self.assertEqual(record["forecastSplitFactor"], 4)
         self.assertEqual(record["forecastSplitEffectiveDate"], "2026-10-01")
+        self.assertEqual(record["forecastRevenue"], 1250000)
+        self.assertEqual(record["forecastRevenueChange"], 5.4)
+        self.assertEqual(record["forecastNetIncome"], -4500)
+        self.assertEqual(record["forecastEpsChange"], -115)
+        self.assertEqual(record["forecastQuarter"], 2)
+        self.assertEqual(record["forecastPeriodType"], "current")
         self.assertEqual(record["lastFetchedAt"], "2026-08-04")
         self.assertEqual(record["lastEventAt"], "2026-08-03")
         # 9433は枠が無いので古いまま（＝4746が先に取られた証拠）

@@ -963,6 +963,19 @@ class FiscalSeriesInStoreTest(unittest.TestCase):
                 "forecastDividend": 84.0,
                 "forecastPeriod": "2027年3月期(予)",
                 "forecastFiscalYear": 2027,
+                "forecastQuarter": 2,
+                "forecastQuarterLabel": "Q2",
+                "forecastPeriodType": "current",
+                "forecastRevenue": 5_400_000,
+                "forecastRevenueChange": 4.5,
+                "forecastOperatingIncome": 560_000,
+                "forecastOperatingIncomeChange": 7.2,
+                "forecastOrdinaryIncome": 550_000,
+                "forecastOrdinaryIncomeChange": 6.8,
+                "forecastNetIncome": 380_000,
+                "forecastNetIncomeChange": 8.1,
+                "forecastEps": 123.4,
+                "forecastEpsChange": 9.0,
                 "confirmedDividend": 80.0,
                 "confirmedFiscalYearEnd": "2026-03-31",
                 "lastFetchedAt": "2026-08-05",
@@ -984,6 +997,74 @@ class FiscalSeriesInStoreTest(unittest.TestCase):
         self.assertEqual(payload["annualPending"]["2026"]["label"], "確定")
         self.assertEqual(payload["annualPending"]["2027"]["kind"], "forecast")
         self.assertEqual(payload["annualPending"]["2027"]["label"], "予想")
+        self.assertEqual(payload["forecastRevenue"], 5_400_000)
+        self.assertEqual(payload["forecastRevenueChange"], 4.5)
+        self.assertEqual(payload["forecastOperatingIncome"], 560_000)
+        self.assertEqual(payload["forecastOperatingIncomeChange"], 7.2)
+        self.assertEqual(payload["forecastEps"], 123.4)
+        self.assertEqual(payload["forecastEpsChange"], 9.0)
+        self.assertEqual(payload["forecastQuarter"], 2)
+        self.assertEqual(payload["forecastPeriodType"], "current")
+        self.assertEqual(payload["earnings"]["forecast"]["kind"], "forecast")
+        self.assertEqual(
+            payload["earnings"]["forecast"]["period"], "2027年3月期(予)"
+        )
+        self.assertEqual(payload["earnings"]["forecast"]["sourceQuarter"], 2)
+        self.assertIsNone(payload["earnings"]["actual"])
+
+    def test_earnings_payload_exposes_actual_when_the_annual_report_arrives(
+        self,
+    ) -> None:
+        fiscal = {
+            "9433": {
+                "series": {2024: 70.0, 2025: 72.5},
+                "fiscalMonth": 3,
+                "connectionStatus": "connected",
+                "connectionReason": "",
+                "externalSource": None,
+                "externalYears": [],
+            }
+        }
+        forecasts = {
+            "9433": {
+                "forecastPeriod": "2027年3月期(予)",
+                "forecastFiscalYear": 2027,
+                "forecastQuarter": 2,
+                "forecastPeriodType": "current",
+                "forecastRevenue": 5_400_000,
+                "forecastRevenueChange": 4.5,
+                "forecastNetIncome": 380_000,
+                "forecastNetIncomeChange": 8.1,
+            }
+        }
+        financials = [
+            {
+                "code": "9433",
+                "name": "ＫＤＤＩ",
+                "revenue": {"2027": 5_500_000},
+                "operatingIncome": {"2027": 570_000},
+                "ordinaryIncome": {"2027": 565_000},
+                "netIncome": {"2027": 390_000},
+                "eps": {"2027": 126.0},
+            },
+            {"code": "9999", "name": "系列なし"},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            self.build(path, fiscal, {}, forecasts=forecasts, financials=financials)
+            with sqlite3.connect(path) as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload FROM stocks WHERE code='9433'"
+                    ).fetchone()[0]
+                )
+
+        actual = payload["earnings"]["actual"]
+        self.assertEqual(actual["kind"], "actual")
+        self.assertEqual(actual["period"], "2027年3月期")
+        self.assertEqual(actual["fiscalYear"], 2027)
+        self.assertEqual(actual["metrics"]["revenue"]["value"], 5_500_000)
+        self.assertEqual(actual["metrics"]["eps"]["value"], 126.0)
 
     def test_payout_ratio_line_comes_from_edinet(self) -> None:
         financials = [

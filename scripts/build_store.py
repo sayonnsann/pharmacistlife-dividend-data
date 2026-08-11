@@ -921,6 +921,136 @@ def forecast_fiscal_year(record: dict[str, Any]) -> int | None:
     return int(match.group(1)) if match else None
 
 
+EARNINGS_FORECAST_FIELDS = (
+    "forecastRevenue",
+    "forecastRevenueChange",
+    "forecastOperatingIncome",
+    "forecastOperatingIncomeChange",
+    "forecastOrdinaryIncome",
+    "forecastOrdinaryIncomeChange",
+    "forecastNetIncome",
+    "forecastNetIncomeChange",
+    "forecastEps",
+    "forecastEpsChange",
+)
+
+
+def earnings_series_value(
+    financial: dict[str, Any], field: str, fiscal_year: int | None
+) -> float | int | None:
+    """有報の年度系列から、予想と同じ事業年度の実績を1件取り出す。"""
+    if fiscal_year is None:
+        return None
+    series = financial.get(field)
+    if not isinstance(series, dict):
+        return None
+    raw = series.get(str(fiscal_year), series.get(fiscal_year))
+    return finite_number(raw)
+
+
+def actual_period_label(period: Any) -> str | None:
+    if not isinstance(period, str) or not period.strip():
+        return None
+    return re.sub(r"\s*\(予\)\s*$", "", period.strip())
+
+
+def earnings_payload(
+    financial: dict[str, Any], forecast_record: Any
+) -> dict[str, Any] | None:
+    """業績予想と、同じ年度の有報実績を置き換え可能な形に揃える。
+
+    ``forecast`` と ``actual`` に同じ period/fiscalYear を持たせ、actual が
+    有報系列に現れた場合だけ値を入れる。表示側は actual があれば通常色、
+    無ければ kind=forecast を灰色で表示できる。
+    """
+    if not isinstance(forecast_record, dict):
+        return None
+
+    period = forecast_record.get("forecastPeriod")
+    fiscal_year = forecast_fiscal_year(forecast_record)
+    quarter = forecast_record.get("forecastQuarter")
+    if isinstance(quarter, bool) or not isinstance(quarter, int):
+        quarter = None
+    period_type = forecast_record.get("forecastPeriodType")
+    if period_type not in ("current", "next"):
+        period_type = (
+            "next"
+            if quarter == 4
+            else "current"
+            if quarter in (1, 2, 3)
+            else None
+        )
+
+    metrics: dict[str, dict[str, float | int | None]] = {}
+    metric_pairs = (
+        ("revenue", "forecastRevenue", "forecastRevenueChange"),
+        (
+            "operatingIncome",
+            "forecastOperatingIncome",
+            "forecastOperatingIncomeChange",
+        ),
+        (
+            "ordinaryIncome",
+            "forecastOrdinaryIncome",
+            "forecastOrdinaryIncomeChange",
+        ),
+        ("netIncome", "forecastNetIncome", "forecastNetIncomeChange"),
+        ("eps", "forecastEps", "forecastEpsChange"),
+    )
+    for name, value_key, change_key in metric_pairs:
+        metrics[name] = {
+            "value": finite_number(forecast_record.get(value_key)),
+            "change": finite_number(forecast_record.get(change_key)),
+        }
+
+    forecast = {
+        "kind": "forecast",
+        "period": period,
+        "fiscalYear": fiscal_year,
+        "periodType": period_type,
+        "sourceQuarter": quarter,
+        "sourceQuarterLabel": (
+            f"Q{quarter}" if quarter in (1, 2, 3, 4) else None
+        ),
+        "metrics": metrics,
+    }
+
+    actual_metric_fields = {
+        "revenue": "revenue",
+        "operatingIncome": "operatingIncome",
+        "ordinaryIncome": "ordinaryIncome",
+        "netIncome": "netIncome",
+        "eps": "eps",
+    }
+    actual_metrics = {
+        name: {"value": earnings_series_value(financial, field, fiscal_year)}
+        for name, field in actual_metric_fields.items()
+    }
+    has_actual = any(
+        metric["value"] is not None for metric in actual_metrics.values()
+    )
+    actual = (
+        {
+            "kind": "actual",
+            "period": actual_period_label(period),
+            "fiscalYear": fiscal_year,
+            "periodType": "actual",
+            "metrics": actual_metrics,
+        }
+        if has_actual
+        else None
+    )
+    return {
+        "period": {
+            "label": period,
+            "fiscalYear": fiscal_year,
+            "periodType": period_type,
+        },
+        "forecast": forecast,
+        "actual": actual,
+    }
+
+
 def forecast_split_factor(record: dict[str, Any]) -> float | None:
     """予想に付いてくる分割係数（1株→N株のN）。計算に使えない値はNone。"""
     factor = finite_number(record.get("forecastSplitFactor"))
@@ -1417,6 +1547,7 @@ def create_database(
                     )
                 if daily_price and numerator is not None and float(numerator) > 0:
                     daily_yield = round(float(numerator) / daily_price * 100, 2)
+                forecast_record = forecasts.get(code) or {}
                 (
                     forecast_dividend,
                     forecast_yield,
@@ -1599,7 +1730,7 @@ def create_database(
                     if str(year).isdigit()
                 }
                 pending = pending_dividends(
-                    forecasts.get(code),
+                    forecast_record,
                     series_years,
                     today=today,
                     adjustment=adjustment,
@@ -1644,10 +1775,31 @@ def create_database(
                 # 生の値ではなく中間・期末から組み立てているので、後から
                 # 表示の裏を取れるようにしておく。
                 payload["forecastBasis"] = forecast_basis
+                for key in EARNINGS_FORECAST_FIELDS:
+                    # 取得前・予想非開示企業も固定キーで返す。表示側はNULLを
+                    # 「予想なし」として扱え、古いstateとの混在でもスキーマが
+                    # 変わらない。
+                    payload[key] = forecast_record.get(key)
+                payload["forecastFiscalYear"] = forecast_fiscal_year(
+                    forecast_record
+                )
+                payload["forecastPeriod"] = forecast_period
+                payload["forecastQuarter"] = forecast_record.get(
+                    "forecastQuarter"
+                )
+                payload["forecastQuarterLabel"] = forecast_record.get(
+                    "forecastQuarterLabel"
+                )
+                payload["forecastPeriodType"] = forecast_record.get(
+                    "forecastPeriodType"
+                )
+                payload["forecastKind"] = "forecast"
+                # 同じ事業年度の有報実績が届いたら actual が埋まる。表示側は
+                # actual を優先すれば、予想カードを本表示へ自然に切り替えられる。
+                payload["earnings"] = earnings_payload(payload, forecast_record)
                 # 会社発表の確定年度配当（edinetdb由来）。
                 # annualPending の「確定」バーと同じ値で、旧い表示コードが
                 # こちらを読むので残してある。
-                forecast_record = forecasts.get(code) or {}
                 confirmed = bounded(forecast_record.get("confirmedDividend"), 0, 1_000_000)
                 if confirmed is not None:
                     payload["confirmedDividend"] = confirmed

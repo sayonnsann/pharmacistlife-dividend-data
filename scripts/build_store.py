@@ -1093,7 +1093,8 @@ def pending_dividends(
     series_years: set[int],
     *,
     today: date,
-    factor: float = 1.0,
+    adjustment: dict[str, Any] | None = None,
+    fiscal_month: int | None = None,
 ) -> dict[str, dict[str, Any]]:
     """まだ配当系列に載っていない事業年度を、会社発表の値で組み立てる。
 
@@ -1104,6 +1105,12 @@ def pending_dividends(
     kind は "confirmed"（会社発表の確定額）と "forecast"（予想）の2種類。
     同じ年に両方あるときは確定を優先する。EDINETの有報から実績を取れた年
     （series_years）は、そちらが正なのでここには出さない。
+
+    台帳の分割係数は、対象年度の期末が効力発生日より前のときだけ掛ける
+    （adjustment_factor_for_period と同じ判定）。edinetdb.jpの確定額・予想は
+    会社がその期の実際の株数で発表した値なので、効力発生日を過ぎた期はすでに
+    現在の株数基準になっている。ここへさらに台帳の係数を掛けると二重補正に
+    なる（分割が発効済みのSPK(7466)で、41円の予想が20.5円に潰れた症状の原因）。
     """
     if not isinstance(forecast_record, dict):
         return {}
@@ -1120,6 +1127,13 @@ def pending_dividends(
             and 1990 <= year <= upper_year
         )
 
+    def factor_for(year: int | None) -> float:
+        if adjustment is None or year is None:
+            return 1.0
+        return adjustment_factor_for_period(
+            adjustment, year, fiscal_month=fiscal_month, field="dividend"
+        )
+
     result: dict[str, dict[str, Any]] = {}
 
     confirmed = bounded(forecast_record.get("confirmedDividend"), 0, 1_000_000)
@@ -1129,7 +1143,7 @@ def pending_dividends(
         confirmed_year = int(fiscal_year_end[:4])
     if confirmed is not None and confirmed > 0 and acceptable(confirmed_year):
         result[str(confirmed_year)] = {
-            "value": round(float(confirmed) * factor, 4),
+            "value": round(float(confirmed) * factor_for(confirmed_year), 4),
             "kind": "confirmed",
             "label": "確定",
             "fiscalYearEnd": fiscal_year_end,
@@ -1147,8 +1161,9 @@ def pending_dividends(
         and acceptable(forecast_year)
         and str(forecast_year) not in result
     ):
+        forecast_factor = factor_for(forecast_year)
         entry: dict[str, Any] = {
-            "value": round(float(forecast) * factor, 4),
+            "value": round(float(forecast) * forecast_factor, 4),
             "kind": "forecast",
             "label": "予想",
             "source": "edinetdb",
@@ -1162,7 +1177,7 @@ def pending_dividends(
         for name in ("interim", "final"):
             value = resolved[name]
             if value is not None:
-                entry[name] = round(float(value) * factor, 4)
+                entry[name] = round(float(value) * forecast_factor, 4)
         result[str(forecast_year)] = entry
 
     fetched_at = forecast_record.get("lastFetchedAt")
@@ -1587,10 +1602,9 @@ def create_database(
                     forecasts.get(code),
                     series_years,
                     today=today,
-                    factor=(
-                        adjustment["dividendFactor"]
-                        if adjustment is not None
-                        else 1.0
+                    adjustment=adjustment,
+                    fiscal_month=(
+                        fiscal_record.get("fiscalMonth") if fiscal_record else None
                     ),
                 )
                 payload["annualPending"] = pending

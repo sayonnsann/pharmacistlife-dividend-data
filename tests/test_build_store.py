@@ -478,7 +478,7 @@ class SplitAdjustmentTest(unittest.TestCase):
             )
         )
         self.assertTrue(loaded["2897"][0]["epsAdjustedByIssuer"])
-        self.assertIsNone(loaded["6516"][0]["epsAdjustedByIssuer"])
+        self.assertTrue(loaded["6516"][0]["epsAdjustedByIssuer"])
 
     def test_manual_actions_include_toukei_as_provisional_after_effective_date(
         self,

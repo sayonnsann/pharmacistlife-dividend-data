@@ -1295,12 +1295,95 @@ class PendingDividendsTest(unittest.TestCase):
         self.assertEqual(self.pending(None, {2026}), {})
 
     def test_split_factor_is_applied(self) -> None:
+        # 対象年度(2027年3月期、period end 2027-03-31)より後に効力が発生する
+        # 分割なので、まだ古い株数基準の値を現在の基準へ揃える必要がある。
+        adjustment = {
+            "events": [
+                {
+                    "adjustmentFactor": 0.5,
+                    "effectiveDate": "2027-04-01",
+                    "applyDividendAdjustment": True,
+                }
+            ]
+        }
         result = self.pending(
             {"forecastDividend": 100.0, "forecastFiscalYear": 2027},
             {2026},
-            factor=0.5,
+            adjustment=adjustment,
+            fiscal_month=3,
         )
         self.assertEqual(result["2027"]["value"], 50.0)
+
+    def test_split_factor_is_not_applied_after_the_effective_date(self) -> None:
+        """SPK(7466)で直したかった症状そのもの。
+
+        分割(2026-04-01)は対象年度(2027年3月期、period end 2027-03-31)より前に
+        発効済み。edinetdb.jpの予想はその期の実際の株数で発表された値なので、
+        台帳の係数をさらに掛けると二重補正になる(41円が20.5円に潰れる)。
+        """
+        adjustment = {
+            "events": [
+                {
+                    "adjustmentFactor": 0.5,
+                    "effectiveDate": "2026-04-01",
+                    "applyDividendAdjustment": True,
+                }
+            ]
+        }
+        result = self.pending(
+            {"forecastDividend": 41.0, "forecastFiscalYear": 2027},
+            {2025, 2026},
+            adjustment=adjustment,
+            fiscal_month=3,
+        )
+        self.assertEqual(result["2027"]["value"], 41.0)
+
+    def test_split_factor_applies_to_a_confirmed_year_before_the_split(
+        self,
+    ) -> None:
+        """確定額（会社発表の確定年度配当）も予想と同じ判定にする。"""
+        adjustment = {
+            "events": [
+                {
+                    "adjustmentFactor": 0.5,
+                    "effectiveDate": "2026-04-01",
+                    "applyDividendAdjustment": True,
+                }
+            ]
+        }
+        result = self.pending(
+            {
+                "confirmedDividend": 80.0,
+                "confirmedFiscalYearEnd": "2025-03-31",
+            },
+            {2023, 2024},
+            adjustment=adjustment,
+            fiscal_month=3,
+        )
+        self.assertEqual(result["2025"]["value"], 40.0)
+
+    def test_split_factor_does_not_apply_to_a_confirmed_year_after_the_split(
+        self,
+    ) -> None:
+        adjustment = {
+            "events": [
+                {
+                    "adjustmentFactor": 0.5,
+                    "effectiveDate": "2026-04-01",
+                    "applyDividendAdjustment": True,
+                }
+            ]
+        }
+        result = self.pending(
+            {
+                "confirmedDividend": 41.0,
+                "confirmedFiscalYearEnd": "2027-03-31",
+            },
+            {2025, 2026},
+            adjustment=adjustment,
+            fiscal_month=3,
+        )
+        self.assertEqual(result["2027"]["value"], 41.0)
 
 
 # 東計電算(4746 / E05066 / 12月決算)の実データ。2026-08-03開示のQ2。
@@ -1565,6 +1648,44 @@ class ForecastSplitBasisTest(unittest.TestCase):
             after["2026"]["interim"] + after["2026"]["final"],
             after["2026"]["value"],
         )
+
+    def test_pending_bar_is_not_double_adjusted_when_the_ledger_also_knows_the_split(
+        self,
+    ) -> None:
+        """東計電算型: 台帳にも同じ分割イベントが載っていても二重に掛からない。
+
+        分割(2026-10-01)は対象年度(2026年12月期、period end 2026-12-31)の
+        期中に発効する。period end は効力発生日より後なので、台帳の係数は
+        (adjustment_factor_for_period の判定どおり)効かない。分割日をまたぐ
+        期の組み立ては forecast_on_price_basis 側がすでに担っている。
+        """
+        ledger_adjustment = {
+            "events": [
+                {
+                    # 東計電算(1→4分割)の old/new。
+                    "adjustmentFactor": 0.25,
+                    "effectiveDate": "2026-10-01",
+                    "applyDividendAdjustment": True,
+                }
+            ]
+        }
+        before = build_store.pending_dividends(
+            TOUKEI_Q2,
+            {2024, 2025},
+            today=self.BEFORE,
+            adjustment=ledger_adjustment,
+            fiscal_month=12,
+        )
+        after = build_store.pending_dividends(
+            TOUKEI_Q2,
+            {2024, 2025},
+            today=self.AFTER,
+            adjustment=ledger_adjustment,
+            fiscal_month=12,
+        )
+        # adjustment を渡さない場合(既存テスト)とまったく同じ値になる。
+        self.assertEqual(before["2026"]["value"], 476.5)
+        self.assertEqual(after["2026"]["value"], 119.125)
 
     def test_pending_bar_without_a_split_has_no_basis_key(self) -> None:
         """分割の無い銘柄のバーは今までと同じ形（余計なキーを足さない）。"""

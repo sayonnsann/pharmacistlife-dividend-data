@@ -193,9 +193,9 @@
     {
       "eventId": "6516-2025-10-01-split-1-to-3", "securityCode": "6516", "name": "山洋電気",
       "action": "split", "oldShares": 1, "newShares": 3, "effectiveDate": "2025-10-01",
-      "status": "confirmed", "epsAdjustedByIssuer": null,
-      "source": {"url": "https://www2.jpx.co.jp/disc/65160/140120250820544787.pdf", "type": "jpx"},
-      "checkedAt": "2026-08-09"
+      "status": "confirmed", "epsAdjustedByIssuer": true,
+      "source": {"url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YCEQ.pdf", "type": "edinet", "note": "有価証券報告書 第124期(2026-06-17提出)「1株当たり情報」注記: 2025-10-01付株式分割につき第120期期首に遡及して1株当たり純資産額・当期純利益を算定と明記"},
+      "checkedAt": "2026-08-11"
     },
     {
       "eventId": "7781-2026-07-01-split-1-to-2", "securityCode": "7781", "name": "平山ホールディングス",

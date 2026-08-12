@@ -162,6 +162,33 @@ def bounded(value: Any, low: float, high: float) -> float | int | None:
     return number
 
 
+def roe_year_end(financial: dict[str, Any]) -> float | None:
+    """期末自己資本ベースのROE（最新の共通年度）を計算する。
+
+    既存の ``roe`` は会社申告値（自己資本は期首・期末平均）なので、
+    期末時点の比較用に、総資産×自己資本比率で自己資本を近似する。
+    3系列の年度が一致する値だけを使い、自己資本が0になる年度は除外する。
+    """
+    assets = financial.get("totalAssets")
+    equity_ratio = financial.get("equityRatio")
+    net_income = financial.get("netIncome")
+    if not all(isinstance(series, dict) for series in (assets, equity_ratio, net_income)):
+        return None
+
+    common_years = set(assets) & set(equity_ratio) & set(net_income)
+    for year in sorted(common_years, key=lambda value: str(value), reverse=True):
+        total_assets = finite_number(assets[year])
+        ratio = finite_number(equity_ratio[year])
+        income = finite_number(net_income[year])
+        if total_assets is None or ratio is None or income is None:
+            continue
+        equity = float(total_assets) * float(ratio) / 100
+        if equity == 0:
+            continue
+        return round(float(income) / equity * 100, 2)
+    return None
+
+
 def load_fiscal_dividends(path: Path) -> dict[str, dict[str, Any]]:
     """事業年度ベースの配当系列（edinet-direct/data/fiscal_dividends.json）を読む。
 
@@ -398,6 +425,43 @@ def fiscal_dividend_stats(
         "cagr5": cagr(5),
         "cagr10": cagr(10),
     }
+
+
+def base_dividend_series(
+    series: dict[int, float], breakdown: dict[str, Any]
+) -> dict[int, float]:
+    """記念・特別配当の内訳がある年度を普通配当額へ置き換える。"""
+    result = dict(series)
+    for raw_year, detail in breakdown.items():
+        if not isinstance(detail, dict):
+            continue
+        try:
+            year = int(raw_year)
+        except (TypeError, ValueError):
+            continue
+        if year not in result:
+            continue
+        base = finite_number(detail.get("base"))
+        if base is None or base < 0:
+            continue
+        result[year] = float(base)
+    return result
+
+
+def streak_base_from_breakdown(
+    series: dict[int, float], breakdown: dict[str, Any]
+) -> int | None:
+    """普通配当だけの系列で、連続増配年数を再計算する。
+
+    内訳が存在する銘柄だけの補助指標なので、株式分割の基準ズレで総額系列を
+    ランキングから外している銘柄でも、内訳から作れる直近の普通配当系列は
+    別指標として保持する。分割でさらに不確かな場合は、元系列の値自体が
+    変わらないため、既存の ``streakIncrease`` とは別に扱う。
+    """
+    if not series or not isinstance(breakdown, dict):
+        return None
+    base_series = base_dividend_series(series, breakdown)
+    return fiscal_dividend_stats(base_series)["streakIncrease"]
 
 
 def _crosses_break(
@@ -1559,6 +1623,8 @@ def create_database(
                 )
 
                 payload = dict(financial)
+                payload["roeYearEnd"] = roe_year_end(financial)
+                payload["streakBase"] = None
                 for key in ("name", "market", "sector", "sector17"):
                     if ticker.get(key):
                         payload[key] = ticker[key]
@@ -1760,6 +1826,9 @@ def create_database(
                 breakdown_entry = dividend_breakdown.get(code)
                 if breakdown_entry:
                     payload["dividendBreakdown"] = breakdown_entry
+                    payload["streakBase"] = streak_base_from_breakdown(
+                        series, breakdown_entry
+                    )
                 if daily_price:
                     payload["price"] = daily_price
                 if daily_yield is not None:

@@ -766,6 +766,103 @@ class FiscalDividendStatsTest(unittest.TestCase):
         self.assertIsNone(stats["cagr3"])
 
 
+class DisplayDerivedMetricsTest(unittest.TestCase):
+    def test_roe_year_end_uses_latest_common_year_and_rounds(self) -> None:
+        value = build_store.roe_year_end(
+            {
+                "totalAssets": {2024: 1_000_000_000, 2025: 1_200_000_000},
+                "equityRatio": {2024: 40, 2025: 50},
+                "netIncome": {2024: 30_000_000, 2025: 60_000_000},
+            }
+        )
+        self.assertEqual(value, 10.0)
+
+    def test_roe_year_end_is_null_when_inputs_are_unavailable(self) -> None:
+        self.assertIsNone(
+            build_store.roe_year_end(
+                {"totalAssets": {2025: 1_000_000_000}, "netIncome": {2025: 10}}
+            )
+        )
+
+    def test_streak_base_replaces_only_breakdown_years(self) -> None:
+        value = build_store.streak_base_from_breakdown(
+            {2022: 100.0, 2023: 120.0, 2024: 150.0},
+            {"2024": {"base": 100.0, "special": 50.0}},
+        )
+        # 総額は2年連続増配だが、普通配当だけでは2024年に減配。
+        self.assertEqual(value, 0)
+
+    def test_payload_contains_derived_display_metrics(self) -> None:
+        financials = [
+            {
+                "code": "9433",
+                "name": "ＫＤＤＩ",
+                "netIncome": {2024: 30_000_000, 2025: 60_000_000},
+                "totalAssets": {2024: 1_000_000_000, 2025: 1_200_000_000},
+                "equityRatio": {2024: 40, 2025: 50},
+            }
+        ]
+        fiscal = {
+            "9433": {
+                "series": {2022: 100.0, 2023: 120.0, 2024: 150.0},
+                "fiscalMonth": 3,
+                "connectionStatus": "edinet_only",
+                "connectionReason": "",
+                "externalSource": None,
+                "externalYears": [],
+            }
+        }
+        tickers = {"9433": {"code": "9433", "name": "ＫＤＤＩ"}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "data").mkdir()
+            (root / "data" / "dividend_breakdown.json").write_text(
+                json.dumps(
+                    {
+                        "9433": {
+                            "2024": {"base": 100.0, "special": 50.0}
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            path = root / "store.sqlite"
+            with mock.patch.object(
+                build_store,
+                "REPOSITORY_ROOT",
+                root,
+            ), mock.patch.object(
+                build_store,
+                "load_daily_prices",
+                return_value=({"9433": 1000.0}, {"9433": 150.0}, "2026-08-05"),
+            ):
+                build_store.create_database(
+                    path,
+                    financials,
+                    {},
+                    tickers,
+                    {},
+                    [Path("f"), Path("s"), Path("t"), Path("fc")],
+                    "fixture.csv",
+                    {},
+                    Path("actions.json"),
+                    fiscal,
+                    Path("fiscal.json"),
+                    {},
+                    Path("calendar.json"),
+                    date(2026, 8, 5),
+                )
+            with sqlite3.connect(path) as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload FROM stocks WHERE code='9433'"
+                    ).fetchone()[0]
+                )
+
+        self.assertEqual(payload["roeYearEnd"], 10.0)
+        self.assertEqual(payload["streakBase"], 0)
+
+
 class FiscalDividendLoaderTest(unittest.TestCase):
     def load(self, document: dict) -> dict:
         with tempfile.TemporaryDirectory() as directory:

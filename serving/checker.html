@@ -1,0 +1,273 @@
+<!-- 配当金推移チェッカー + EDINET財務指標（WordPressカスタムHTML向け） -->
+<div id="dvc-root" class="dvc-root">
+  <div class="dvc-search-box">
+    <input id="dvc-search" type="text" class="dvc-search-input"
+      placeholder="銘柄コードまたは銘柄名で検索(例: 7203、トヨタ)" autocomplete="off">
+    <div id="dvc-suggest" class="dvc-suggest"></div>
+  </div>
+
+  <div id="dvc-detail" class="dvc-detail" style="display:none;"></div>
+
+  <div class="dvc-ranking">
+    <div class="dvc-ranking-head">
+      <h3>配当・財務指標一覧</h3>
+      <div class="dvc-ranking-controls">
+        <label>業種で絞り込み:
+          <select id="dvc-sector-filter"><option value="">すべての業種</option></select>
+        </label>
+        <label>配当利回り: <input id="dvc-yield-min" type="number" step="0.1" min="0" placeholder="指定なし" style="width:70px">%以上</label>
+        <label>ROE:
+          <input id="dvc-roe-min" type="number" step="0.1" placeholder="下限"> %以上
+        </label>
+        <label>自己資本比率:
+          <input id="dvc-equity-min" type="number" step="0.1" placeholder="下限"> %以上
+        </label>
+        <label>配当性向:
+          <input id="dvc-payout-max" type="number" step="0.1" placeholder="上限"> %以下
+        </label>
+        <button id="dvc-screen-button" type="button">絞り込む</button>
+      </div>
+    </div>
+    <p class="dvc-sort-hint">見出しをクリックすると、APIからその並び順の最大300件を再取得します。絞り込み条件を使う場合は「絞り込む」を押してください。</p>
+    <div id="dvc-table-wrap" class="dvc-table-wrap">読み込み中...</div>
+    <div id="dvc-updated" class="dvc-updated"></div>
+  </div>
+  <p class="dvc-page-note">配当実績・財務指標はEDINET（金融庁）の開示書類を中心とした公開情報、配当予想はEDINET DB、株価はYahoo!ファイナンスに由来します。数値は各出典の更新時点・定義に基づきます。<br>予想は会社発表に基づく参考値です。</p>
+</div>
+
+<style>
+  .dvc-root,.dvc-root *{box-sizing:border-box}
+  .dvc-root{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Meiryo",sans-serif;color:#2b2b2b;max-width:1400px;margin:0 auto;line-height:1.55;--dvc-blue:#2563eb;--dvc-cyan:#0891b2;--dvc-orange:#f59e0b;--dvc-green:#059669;--dvc-purple:#7c3aed;--dvc-border:#dfe7f1;--dvc-muted:#64748b}
+  .dvc-search-box{position:relative;margin-bottom:24px}.dvc-search-input{width:100%;padding:12px 14px;font-size:16px;border:2px solid #d8dee4;border-radius:8px;outline:none}.dvc-search-input:focus{border-color:#3b82f6}
+  .dvc-suggest{position:absolute;z-index:20;left:0;right:0;display:none;max-height:320px;overflow-y:auto;background:#fff;border:1px solid #d8dee4;border-top:0;border-radius:0 0 8px 8px;box-shadow:0 6px 16px rgba(0,0,0,.08)}
+  .dvc-suggest-item{padding:10px 14px;cursor:pointer;display:flex;justify-content:space-between}.dvc-suggest-item:hover{background:#f2f6ff}.dvc-suggest-code{color:#6b7280;font-size:13px}
+  .dvc-detail{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-bottom:28px;background:#fafbfc}.dvc-detail-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}.dvc-detail-head h2{margin:0;font-size:20px}.dvc-detail-code{color:#6b7280;font-size:14px}.dvc-detail-meta{color:#6b7280;font-size:13px;margin-top:4px}
+  .dvc-stat-grid,.dvc-fin-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:16px 0}.dvc-stat,.dvc-fin-summary-item{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;text-align:center}.dvc-stat-label,.dvc-fin-summary-label{display:block;font-size:12px;color:#6b7280}.dvc-stat-value,.dvc-fin-summary-value{display:block;font-size:18px;font-weight:700;margin-top:4px;color:#172554}
+  .dvc-forecast{display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:2px 6px;margin:-4px 0 16px;padding:9px 12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;color:#1e3a8a;font-size:13px}.dvc-forecast-main{font-weight:700}.dvc-forecast-detail{color:#475569;font-size:12px}
+  .dvc-earnings-card{margin:14px 0 0;background:#fff}.dvc-earnings-card.dvc-earnings-next{border-color:#cbd5e1;background:#f8fafc}.dvc-earnings-card.dvc-earnings-next h4{color:#475569}.dvc-earnings-card.dvc-earnings-next .dvc-earnings-metric{background:#fff;border-color:#e2e8f0}.dvc-earnings-subtitle{margin:2px 0 0;color:var(--dvc-muted);font-size:12px}.dvc-earnings-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.dvc-earnings-metric{min-width:0;padding:10px 9px;border:1px solid #dbeafe;border-radius:9px;background:#f8fbff;text-align:center}.dvc-earnings-label{display:block;color:#475569;font-size:12px;font-weight:700}.dvc-earnings-value{display:block;margin-top:3px;color:#172554;font-size:18px;font-weight:800;white-space:nowrap}.dvc-earnings-change{display:block;margin-top:2px;color:#64748b;font-size:12px}.dvc-earnings-change.dvc-growth-pos{color:#16a34a}.dvc-earnings-change.dvc-growth-neg{color:#dc2626}.dvc-roe-note{margin:8px 0 0}
+  .dvc-chart-wrap{margin-top:20px;overflow-x:auto}.dvc-bar-label{font-size:11px;fill:#6b7280}.dvc-bar-value{font-size:11px;fill:#2b2b2b}.dvc-growth-label{font-size:10px}.dvc-growth-pos{fill:#16a34a;color:#16a34a}.dvc-growth-neg{fill:#dc2626;color:#dc2626}.dvc-payout-label{font-size:10px;fill:#b45309}
+  .dvc-chart-legend,.dvc-fin-legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11px;color:#6b7280;margin-top:8px}.dvc-chart-legend span,.dvc-fin-legend span{display:flex;align-items:center;gap:6px}.dvc-legend-swatch{display:inline-block;width:12px;height:12px;border-radius:2px}.dvc-legend-line{width:15px;height:3px;border-radius:0}.dvc-legend-average{width:18px;height:0;border-top:2px dashed currentColor;opacity:.65}.dvc-legend-sector{width:18px;height:0;border-top:2px dotted #7c3aed}.dvc-legend-text{font-style:normal;font-weight:700}
+  .dvc-source{margin:7px 0 0;color:#64748b;font-size:11px}.dvc-source strong{color:#475569}
+  .dvc-financials{margin-top:24px;padding-top:18px;border-top:2px solid #e2e8f0}.dvc-fin-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.dvc-fin-head h3{margin:0;color:#172554;font-size:19px}.dvc-fin-head p{margin:3px 0 0;color:#64748b;font-size:12px}.dvc-fin-source{flex:0 0 auto;padding:4px 9px;border:1px solid #bfdbfe;border-radius:6px;color:#2563eb;background:#eff6ff;font-size:11px;font-weight:700}
+  .dvc-warnings{margin:14px 0;padding:10px 12px 10px 30px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;color:#64748b;font-size:12px}.dvc-warnings li+li{margin-top:4px}.dvc-warning-split{color:#9a3412;font-weight:600}
+  .dvc-chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}.dvc-card{min-width:0;padding:17px;border:1px solid var(--dvc-border);border-radius:12px;background:#fff;box-shadow:0 3px 12px rgba(15,23,42,.04)}.dvc-card-wide{grid-column:1/-1}.dvc-card-head{margin-bottom:8px}.dvc-card h4{margin:0;color:#1e3a8a;font-size:16px}.dvc-card-subtitle{margin:2px 0 0;color:var(--dvc-muted);font-size:11px}
+  .dvc-mini-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.dvc-mini-panel{min-width:0;padding-top:4px}.dvc-mini-panel+.dvc-mini-panel{border-left:1px dashed var(--dvc-border);padding-left:12px}.dvc-yield-panel{margin-top:14px;padding-top:14px;border-top:1px dashed var(--dvc-border)}.dvc-metric-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.dvc-mini-title{margin:0;color:#475569;font-size:12px;font-weight:700}.dvc-metric-source{display:block;color:#94a3b8;font-size:10px;font-weight:400}.dvc-trend-badge{max-width:70%;padding:3px 8px;border:1px solid #dbeafe;border-radius:999px;background:#eff6ff;color:#1e40af;font-size:10px;font-weight:700;line-height:1.4;text-align:right}.dvc-metric-description{min-height:2.8em;margin:4px 0 6px;color:var(--dvc-muted);font-size:11px;line-height:1.4}
+  .dvc-sector-position{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:4px 0}.dvc-sector-badge{padding:2px 8px;border-radius:999px;background:#f3e8ff;color:#6b21a8;font-size:10px;font-weight:700}.dvc-sector-median{color:var(--dvc-muted);font-size:10px}
+  .dvc-fin-chart{width:100%;overflow:hidden}.dvc-fin-chart svg{display:block;width:100%;height:auto;overflow:visible}.dvc-axis-label{fill:#64748b;font-size:11px}.dvc-value-label{fill:#334155;font-size:10px;font-weight:700}.dvc-grid-line{stroke:#e8eef5;stroke-width:1}.dvc-zero-line{stroke:#94a3b8;stroke-width:1.2}.dvc-axis-break{fill:none;stroke:#64748b;stroke-width:1.6;stroke-linecap:round}.dvc-axis-break-grid{fill:none;stroke:#cbd5e1;stroke-width:1.1}.dvc-outlier-label{fill:#172554;font-weight:800}.dvc-chart-note{margin:7px 0 0;color:var(--dvc-muted);font-size:11px}
+  .dvc-single{padding:11px;border:1px solid #dbeafe;border-radius:9px;background:#f8fbff}.dvc-single-label{display:block;color:var(--dvc-muted);font-size:11px}.dvc-single-value{display:block;color:#1e3a8a;font-size:19px;font-weight:700}.dvc-single-year{color:#94a3b8;font-size:10px;font-weight:400}.dvc-empty{display:flex;min-height:120px;align-items:center;justify-content:center;padding:18px;border:1px dashed #cbd5e1;border-radius:9px;background:#f8fafc;color:var(--dvc-muted);text-align:center;font-size:13px}
+  .dvc-links{margin-top:18px;padding-top:14px;border-top:1px dashed #e2e8f0;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}.dvc-links-copy{flex-basis:100%;margin:0;color:#6b7280;font-size:12px}.dvc-links-label{font-size:13px;color:#6b7280}.dvc-link{display:inline-block;font-size:13px;padding:6px 12px;border:1px solid #3b82f6;border-radius:6px;color:#3b82f6;text-decoration:none}.dvc-link:hover{background:#3b82f6;color:#fff}
+  .dvc-ranking-head{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px}.dvc-ranking-head h3{margin:0}.dvc-ranking-controls{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:8px 12px;font-size:12px}.dvc-ranking-controls select,.dvc-ranking-controls input,.dvc-ranking-controls button{padding:6px 8px;border-radius:6px;border:1px solid #d8dee4;background:#fff}.dvc-ranking-controls input{width:74px}.dvc-ranking-controls button{border-color:#2563eb;background:#2563eb;color:#fff;cursor:pointer}.dvc-sort-hint{font-size:12px;color:#64748b}.dvc-load-error{color:#b91c1c}.dvc-table-wrap{overflow-x:auto;margin-top:12px}table.dvc-table{width:100%;border-collapse:collapse;font-size:14px}table.dvc-table th,table.dvc-table td{padding:8px 10px;border-bottom:1px solid #eef1f4;text-align:right}table.dvc-table th:nth-child(-n+3),table.dvc-table td:nth-child(-n+3){text-align:left}table.dvc-table thead th{color:#6b7280;font-weight:600;font-size:12px}table.dvc-table th.dvc-sortable{cursor:pointer;white-space:nowrap;text-decoration:underline dotted;text-underline-offset:3px;user-select:none}table.dvc-table th.dvc-sortable:hover{color:#3b82f6}table.dvc-table th.dvc-sortable:focus{outline:2px solid #3b82f6;outline-offset:-2px}table.dvc-table tbody tr:hover{background:#f8fafc;cursor:pointer}.dvc-updated{font-size:12px;color:#9ca3af;margin-top:10px;text-align:right}.dvc-page-note{margin:24px 0 0;padding-top:12px;border-top:1px solid #e2e8f0;color:#64748b;font-size:11px;text-align:right}
+  @media(max-width:760px){.dvc-chart-grid{grid-template-columns:1fr}.dvc-card-wide{grid-column:auto}.dvc-fin-head{display:block}.dvc-fin-source{display:inline-block;margin-top:8px}}
+  @media(max-width:520px){.dvc-detail,.dvc-card{padding:14px}.dvc-mini-grid{grid-template-columns:1fr}.dvc-earnings-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.dvc-mini-panel+.dvc-mini-panel{border-left:0;border-top:1px dashed var(--dvc-border);padding-left:0;padding-top:12px}.dvc-metric-head{display:block}.dvc-trend-badge{display:inline-block;max-width:100%;margin-top:4px;text-align:left}.dvc-axis-label{font-size:12px}}
+  @media(prefers-reduced-motion:reduce){.dvc-root *{scroll-behavior:auto!important}}
+</style>
+
+<script>
+(function(){
+  "use strict";
+  var API_BASE="/api/api.php";
+  var state={data:[],byCode:{},sort:{key:"streak",dir:"desc"},financialByCode:{},sectorStats:{},financialStatus:"loaded",currentCode:"",total:0,searchTimer:null,searchRequest:0,detailRequest:0};
+  var SORTABLE_COLUMNS=[{key:"yield",label:"配当利回り"},{key:"forecast_yield",label:"予想利回り"},{key:"streak",label:"連続増配"},{key:"streak_nd",label:"連続非減配"},{key:"cagr5",label:"5年増配率"}];
+  var COLORS=["#2563eb","#f59e0b","#0891b2","#059669"],SVG_W=620,SVG_H=272,PAD={top:29,right:18,bottom:43,left:62};
+
+  function esc(v){return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;")}
+  function fmtPct(v){return v===null||v===undefined?"-":v.toFixed(2)+"%"}
+  // 数えられなかった年数(null)を「0年」と出すと、実際は増配が続いている会社を
+  // 最下位に見せてしまう。分からないものは「-」にする。
+  function fmtYears(v){return (typeof v==="number"&&isFinite(v))?v+"年":"-"}
+  function streakNote(r){var u=r.streakUnreliable;if(!u)return"";var years=(u.breakYears||[]).join("・");return '<p class="dvc-source">連続増配年数・平均増配率は、株式分割で配当額の基準がそろっていない年'+(years?"("+esc(years)+"年)":"")+'があるため判定できません。</p>'}
+  function stat(label,value){return '<div class="dvc-stat"><span class="dvc-stat-label">'+esc(label)+'</span><span class="dvc-stat-value">'+esc(value)+'</span></div>'}
+  function forecastSummary(r){var details=[];if(typeof r.forecastDividend!=="number"||!isFinite(r.forecastDividend))return"";if(r.forecastPeriod)details.push(String(r.forecastPeriod));if(typeof r.forecastYield==="number"&&isFinite(r.forecastYield))details.push("予想利回り "+fmtPct(r.forecastYield));return '<div class="dvc-forecast"><span class="dvc-forecast-main">予想配当 '+esc(formatValue(r.forecastDividend,"円"))+'</span>'+(details.length?'<span class="dvc-forecast-detail">（'+esc(details.join("・"))+'）</span>':"")+"</div>"}
+  function baseStreakStat(r){var base=r&&r.streakBase,total=r&&r.streakIncrease;if(typeof base!=="number"||!isFinite(base)||(typeof total==="number"&&isFinite(total)&&base===total))return"";return stat("連続増配（記念配当除き）",fmtYears(base))}
+  function earningsValue(metric){var value=metric&&metric.value;return typeof value==="number"&&isFinite(value)?compactValue(value/100,"億円"):"—"}
+  function earningsChange(metric){var value=metric&&metric.change;if(typeof value!=="number"||!isFinite(value))return"—";return (value>=0?"+":"")+formatNumber(value,1)+"%"}
+  function earningsForecastCard(company){
+    var earnings=company&&company.earnings,forecast=earnings&&earnings.forecast,metrics=forecast&&forecast.metrics,definitions=[
+      ["売上高","revenue"],["営業利益","operatingIncome"],["経常利益","ordinaryIncome"],["純利益","netIncome"]
+    ],hasValue;
+    if(!forecast||!metrics)return"";
+    hasValue=definitions.some(function(item){var metric=metrics[item[1]],value=metric&&metric.value;return typeof value==="number"&&isFinite(value)});
+    if(!hasValue)return"";
+    var periodType=forecast.periodType=== "next"||forecast.periodType==="current"?forecast.periodType:(forecast.sourceQuarter===4?"next":"current"),period=forecast.period?String(forecast.period):"業績予想";
+    if(periodType==="next"&&!/\(予\)\s*$/.test(period))period+="(予)";
+    var periodLabel=period+"・"+(periodType==="next"?"来期":"今期"),classes="dvc-card dvc-card-wide dvc-earnings-card"+(periodType==="next"?" dvc-earnings-next":"");
+    return '<section class="'+classes+'"><div class="dvc-card-head"><h4>業績予想</h4><p class="dvc-earnings-subtitle">'+esc(periodLabel)+'（元データ: 百万円・表示: 億円換算）</p></div><div class="dvc-earnings-grid">'+definitions.map(function(item){var metric=metrics[item[1]]||{},changeClass=typeof metric.change==="number"&&isFinite(metric.change)?(metric.change<0?"dvc-growth-neg":"dvc-growth-pos"):"";return '<div class="dvc-earnings-metric"><span class="dvc-earnings-label">'+esc(item[0])+'</span><strong class="dvc-earnings-value">'+esc(earningsValue(metric))+'</strong><span class="dvc-earnings-change '+changeClass+'">前年比 '+esc(earningsChange(metric))+'</span></div>'}).join("")+"</div></section>"
+  }
+  function roeMethodNote(company){var value=company&&company.roeYearEnd,message="ROEは会社申告値（自己資本は期首期末平均）。";if(typeof value==="number"&&isFinite(value))message+="期末ベースでは "+formatNumber(value,2)+"%（IRbank等はこの方式）";return '<p class="dvc-chart-note dvc-roe-note">'+esc(message)+"</p>"}
+  function validYears(data){return data?Object.keys(data).sort().filter(function(y){return typeof data[y]==="number"&&isFinite(data[y])}):[]}
+  function latest(data){var ys=validYears(data);return ys.length?{year:ys[ys.length-1],value:data[ys[ys.length-1]]}:null}
+  function formatNumber(v,d){return Number(v).toLocaleString("ja-JP",{minimumFractionDigits:d,maximumFractionDigits:d})}
+  function digits(v){var a=Math.abs(v);return a>=100?0:a>=10?1:2}
+  function formatValue(v,u){if(u==="%")return formatNumber(v,digits(v))+"%";if(u==="円")return formatNumber(v,digits(v))+"円";if(u==="億円")return formatNumber(v,Math.abs(v)<100?1:0)+"億円";return formatNumber(v,digits(v))}
+  function compactValue(v,u){return u==="億円"&&Math.abs(v)>=10000?formatNumber(v/10000,1)+"兆円":formatValue(v,u)}
+  function average(data){var ys=validYears(data),sum=0;if(!ys.length)return null;ys.forEach(function(y){sum+=data[y]});return sum/ys.length}
+  function toOku(data){var out={};validYears(data).forEach(function(y){out[y]=data[y]/100000000});return out}
+  function unionYears(series){var seen={};series.forEach(function(s){validYears(s.data).forEach(function(y){seen[y]=true})});return Object.keys(seen).sort()}
+  function median(values){var a=values.slice().sort(function(x,y){return x-y}),m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2}
+
+  function apiURL(action,params){var query=new URLSearchParams();query.set("action",action);Object.keys(params||{}).forEach(function(key){var value=params[key];if(value!==""&&value!==null&&value!==undefined)query.set(key,value)});return API_BASE+"?"+query.toString()}
+  function apiErrorMessage(err){return err&&err.rateLimited?"アクセスが集中しています。しばらくしてからお試しください":(err&&err.message?err.message:"データの読み込みに失敗しました")}
+  function requestJSON(url){return fetch(url).then(function(res){return res.json().catch(function(){return{}}).then(function(body){if(!res.ok){var err=new Error(body&&body.error?body.error:"データの読み込みに失敗しました");err.rateLimited=res.status===429;throw err}return body})})}
+  function renderSuggest(query){
+    var box=document.getElementById("dvc-suggest"),q=query.trim(),requestId=++state.searchRequest;
+    clearTimeout(state.searchTimer);
+    if(!q){box.innerHTML="";box.style.display="none";return}
+    if(Array.from(q).length<2){box.innerHTML='<div class="dvc-suggest-item">2文字以上入力してください</div>';box.style.display="block";return}
+    state.searchTimer=setTimeout(function(){
+      requestJSON(apiURL("search",{q:q})).then(function(matches){
+        if(requestId!==state.searchRequest)return;
+        if(!matches.length){box.innerHTML='<div class="dvc-suggest-item">該当する銘柄が見つかりません</div>';box.style.display="block";return}
+        box.innerHTML=matches.map(function(r){return '<div class="dvc-suggest-item" data-code="'+esc(r.code)+'"><span>'+esc(r.name)+'</span><span class="dvc-suggest-code">'+esc(r.code)+'</span></div>'}).join("");
+        box.style.display="block";
+        Array.prototype.forEach.call(box.querySelectorAll(".dvc-suggest-item[data-code]"),function(el){el.addEventListener("click",function(){showDetail(el.getAttribute("data-code"),true);box.style.display="none";document.getElementById("dvc-search").value=""})})
+      }).catch(function(err){if(requestId!==state.searchRequest)return;box.innerHTML='<div class="dvc-suggest-item dvc-load-error">'+esc(apiErrorMessage(err))+"</div>";box.style.display="block"})
+    },300)
+  }
+  function yoyGrowthByYear(annual,years){var growth={};years.forEach(function(y,i){var p,c;if(!i)return;p=annual[years[i-1]];c=annual[y];if(p>0)growth[y]=((c-p)/p)*100});return growth}
+  function buildBarChart(annual,payoutRatio,dividendBreakdown,annualPartial,confirmed,pending,seriesInfo){
+    var years=Object.keys(annual).sort(),growth,values,max,payoutYears,payoutValues,payoutMax,barW=34,gap=10,chartH=200,leftPad=4,topPad=26,w,h,xCenter={},bars,payoutLine="",legend,hasBreakdown=false,hasPartial=false,hasForecast=false,hasConfirmed=false,partialSet={},displayYears;
+    annualPartial=annualPartial||{};dividendBreakdown=dividendBreakdown||{};payoutRatio=payoutRatio||{};confirmed=confirmed||{};pending=pending||{};seriesInfo=seriesInfo||{};
+    var isFiscal=seriesInfo.basis!=="calendar",axisText=isFiscal?"事業年度":"暦年・更新停止";
+    displayYears=years.slice();
+    Object.keys(annualPartial).sort().forEach(function(y){var v=annualPartial[y];if(typeof v==="number"&&isFinite(v)&&v>0&&years.indexOf(y)<0){displayYears.push(y);partialSet[y]=true;hasPartial=true}});
+    if(!displayYears.length)return"<p>配当データがありません</p>";
+    growth=yoyGrowthByYear(annual,years);
+    values=displayYears.map(function(y){return partialSet[y]?annualPartial[y]:annual[y]});
+    max=Math.max.apply(null,values)*1.15||1;
+    payoutYears=years.filter(function(y){return payoutRatio[y]!==undefined&&payoutRatio[y]!==null});payoutValues=payoutYears.map(function(y){return payoutRatio[y]});payoutMax=Math.max(100,Math.max.apply(null,payoutValues.concat([0]))*1.15);
+    w=displayYears.length*(barW+gap)+leftPad;h=chartH+topPad+56;
+    bars=displayYears.map(function(year,i){var isPartial=!!partialSet[year],pin=pending[year]||null,isConfirmed=false,partialLabel="",v=isPartial?annualPartial[year]:annual[year],bh=(v/max)*chartH,x=leftPad+i*(barW+gap),yt=topPad+chartH-bh,g=isPartial?undefined:growth[year],gl="",isConfirmed=isPartial&&(pin?pin.kind==="confirmed":(typeof confirmed.value==="number"&&confirmed.year===year&&Math.abs(confirmed.value-v)<0.01)),partialLabel=isPartial?((pin&&pin.label)?pin.label:(isConfirmed?"確定":"予想")):"",mainFill=(isPartial&&!isConfirmed)?"#cbd5e1":"#3b82f6",bar='<rect x="'+x+'" y="'+yt+'" width="'+barW+'" height="'+bh+'" rx="3" fill="'+mainFill+'"></rect>',bd=dividendBreakdown[year],base,special,specialH,baseH,kind,tooltip;if(bd&&typeof bd.base==="number"&&isFinite(bd.base)&&typeof bd.special==="number"&&isFinite(bd.special)&&bd.special>=0&&bd.special<=v){base=bd.base;special=bd.special;if(Math.abs(base+special-v)>0.000001)base=v-special;specialH=(special/max)*chartH;baseH=(base/max)*chartH;kind=bd.kind?String(bd.kind):"";tooltip="記念・特別配当 "+special+"円"+(kind?"("+kind+")":"");bar='<rect x="'+x+'" y="'+(yt+specialH)+'" width="'+barW+'" height="'+baseH+'" fill="'+mainFill+'"></rect><rect x="'+x+'" y="'+yt+'" width="'+barW+'" height="'+specialH+'" rx="3" fill="#93c5fd" title="'+esc(tooltip)+'"></rect>';hasBreakdown=true}xCenter[year]=x+barW/2;if(g!==undefined)gl='<text class="dvc-growth-label '+(g>=0?"dvc-growth-pos":"dvc-growth-neg")+'" x="'+(x+barW/2)+'" y="'+(yt-18)+'" text-anchor="middle">'+(g>=0?"+":"")+g.toFixed(0)+'%</text>';return bar+gl+'<text class="dvc-bar-value" x="'+(x+barW/2)+'" y="'+(yt-4)+'" text-anchor="middle">'+esc(v)+'</text><text class="dvc-bar-label" x="'+(x+barW/2)+'" y="'+(topPad+chartH+16)+'" text-anchor="middle">'+esc(year.slice(2))+'</text>'+(isPartial?'<text class="dvc-bar-label" x="'+(x+barW/2)+'" y="'+(topPad+chartH+30)+'" text-anchor="middle" fill="'+(isConfirmed?"#2563eb":"#94a3b8")+'">'+esc(partialLabel)+'</text>':"")}).join("");
+    displayYears.forEach(function(y){if(!partialSet[y])return;var pin=pending[y];if(pin&&pin.kind==="confirmed"){hasConfirmed=true}else if(pin){hasForecast=true}else{hasForecast=true}});
+    if(payoutYears.length){var points=payoutYears.map(function(y){return xCenter[y]+","+(topPad+chartH-(payoutRatio[y]/payoutMax)*chartH)}).join(" "),dots=payoutYears.map(function(y){var py=topPad+chartH-(payoutRatio[y]/payoutMax)*chartH;return '<circle cx="'+xCenter[y]+'" cy="'+py+'" r="3" fill="#f59e0b"></circle><text class="dvc-payout-label" x="'+xCenter[y]+'" y="'+(py-8)+'" text-anchor="middle">'+payoutRatio[y].toFixed(0)+'%</text>'}).join("");payoutLine='<polyline points="'+points+'" fill="none" stroke="#f59e0b" stroke-width="2"></polyline>'+dots}
+    legend='<div class="dvc-chart-legend"><span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>年間配当金(円、棒グラフ・'+esc(axisText)+')</span>'+(hasForecast?'<span><i class="dvc-legend-swatch" style="background:#cbd5e1"></i>グレー+「予想」=会社発表の配当予想(まだ確定していない年度)</span>':"")+(hasConfirmed?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>青+「確定」=会社発表の確定額(有価証券報告書はまだ出ていない年度)</span>':"")+(hasBreakdown?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>■通常配当　<i class="dvc-legend-swatch" style="background:#93c5fd"></i>■記念・特別配当</span>':"")+'<span><i class="dvc-legend-swatch dvc-legend-line" style="background:#f59e0b"></i>配当性向(%)</span><span><i class="dvc-legend-text dvc-growth-pos">+12%</i>のような数字は前年比の増配率</span></div>';
+    return '<div class="dvc-chart-wrap"><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+" "+h+'">'+bars+payoutLine+"</svg></div>"+legend+'<p class="dvc-source"><strong>出典:</strong> '+(isFiscal?'配当実績: EDINET(有価証券報告書)':'配当実績: 外部データの凍結分(EDINETに配当の記載が無いため更新していません)')+' / 配当性向: EDINET(有価証券報告書) / 配当予想・確定額: EDINET DB</p>'
+  }
+  function confirmedInfo(r){
+    var v=r.confirmedDividend,fy=r.confirmedFiscalYearEnd;
+    if(typeof v!=="number"||!isFinite(v)||!fy)return{};
+    // 期末の年＝権利落ちの暦年(期末配当の権利落ちは期末直前のため)
+    return{year:String(fy).slice(0,4),value:v}
+  }
+  function dividendBreakdownNote(dividendBreakdown){var years=Object.keys(dividendBreakdown||{}).sort(),notes=[];years.forEach(function(year){var bd=dividendBreakdown[year],base,special,kind;if(!bd||typeof bd.base!=="number"||!isFinite(bd.base)||typeof bd.special!=="number"||!isFinite(bd.special))return;base=bd.base;special=bd.special;kind=bd.kind?String(bd.kind):"記念・特別";notes.push(year+"年: 通常配当"+formatValue(base,"円")+" + "+kind+"配当"+formatValue(special,"円")+" = 合計"+formatValue(base+special,"円")+"（有報より）")});return notes.length?'<p class="dvc-source">'+esc(notes.join("、"))+"。</p>":""}
+
+  function trendSummary(data,unit){
+    var ys=validYears(data),fy,ly,first,last,change,vals,min,max,range,avg,flat,swing,span;
+    if(ys.length<2)return"";fy=ys[0];ly=ys[ys.length-1];first=data[fy];last=data[ly];change=last-first;vals=ys.map(function(y){return data[y]});min=Math.min.apply(null,vals);max=Math.max.apply(null,vals);range=max-min;avg=average(data);flat=first===0?last===0:Math.abs(change/first)<.1;swing=avg!==0&&Math.abs(range/avg)>.3&&range>Math.abs(change)*2.5;span=Number(ly)-Number(fy)+1;
+    if(flat)return swing?"上下の振れが大きい（"+compactValue(min,unit)+" 〜 "+compactValue(max,unit)+"）":"ほぼ横ばい（"+compactValue(avg,unit)+"前後）";
+    return span+"年で"+(swing?"上下しつつ":"")+(change>0?"上昇":"低下")+"（"+compactValue(first,unit)+" → "+compactValue(last,unit)+"）"
+  }
+  function sectorMetric(company,key){var group=company&&company.industry&&state.sectorStats[company.industry];return group&&group[key]?group[key]:null}
+  function sectorSeries(company,key,data){var stats=sectorMetric(company,key),out={};if(!stats)return out;validYears(data).forEach(function(y){if(stats[y]&&typeof stats[y].median==="number")out[y]=stats[y].median});return out}
+  function sectorPosition(company,key,data,unit){var p=latest(data),stats=sectorMetric(company,key),b,label;if(!p||!stats||!stats[p.year])return"";b=stats[p.year];if(typeof b.median!=="number"||typeof b.p25!=="number"||typeof b.p75!=="number")return"";label=p.value>=b.p75?"数値が業種内 上位25%":p.value<=b.p25?"数値が業種内 下位25%":"数値が業種内 中位";return '<span class="dvc-sector-position"><span class="dvc-sector-badge">'+esc(label)+'</span><small class="dvc-sector-median">'+esc(p.year+"年の業種中央値 "+formatValue(b.median,unit))+"</small></span>"}
+  function detectBreak(series,unit){var vals=[];series.forEach(function(s){validYears(s.data).forEach(function(y){vals.push(s.data[y])})});if(vals.length<2||(vals.length===2&&unit!=="%"))return null;vals.sort(function(a,b){return a-b});for(var count=Math.min(2,vals.length-1);count>=1;count-=1){if(vals.length>2&&count*2>=vals.length)continue;var lower=vals.slice(0,vals.length-count),upper=vals.slice(vals.length-count),lm=lower[lower.length-1],base=Math.abs(median(lower)),um=upper[0];if(lm>0&&um>base*2.5&&um>lm*2)return{lower:lower,upper:upper,upperMinValue:um,isOutlier:function(v){return v>=um}}}return null}
+  function padded(values){var min=Math.min.apply(null,values.concat([0])),max=Math.max.apply(null,values.concat([0]));if(min===max){if(max===0)return{min:-1,max:1};min=Math.min(0,min*.9);max=max*1.1}var p=(max-min)*.08;if(min<0)min-=p;if(max>0)max+=p;return{min:min,max:max}}
+  function domainFor(series,br){var vals=[];series.forEach(function(s){validYears(s.data).forEach(function(y){vals.push(s.data[y])})});if(!vals.length)return{min:0,max:1};if(!br)return padded(vals);var lo=padded(br.lower),umin=Math.min.apply(null,br.upper),umax=Math.max.apply(null,br.upper),span=umax-umin,p=span>0?span*.18:Math.max(Math.abs(umax)*.08,1);return{min:lo.min,max:umax+p,lowerMax:lo.max,upperMin:Math.max(lo.max,umin-p),broken:true}}
+  function scalesFor(years,d){var pw=SVG_W-PAD.left-PAD.right,ph=SVG_H-PAD.top-PAD.bottom,g=d.broken?18:0,uh=d.broken?Math.round(ph*.24):0,lh=d.broken?ph-uh-g:ph,bt=PAD.top+uh,bb=bt+g;return{x:function(i){return years.length===1?PAD.left+pw/2:PAD.left+(i/(years.length-1))*pw},y:function(v){if(d.broken){if(v>=d.upperMin)return PAD.top+((d.max-v)/(d.max-d.upperMin))*uh;if(v>d.lowerMax)return bt+g/2;return bb+((d.lowerMax-v)/(d.lowerMax-d.min))*lh}return PAD.top+((d.max-v)/(d.max-d.min))*ph},plotW:pw,breakTop:bt,breakBottom:bb,breakY:bt+g/2}}
+  function axisValue(v,u){if(u==="億円")return Math.abs(v)>=10000?formatNumber(v/10000,1)+"兆":formatNumber(v,0);if(u==="%")return formatNumber(v,Math.abs(v)<10?1:0);return formatNumber(v,0)}
+  function axes(years,d,s,u){
+    var out=[],i,value,y,lineClass;
+    if(d.broken){
+      for(i=0;i<=1;i+=1){
+        value=d.max-(d.max-d.upperMin)*i;
+        y=s.y(value);
+        out.push('<line class="dvc-grid-line" x1="'+PAD.left+'" y1="'+y+'" x2="'+(SVG_W-PAD.right)+'" y2="'+y+'"></line>');
+        out.push('<text class="dvc-axis-label" x="'+(PAD.left-9)+'" y="'+(y+4)+'" text-anchor="end">'+esc(axisValue(value,u))+'</text>');
+      }
+      for(i=0;i<=3;i+=1){
+        value=d.lowerMax-(d.lowerMax-d.min)*i/3;
+        y=s.y(value);
+        lineClass=Math.abs(value)<(d.lowerMax-d.min)/1000?"dvc-zero-line":"dvc-grid-line";
+        out.push('<line class="'+lineClass+'" x1="'+PAD.left+'" y1="'+y+'" x2="'+(SVG_W-PAD.right)+'" y2="'+y+'"></line>');
+        out.push('<text class="dvc-axis-label" x="'+(PAD.left-9)+'" y="'+(y+4)+'" text-anchor="end">'+esc(axisValue(value,u))+'</text>');
+      }
+    }else{
+      for(i=0;i<=4;i+=1){
+        value=d.max-(d.max-d.min)*i/4;
+        y=s.y(value);
+        lineClass=Math.abs(value)<(d.max-d.min)/1000?"dvc-zero-line":"dvc-grid-line";
+        out.push('<line class="'+lineClass+'" x1="'+PAD.left+'" y1="'+y+'" x2="'+(SVG_W-PAD.right)+'" y2="'+y+'"></line>');
+        out.push('<text class="dvc-axis-label" x="'+(PAD.left-9)+'" y="'+(y+4)+'" text-anchor="end">'+esc(axisValue(value,u))+'</text>');
+      }
+      if(d.min<0&&d.max>0){
+        out.push('<line class="dvc-zero-line" x1="'+PAD.left+'" y1="'+s.y(0)+'" x2="'+(SVG_W-PAD.right)+'" y2="'+s.y(0)+'"></line>');
+      }
+    }
+    years.forEach(function(year,index){
+      out.push('<text class="dvc-axis-label" x="'+s.x(index)+'" y="'+(SVG_H-15)+'" text-anchor="middle">'+esc(year.slice(2))+'</text>');
+    });
+    out.push('<text class="dvc-axis-label" x="'+PAD.left+'" y="14">'+esc(u)+'</text>');
+    return out.join("");
+  }
+  function wave(x1,x2,y,a){var d="M "+x1+" "+y,x=x1,dir=-1;while(x+8<=x2){d+=" q 4 "+(a*dir)+" 8 0";x+=8;dir*=-1}return d}
+  function breakMarks(s){var l=PAD.left,r=SVG_W-PAD.right,y=s.breakY;return '<rect x="'+(l-12)+'" y="'+s.breakTop+'" width="'+(r-l+14)+'" height="'+(s.breakBottom-s.breakTop)+'" fill="#fff" fill-opacity=".94"></rect><path class="dvc-axis-break-grid" d="'+wave(l+11,r,y-3,2.5)+'"></path><path class="dvc-axis-break-grid" d="'+wave(l+11,r,y+3,2.5)+'"></path><path class="dvc-axis-break" d="'+wave(l-10,l+11,y-3,3)+'"></path><path class="dvc-axis-break" d="'+wave(l-10,l+11,y+3,3)+'"></path>'}
+  function averageLines(series,s,d){return series.map(function(item,i){if(item.isSector)return"";var a=average(item.data);if(a===null||(d.broken&&a>d.lowerMax&&a<d.upperMin))return"";return '<line x1="'+PAD.left+'" y1="'+s.y(a)+'" x2="'+(SVG_W-PAD.right)+'" y2="'+s.y(a)+'" stroke="'+(item.color||COLORS[i])+'" stroke-width="1.5" stroke-dasharray="6 5" stroke-opacity=".45"></line>'}).join("")}
+  function legend(series,type,unit){var labels=[];series.forEach(function(item,i){if(item.isSector){labels.push('<span><i class="dvc-legend-sector"></i>'+esc(item.label)+"</span>");return}var color=item.color||COLORS[i],a=average(item.data);labels.push('<span><i class="dvc-legend-swatch'+(type==="line"?" dvc-legend-line":"")+'" style="background:'+color+'"></i>'+esc(item.label)+"</span>");if(a!==null)labels.push('<span><i class="dvc-legend-average" style="color:'+color+'"></i>'+esc("期間平均 "+compactValue(a,unit))+"</span>")});return '<div class="dvc-fin-legend">'+labels.join("")+"</div>"}
+  function chart(series,unit,type,label){
+    var graph=series.filter(function(s){return validYears(s.data).length>=2});if(!graph.length)return"";
+    var years=unionYears(graph),br=detectBreak(graph,unit),d=domainFor(graph,br),s=scalesFor(years,d),body=axes(years,d,s,unit)+averageLines(graph,s,d),zero=s.y(0);
+    if(type==="bar"){var groupW=s.plotW/years.length,barW=Math.min(38,Math.max(10,groupW-18));s.x=function(i){return PAD.left+groupW*i+groupW/2};body=axes(years,d,s,unit)+averageLines(graph,s,d);years.forEach(function(y,yi){graph.forEach(function(item,si){var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;var vy=s.y(v),top=Math.min(vy,zero),height=Math.max(1.5,Math.abs(zero-vy)),x=s.x(yi)-barW/2,isOut=br&&br.isOutlier(v),ly=v>=0?Math.max(PAD.top+9,top-6):Math.min(SVG_H-PAD.bottom-2,top+height+13);body+='<rect x="'+x+'" y="'+top+'" width="'+barW+'" height="'+height+'" rx="3" fill="'+(item.color||COLORS[si])+'"><title>'+esc(item.label+" "+y+"年: "+formatValue(v,unit))+'</title></rect><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):axisValue(v,unit))+"</text>"})})}else{graph.forEach(function(item,si){var color=item.color||COLORS[si],segments=[],seg=[],last=null;years.forEach(function(y,yi){var v=item.data[y];if(typeof v==="number"&&isFinite(v)){if(last!==null&&Number(y)-Number(last)>1&&seg.length){segments.push(seg);seg=[]}seg.push(s.x(yi)+","+s.y(v));last=y}else if(seg.length){segments.push(seg);seg=[];last=null}});if(seg.length)segments.push(seg);segments.forEach(function(points){if(points.length>=2)body+='<polyline points="'+points.join(" ")+'" fill="none" stroke="'+color+'" stroke-width="'+(item.isSector?2:3)+'"'+(item.isSector?' stroke-dasharray="2 5"':'')+' stroke-linecap="round" stroke-linejoin="round"></polyline>'});if(item.isSector)return;years.forEach(function(y,yi){var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;var cy=s.y(v),isOut=br&&br.isOutlier(v),ly=cy<PAD.top+18?cy+20:cy-10;body+='<circle cx="'+s.x(yi)+'" cy="'+cy+'" r="5" fill="#fff" stroke="'+color+'" stroke-width="3"><title>'+esc(item.label+" "+y+"年: "+formatValue(v,unit))+'</title></circle><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):formatValue(v,unit).replace(unit,""))+"</text>"})})}
+    if(br)body+=breakMarks(s);
+    return '<div class="dvc-fin-chart"><svg viewBox="0 0 '+SVG_W+" "+SVG_H+'" role="img" aria-label="'+esc(label)+'">'+body+"</svg></div>"+legend(graph,type,unit)+(br?'<p class="dvc-chart-note">※縦軸の一部を二重波線の位置で省略しています。上側の点には実際の数値を表示しています。</p>':"")
+  }
+  function miniMetric(title,data,unit,type,color,description,emptyMessage,company,key){
+    var count=validYears(data).length,series=[{label:title,data:data||{},color:color}],med=sectorSeries(company,key,data||{}),content;
+    if(type==="line"&&count>=2&&validYears(med).length>=2)series.push({label:"業種中央値（"+company.industry+"）",data:med,color:"#7c3aed",isSector:true});
+    if(count>=2)content=chart(series,unit,type,title+"の推移");else if(count===1){var p=latest(data);content='<div class="dvc-single"><span class="dvc-single-label">'+esc(title)+'（1期のみ）</span><span class="dvc-single-value">'+esc(formatValue(p.value,unit))+' <small class="dvc-single-year">'+esc(p.year)+"年</small></span></div>"}else content='<div class="dvc-empty">'+esc(emptyMessage||title+"のデータはありません")+"</div>";
+    return '<div class="dvc-mini-panel"><div class="dvc-metric-head"><p class="dvc-mini-title">'+esc(title)+'<span class="dvc-metric-source">出典: EDINET（金融庁）</span></p>'+(count>=2?'<span class="dvc-trend-badge">'+esc(trendSummary(data,unit))+"</span>":"")+"</div>"+sectorPosition(company,key,data||{},unit)+'<p class="dvc-metric-description">'+esc(description)+"</p>"+content+"</div>"
+  }
+  function dividendYieldMetric(company){
+    var data=company.dividendYieldHistory||{},count=validYears(data).length;
+    return '<div class="dvc-yield-panel">'+miniMetric("配当利回りの推移",data,"%","line","#f59e0b","その年度末の株価に対する配当の割合","配当利回りのデータはありません",company,"dividendYieldHistory")+(count?'<p class="dvc-chart-note">各年度末時点の値です。現在の利回りは上部の株価情報または外部サイトをご確認ください。</p>':"")+"</div>"
+  }
+  function card(title,subtitle,content,wide){return '<section class="dvc-card'+(wide?" dvc-card-wide":"")+'"><div class="dvc-card-head"><h4>'+esc(title)+'</h4><p class="dvc-card-subtitle">'+esc(subtitle)+"</p></div>"+content+"</section>"}
+  function warningMessages(company){var messages={},split={};(company.splitSuspectYears||[]).forEach(function(y){split[String(y)]=true});(company.warnings||[]).forEach(function(w){var text=String(w),m;if(/dividendPerShare|株式分割|株式併合/.test(text)){(text.match(/(?:19|20)\d{2}/g)||[]).forEach(function(y){split[y]=true});return}m=text.match(/^([A-Za-z][A-Za-z0-9]*):/);if(m&&m[1]==="revenue")messages.revenue="売上高は、この会社の開示形式では取得できませんでした";else if(m&&m[1]==="netIncome")messages.netIncome="純利益は、この会社の開示形式では取得できませんでした";else messages.partial="一部の財務項目は、この会社の開示形式では取得できませんでした"});var years=Object.keys(split).sort(),out=Object.keys(messages).map(function(k){return{text:messages[k],split:false}});if(years.length)out.push({text:years.map(function(y){return y+"年"}).join("・")+"に株式分割・併合があった可能性があります。1株あたりの数値は、この年をまたいで単純に比較できない場合があります",split:true});return out}
+  function finSummary(label,point,unit){return '<div class="dvc-fin-summary-item"><span class="dvc-fin-summary-label">'+esc(label)+'</span><span class="dvc-fin-summary-value">'+esc(point?formatValue(point.value,unit):"—")+"</span></div>"}
+  function buildFinancialSection(code){
+    if(state.financialStatus==="loading")return '<section class="dvc-financials"><div class="dvc-empty">財務データを読み込んでいます…</div></section>';
+    if(state.financialStatus==="failed")return '<section class="dvc-financials"><div class="dvc-empty">財務データを読み込めませんでした。配当情報はそのままご利用いただけます。</div></section>';
+    var c=state.financialByCode[code];if(!c)return"";
+    var cash=c.cashAndEquivalents||c.cash||{},payout=validYears(c.payoutRatioTotalBased||{}).length?c.payoutRatioTotalBased:(c.payoutRatioConsolidated||{}),payoutKey=validYears(c.payoutRatioTotalBased||{}).length?"payoutRatioTotalBased":"payoutRatioConsolidated",warnings=warningMessages(c),html;
+    html='<section class="dvc-financials"><div class="dvc-fin-head"><div><h3>財務指標の推移</h3><p>薄い破線は期間平均、紫の点線は業種中央値です。横軸は開示年です。</p></div><span class="dvc-fin-source">出典: EDINET（金融庁）</span></div>';
+    if(warnings.length)html+='<ul class="dvc-warnings">'+warnings.map(function(w){return '<li class="'+(w.split?"dvc-warning-split":"dvc-warning-note")+'">'+esc(w.text)+"</li>"}).join("")+"</ul>";
+    html+=earningsForecastCard(c);
+    html+='<div class="dvc-fin-summary">'+finSummary("最新ROE",latest(c.roe||{}),"%")+finSummary("最新自己資本比率",latest(c.equityRatio||{}),"%")+finSummary("最新EPS",latest(c.eps||{}),"円")+finSummary("最新BPS",latest(c.bps||{}),"円")+"</div>"+roeMethodNote(c);
+    html+='<div class="dvc-chart-grid">'+
+      card("収益性","ROEとROAは別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("ROE",c.roe||{},"%","line","#2563eb","株主のお金を使って、どれだけ利益を生んだかの割合",null,c,"roe")+miniMetric("ROA",c.roa||{},"%","line","#f59e0b","会社が持つ資産全体を使って、どれだけ利益を生んだかの割合",null,c,"roa")+"</div>",true)+
+      card("安全性","自己資本比率（%）",miniMetric("自己資本比率",c.equityRatio||{},"%","line","#0891b2","総資産のうち返済不要な自己資本が占める割合",null,c,"equityRatio"),false)+
+      card("1株価値","EPSとBPSは別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("EPS",c.eps||{},"円","line","#2563eb","1株あたりの利益",null,c,"eps")+miniMetric("BPS",c.bps||{},"円","line","#0891b2","1株あたりの純資産",null,c,"bps")+"</div>",true)+
+      card("規模","金額は億円換算。売上高と純利益は別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("売上高",toOku(c.revenue||{}),"億円","bar","#2563eb","商品やサービスの提供で得た収入の規模",null,c,"revenue")+miniMetric("純利益",toOku(c.netIncome||{}),"億円","bar","#059669","税金などを差し引いた後に会社に残った利益",null,c,"netIncome")+"</div>",true)+
+      card("現金と借入","現金と有利子負債比率は別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("現金等",toOku(cash),"億円","bar","#0891b2","手元にある現金や、すぐに現金化できる資産の規模",null,c,"cashAndEquivalents")+miniMetric("有利子負債比率",c.deRatio||{},"%","line","#f59e0b","自己資本に対する借入の大きさ","有利子負債比率は、この会社の開示形式では算出できませんでした",c,"deRatio")+"</div>",true)+
+      card("株主還元","配当性向・DOE・配当利回りは別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("配当性向",payout,"%","line","#2563eb","利益のうち配当に回した割合",null,c,payoutKey)+miniMetric("DOE",c.doe||{},"%","line","#059669","純資産に対する配当の割合",null,c,"doe")+"</div>"+dividendYieldMetric(c),true)+
+      "</div></section>";
+    return html
+  }
+
+  function renderDetail(r,shouldScroll){
+    var panel=document.getElementById("dvc-detail"),stats;
+    state.currentCode=r.code;panel.style.display="block";
+    stats=stat("株価(データ取得時点)",r.price?r.price.toLocaleString("ja-JP")+"円":"-")+stat("現在の配当利回り",fmtPct(r.dividendYield))+stat("予想利回り",fmtPct(typeof r.forecastYield==="number"&&isFinite(r.forecastYield)?r.forecastYield:null))+stat("連続増配年数",fmtYears(r.streakIncrease))+baseStreakStat(r)+stat("連続非減配年数",fmtYears(r.streakNonDecrease))+stat("3年平均増配率",fmtPct(r.cagr3))+stat("5年平均増配率",fmtPct(r.cagr5))+stat("10年平均増配率",fmtPct(r.cagr10));
+    panel.innerHTML='<div class="dvc-detail-head"><h2>'+esc(r.name)+'</h2><span class="dvc-detail-code">'+esc(r.code)+'</span></div><div class="dvc-detail-meta">'+esc((r.market||"")+" / "+(r.sector||""))+'</div><div class="dvc-stat-grid">'+stats+"</div>"+streakNote(r)+forecastSummary(r)+'<h4>年別配当金推移(1株あたり・円)</h4>'+buildBarChart(r.annual||{},r.payoutRatio||{},r.dividendBreakdown||{},r.annualPartial||{},confirmedInfo(r),r.annualPending||{},r.dividendSeries||{})+dividendBreakdownNote(r.dividendBreakdown||{})+buildFinancialSection(r.code)+buildExternalLinks(r.code);
+    Array.prototype.forEach.call(panel.querySelectorAll(".dvc-chart-wrap"),function(wrap){wrap.scrollLeft=wrap.scrollWidth});
+    if(shouldScroll&&panel.scrollIntoView)panel.scrollIntoView({behavior:"smooth",block:"start"})
+  }
+  function showDetail(code,shouldScroll){
+    var panel=document.getElementById("dvc-detail"),requestId=++state.detailRequest;state.currentCode=code;panel.style.display="block";panel.innerHTML='<div class="dvc-empty">銘柄データを読み込んでいます…</div>';
+    requestJSON(apiURL("stock",{code:code})).then(function(r){if(requestId!==state.detailRequest)return;r.code=String(r.code);state.byCode[r.code]=r;state.financialByCode[r.code]=r;renderDetail(r,shouldScroll)}).catch(function(err){if(requestId!==state.detailRequest)return;panel.innerHTML='<div class="dvc-empty dvc-load-error">'+esc(apiErrorMessage(err))+"</div>"})
+  }
+  function buildExternalLinks(code){var c=encodeURIComponent(String(code));return '<div class="dvc-links"><p class="dvc-links-copy">2013年以前の配当推移は外部サイトで確認できます。</p><span class="dvc-links-label">この銘柄をもっと調べる:</span><a class="dvc-link" href="https://irbank.net/'+c+'/dividend" target="_blank" rel="noopener noreferrer">IR BANK</a><a class="dvc-link" href="https://nikkeiyosoku.com/stock/dividend/'+c+'/" target="_blank" rel="noopener noreferrer">投資の森</a><a class="dvc-link" href="https://finance.yahoo.co.jp/quote/'+c+'.T" target="_blank" rel="noopener noreferrer">Yahoo!ファイナンス</a></div>'}
+  function toggleSort(key){if(state.sort.key===key)state.sort.dir=state.sort.dir==="asc"?"desc":"asc";else state.sort={key:key,dir:"desc"};document.getElementById("dvc-sector-filter").value="";document.getElementById("dvc-roe-min").value="";document.getElementById("dvc-equity-min").value="";document.getElementById("dvc-payout-max").value="";loadList()}
+  function sortIndicator(key){return state.sort.key===key?(state.sort.dir==="asc"?" ▲":" ▼"):""}
+  function buildHeadCell(col){return '<th class="dvc-sortable" data-sort-key="'+col.key+'" tabindex="0" role="button">'+col.label+sortIndicator(col.key)+"</th>"}
+  function renderTable(){var html='<table class="dvc-table"><thead><tr><th>銘柄名</th><th>コード</th><th>業種</th>'+SORTABLE_COLUMNS.map(buildHeadCell).join("")+"</tr></thead><tbody>";state.data.forEach(function(r){html+='<tr data-code="'+esc(r.code)+'"><td>'+esc(r.name)+"</td><td>"+esc(r.code)+"</td><td>"+esc(r.industry||"-")+"</td><td>"+fmtPct(r.yield)+"</td><td>"+fmtPct(r.forecast_yield)+"</td><td>"+fmtYears(r.streak)+"</td><td>"+fmtYears(r.streak_nd)+"</td><td>"+fmtPct(r.cagr5)+"</td></tr>"});html+="</tbody></table>";var wrap=document.getElementById("dvc-table-wrap");wrap.innerHTML=html;Array.prototype.forEach.call(wrap.querySelectorAll("tr[data-code]"),function(tr){tr.addEventListener("click",function(){showDetail(tr.getAttribute("data-code"),true)})});Array.prototype.forEach.call(wrap.querySelectorAll("th[data-sort-key]"),function(th){var key=th.getAttribute("data-sort-key");th.addEventListener("click",function(){toggleSort(key)});th.addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" "||e.key==="Spacebar"||e.keyCode===13||e.keyCode===32){e.preventDefault();toggleSort(key)}})})}
+  function showRows(rows,total,label){state.data=rows;state.total=total;renderTable();document.getElementById("dvc-updated").textContent=(label||"該当銘柄数")+": "+total+"件（最大300件表示）"}
+  function showTableError(err){document.getElementById("dvc-table-wrap").innerHTML='<p class="dvc-load-error">'+esc(apiErrorMessage(err))+"</p>"}
+  function loadList(){document.getElementById("dvc-table-wrap").textContent="読み込み中...";requestJSON(apiURL("list",{sort:state.sort.key,order:state.sort.dir,limit:300})).then(function(rows){showRows(rows,rows.length,"表示銘柄数")}).catch(showTableError)}
+  function loadScreen(){var params={industry:document.getElementById("dvc-sector-filter").value,yield_min:document.getElementById("dvc-yield-min").value,roe_min:document.getElementById("dvc-roe-min").value,equity_min:document.getElementById("dvc-equity-min").value,payout_max:document.getElementById("dvc-payout-max").value};document.getElementById("dvc-table-wrap").textContent="絞り込み中...";requestJSON(apiURL("screen",params)).then(function(result){state.sort={key:"streak",dir:"desc"};showRows(result.rows,result.total,"条件一致")}).catch(showTableError)}
+  function populateSectorFilter(){var sel=document.getElementById("dvc-sector-filter"),sectors=Object.keys(state.sectorStats).sort(function(a,b){return a.localeCompare(b,"ja")}),html='<option value="">すべての業種</option>';sectors.forEach(function(s){html+='<option value="'+esc(s)+'">'+esc(s)+"</option>"});sel.innerHTML=html}
+  function init(){document.getElementById("dvc-search").addEventListener("input",function(e){renderSuggest(e.target.value)});document.addEventListener("click",function(e){if(!e.target.closest("#dvc-search")&&!e.target.closest("#dvc-suggest"))document.getElementById("dvc-suggest").style.display="none"});document.getElementById("dvc-screen-button").addEventListener("click",loadScreen);document.getElementById("dvc-sector-filter").addEventListener("change",loadScreen);loadList();requestJSON(apiURL("sectors",{})).then(function(stats){state.sectorStats=stats&&typeof stats==="object"?stats:{};populateSectorFilter();var current=state.byCode[state.currentCode];if(current&&current.annual)renderDetail(current,false)}).catch(function(err){console.warn("業種統計を読み込めませんでした",apiErrorMessage(err))})}
+  init()
+  // iframeで埋め込まれたときは、親の枠の高さを中身に合わせる（同一ドメインのときだけ動く）
+  function fitParentFrame(){try{if(window.frameElement){var h=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight);if(h>0)window.frameElement.style.height=(h+24)+"px"}}catch(e){}}
+  if(window.frameElement){fitParentFrame();setInterval(fitParentFrame,400);window.addEventListener("resize",fitParentFrame)}
+}());
+</script>

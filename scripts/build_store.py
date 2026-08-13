@@ -1616,6 +1616,14 @@ def create_database(
     price_session = (
         (price_session_meta or {}).get("session") or "afternoon_close"
     )
+    # 「その株価データが実際にいつ時点のものか」を表す日付。朝6:00のフル更新
+    # （kouhaitou-db側のupdate.yml）はこのmetaファイルを更新しないため、
+    # 6:00〜7:00の間はdailyPricesUpdated（CSVヘッダの更新日時）とセッション名の
+    # 組み合わせが噛み合わなくなる。表示側（checker.html）がその不整合を避けら
+    # れるよう、メタが持つ日付をそのまま別キーとして渡す。metaが無い/取得に
+    # 失敗した場合はNoneのままとし、payloadにはキー自体を入れない
+    # （呼び出し側でif文により省く）。
+    price_session_as_of = (price_session_meta or {}).get("as_of_date")
     stock_actions_by_code = stock_actions_by_code or {}
     fiscal_by_code = fiscal_by_code or {}
     calendar_by_code = calendar_by_code or {}
@@ -1954,6 +1962,8 @@ def create_database(
                     # フロント側でラベルに変換する想定（checker.html参照）。
                     payload["dailyPricesUpdated"] = prices_updated or None
                     payload["dailyPricesSession"] = price_session
+                    if price_session_as_of:
+                        payload["dailyPricesAsOf"] = price_session_as_of
                 if daily_yield is not None:
                     payload["dividendYield"] = daily_yield
                 elif currently_unpaid:

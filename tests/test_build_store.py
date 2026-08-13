@@ -2302,3 +2302,93 @@ class PriceSessionMetaTest(unittest.TestCase):
                 )
         self.assertEqual(payload["dailyPricesSession"], "afternoon_close")
         self.assertEqual(payload["dailyPricesUpdated"], "2026/08/13 15:36:00")
+        self.assertNotIn("dailyPricesAsOf", payload)
+
+    def test_create_database_adds_daily_prices_as_of_from_meta(self) -> None:
+        """metaが取得できた場合、as_of_dateがdailyPricesAsOfとしてpayloadに入ること。"""
+        financials = [
+            {
+                "code": "9999",
+                "name": "テスト銘柄",
+                "dividendPerShare": {"2026": 20.0},
+            }
+        ]
+        meta = {
+            "session": "morning_open",
+            "session_label": "前場寄付",
+            "as_of_date": "2026-08-13",
+            "updated_at": "2026/08/13 09:06:00",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            with mock.patch.object(
+                build_store,
+                "load_daily_prices",
+                return_value=({"9999": 1000.0}, {"9999": 20.0}, "2026/08/13 09:06:00"),
+            ), mock.patch.object(
+                build_store,
+                "load_price_session_meta",
+                return_value=meta,
+            ):
+                build_store.create_database(
+                    path,
+                    financials,
+                    {},
+                    {},
+                    {},
+                    [Path("f"), Path("s"), Path("t"), Path("fc")],
+                    "https://raw.githubusercontent.com/sayonnsann/kouhaitou-db/main/data/database.csv",
+                    {},
+                    Path("stock_actions.json"),
+                )
+            with sqlite3.connect(path) as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload FROM stocks WHERE code='9999'"
+                    ).fetchone()[0]
+                )
+        self.assertEqual(payload["dailyPricesSession"], "morning_open")
+        self.assertEqual(payload["dailyPricesAsOf"], "2026-08-13")
+
+    def test_create_database_omits_daily_prices_as_of_when_meta_missing(self) -> None:
+        """metaが取得できない場合（curl失敗等）、dailyPricesAsOfのキー自体が
+        payloadに入らないこと。既存のdailyPricesUpdated/dailyPricesSessionの
+        フォールバック挙動は変わらない。"""
+        financials = [
+            {
+                "code": "9999",
+                "name": "テスト銘柄",
+                "dividendPerShare": {"2026": 20.0},
+            }
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            with mock.patch.object(
+                build_store,
+                "load_daily_prices",
+                return_value=({"9999": 1000.0}, {"9999": 20.0}, "2026/08/13 09:06:00"),
+            ), mock.patch.object(
+                build_store,
+                "load_price_session_meta",
+                return_value=None,
+            ):
+                build_store.create_database(
+                    path,
+                    financials,
+                    {},
+                    {},
+                    {},
+                    [Path("f"), Path("s"), Path("t"), Path("fc")],
+                    "https://raw.githubusercontent.com/sayonnsann/kouhaitou-db/main/data/database.csv",
+                    {},
+                    Path("stock_actions.json"),
+                )
+            with sqlite3.connect(path) as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload FROM stocks WHERE code='9999'"
+                    ).fetchone()[0]
+                )
+        self.assertEqual(payload["dailyPricesSession"], "afternoon_close")
+        self.assertEqual(payload["dailyPricesUpdated"], "2026/08/13 09:06:00")
+        self.assertNotIn("dailyPricesAsOf", payload)

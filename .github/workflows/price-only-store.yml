@@ -1,0 +1,250 @@
+name: 配当チェッカーDBの株価のみ更新（1日2回）
+
+# 実行タイミング（kouhaitou-db側の株価のみ更新ワークフローの後を狙う）:
+#   - JST 9:30頃（前場寄付の直後・kouhaitou-db側の9:05頃実行の後）
+#   - JST 16:00頃（後場引けの後・kouhaitou-db側の15:30頃実行の後）
+#   - GitHubの Actions 画面から手動でも実行できる(workflow_dispatch)
+#
+# 毎朝7:00(JST)の daily-store.yml（配当予想の取得・全データの日次更新）とは別の
+# 軽量ワークフロー。scripts/fetch_forecasts.py（edinetdb.jp APIの無料枠）は
+# 呼ばない。stocks.sqlite をフルビルドし直してFTPSへ配信するが、入力は
+# 「株価だけ変わったもの」として扱う（配当・決算等のデータソースはFTPSの
+# 最新版をそのまま使う。build_store.py のビルド自体は数秒で終わる）。
+#
+# jsDelivrの@main指定は最大12時間キャッシュされるため、kouhaitou-db側のpurgeが
+# 遅延・失敗した場合に古い株価を掴む恐れがある。ここでは
+# raw.githubusercontent.com（数分程度のキャッシュ）から直接読むことで回避する
+# （build_store.py --prices-no-cache）。それでもCSVヘッダの最終更新日時が
+# 古すぎる場合は、ビルド中に ::warning:: が出る（check_price_freshness）。
+
+on:
+  schedule:
+    # UTC 0:30 = JST 09:30（前場寄付の直後を狙う）
+    - cron: "30 0 * * *"
+    # UTC 7:00 = JST 16:00（後場引けの後を狙う）
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  # 日次フル更新(daily-store.yml)・単発更新(refresh-one.yml)と同じグループに
+  # 参加させ、FTPS上のstocks.sqlite書き換えが競合しないようにする。
+  group: daily-dividend-store
+  cancel-in-progress: false
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    # 株価だけの反映なので、日次フル更新(30分)より短い上限で十分。
+    timeout-minutes: 15
+    env:
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASS: ${{ secrets.FTP_PASS }}
+      FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - name: lftpをインストール
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: 依存ライブラリをインストール
+        run: python -m pip install --disable-pip-version-check -r scripts/requirements.txt
+
+      - name: 外部由来データがリポジトリに入っていないか確認
+        shell: bash
+        run: |
+          set -euo pipefail
+          # daily-store.ymlと同じ安全確認。公開してよいのはEDINET原本から作った
+          # 2次資料まで。以下は外部サイト由来の値そのものを含むので、Publicの
+          # このリポジトリには絶対に入れない。
+          tracked=0
+          for path in \
+            data/fiscal_dividends.json \
+            data/haitoukin_fills.json \
+            data/dividends.json \
+            data/calendar_dividends_frozen.json
+          do
+            if git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
+              echo "::error::${path} がリポジトリに入っています。外部サイト由来のデータをPublicリポジトリに置くことはできません。git rm --cached で外してください。"
+              tracked=1
+            fi
+          done
+          if [[ "$tracked" -ne 0 ]]; then
+            exit 1
+          fi
+          echo "外部由来データはリポジトリに入っていません。"
+
+      - name: 非公開ファイルの一時パスを設定
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SQLITE_FILE=${RUNNER_TEMP}/stocks.sqlite" >> "$GITHUB_ENV"
+          echo "FISCAL_FILE=${RUNNER_TEMP}/fiscal_dividends.json" >> "$GITHUB_ENV"
+          echo "CALENDAR_FILE=${RUNNER_TEMP}/calendar_dividends_frozen.json" >> "$GITHUB_ENV"
+          echo "STATE_FILE=${RUNNER_TEMP}/forecasts_state.json" >> "$GITHUB_ENV"
+
+      - name: FTPS設定を検証
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in FTP_HOST FTP_USER FTP_PASS FTP_REMOTE_DIR; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Secret ${name} が未設定です。"
+              exit 1
+            fi
+          done
+          if [[ "$FTP_HOST" == *"://"* || "$FTP_HOST" == */* ]]; then
+            echo "::error::FTP_HOST はホスト名だけを設定してください。"
+            exit 1
+          fi
+          if [[ "$FTP_REMOTE_DIR" != /* ]]; then
+            echo "::error::FTP_REMOTE_DIR は / から始めてください。"
+            exit 1
+          fi
+
+      - name: 予想stateをFTPSから取得（読み取り専用。書き戻さない）
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          state_url="ftp://${FTP_HOST}${remote_dir}/forecasts_state.json"
+          if curl \
+            --ssl-reqd \
+            --fail \
+            --silent \
+            --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$STATE_FILE" \
+            "$state_url"; then
+            echo "既存の予想stateを取得しました。"
+          else
+            status=$?
+            if [[ "$status" -eq 78 ]]; then
+              rm -f "$STATE_FILE"
+              echo "予想stateがまだ無いため空の状態から開始します。"
+            else
+              echo "::error::予想stateのFTPS取得に失敗しました（curl終了コード ${status}）。"
+              exit "$status"
+            fi
+          fi
+
+      - name: 事業年度の配当系列をFTPSから取得
+        shell: bash
+        run: |
+          set -euo pipefail
+          # このファイルはリポジトリに置けない（外部サイト由来のデータを含み、
+          # このリポジトリはPublicのため）。ConoHaの非公開dataディレクトリから
+          # 実行のたびに取ってきて、ランナーの一時領域だけで使う。
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          curl \
+            --ssl-reqd \
+            --fail \
+            --silent \
+            --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$FISCAL_FILE" \
+            "ftp://${FTP_HOST}${remote_dir}/fiscal_dividends.json"
+          python - <<'PY'
+          import json
+          import os
+          path = os.environ["FISCAL_FILE"]
+          with open(path, encoding="utf-8") as source:
+              document = json.load(source)
+          if not isinstance(document, dict) or len(document) < 3000:
+              raise SystemExit(
+                  f"事業年度の配当系列が不足しています（{type(document).__name__}, "
+                  f"{len(document) if isinstance(document, dict) else 0}銘柄）"
+              )
+          print(f"事業年度の配当系列を取得しました: {len(document):,}銘柄")
+          PY
+
+      - name: 暦年の凍結スナップショットをFTPSから取得
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 無くてもビルドは通る（該当14銘柄のグラフだけが空になる）ので、
+          # 取得に失敗しても止めない。
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          if curl \
+            --ssl-reqd \
+            --fail \
+            --silent \
+            --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$CALENDAR_FILE" \
+            "ftp://${FTP_HOST}${remote_dir}/calendar_dividends_frozen.json"
+          then
+            python - <<'PY'
+          import json
+          import os
+          path = os.environ["CALENDAR_FILE"]
+          with open(path, encoding="utf-8") as source:
+              document = json.load(source)
+          stocks = document.get("stocks") if isinstance(document, dict) else None
+          if not isinstance(stocks, dict) or not stocks:
+              raise SystemExit("凍結スナップショットが空です")
+          print(f"暦年の凍結スナップショットを取得しました: {len(stocks):,}銘柄")
+          PY
+          else
+            echo "::warning::凍結スナップショットを取得できませんでした。該当14銘柄の配当グラフが空になります。"
+            rm -f "$CALENDAR_FILE"
+          fi
+
+      - name: SQLiteストアを構築（株価はキャッシュ回避で取得）
+        run: >-
+          python scripts/build_store.py
+          --forecasts "$STATE_FILE"
+          --fiscal-dividends "$FISCAL_FILE"
+          --calendar-dividends "$CALENDAR_FILE"
+          --output "$SQLITE_FILE"
+          --prices-no-cache
+
+      - name: SQLiteをFTPSへ原子的に反映
+        id: publish_store
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
+                put -O ${remote_dir}/ \"$SQLITE_FILE\" -o stocks.sqlite.new; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          # 実サイズ検証（申告ではなく現物を確認）
+          local_size=$(wc -c < "$SQLITE_FILE" | tr -d ' ')
+          remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
+            "ftp://${FTP_HOST}${remote_dir}/stocks.sqlite.new" | awk '/Content-Length/ {print $2}' | tr -d '\r')
+          if [ "$local_size" != "$remote_size" ]; then
+            echo "::error::stocks.sqlite のアップロード検証に失敗（local=$local_size remote=$remote_size）"
+            exit 1
+          fi
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; \
+                rm -f ${remote_dir}/stocks.sqlite.bak; \
+                mv ${remote_dir}/stocks.sqlite ${remote_dir}/stocks.sqlite.bak || true; \
+                mv ${remote_dir}/stocks.sqlite.new ${remote_dir}/stocks.sqlite; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          echo "stocks.sqlite を検証つきで差し替えました（$local_size bytes）"
+
+      - name: 分割補正のフォールバックを通知
+        if: ${{ always() && steps.publish_store.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/check_split_fallback.py "$SQLITE_FILE"
+
+      - name: 完了
+        run: echo "配当チェッカーDBの株価のみ更新が完了しました。"

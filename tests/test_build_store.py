@@ -2183,3 +2183,122 @@ class NoYahooDependencyTest(unittest.TestCase):
         for name in ("build_store.py", "fetch_forecasts.py"):
             source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
             self.assertNotIn('"--dividends"', source, name)
+
+
+class PriceFreshnessTest(unittest.TestCase):
+    """株価CSVヘッダの最終更新日時に対する鮮度チェック（軽量ワークフロー用）。"""
+
+    def test_fresh_timestamp_does_not_warn(self) -> None:
+        now = build_store.datetime(2026, 8, 13, 9, 10, tzinfo=build_store.JST)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            build_store.check_price_freshness("2026/08/13 09:06:00", now=now)
+        self.assertEqual(output.getvalue(), "")
+
+    def test_stale_timestamp_warns_without_raising(self) -> None:
+        now = build_store.datetime(2026, 8, 13, 15, 30, tzinfo=build_store.JST)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            build_store.check_price_freshness("2026/08/13 06:00:00", now=now)
+        self.assertIn("::warning::", output.getvalue())
+        self.assertIn("日次株価CSVの最終更新日時が古い", output.getvalue())
+
+    def test_unparseable_timestamp_warns(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            build_store.check_price_freshness("not-a-date")
+        self.assertIn("::warning::", output.getvalue())
+        self.assertIn("解釈できません", output.getvalue())
+
+    def test_empty_timestamp_warns(self) -> None:
+        output = io.StringIO()
+        with redirect_stdout(output):
+            build_store.check_price_freshness("")
+        self.assertIn("::warning::", output.getvalue())
+
+
+class PriceSessionMetaTest(unittest.TestCase):
+    """kouhaitou-dbのprice_update_meta.json（前場寄付/後場引けの識別）を読む処理。"""
+
+    def test_meta_url_is_derived_from_database_csv_url(self) -> None:
+        url = build_store._price_session_meta_url(
+            "https://raw.githubusercontent.com/sayonnsann/kouhaitou-db/main/data/database.csv"
+        )
+        self.assertEqual(
+            url,
+            "https://raw.githubusercontent.com/sayonnsann/kouhaitou-db/main/data/price_update_meta.json",
+        )
+
+    def test_meta_url_is_empty_for_unexpected_suffix(self) -> None:
+        self.assertEqual(build_store._price_session_meta_url("fixture.csv"), "")
+
+    def test_load_price_session_meta_returns_none_for_empty_url(self) -> None:
+        self.assertIsNone(build_store.load_price_session_meta(""))
+
+    def test_load_price_session_meta_parses_curl_output(self) -> None:
+        payload = {
+            "session": "morning_open",
+            "session_label": "前場寄付",
+            "as_of_date": "2026-08-13",
+            "updated_at": "2026/08/13 09:06:00",
+        }
+        completed = subprocess.CompletedProcess(
+            args=["curl"], returncode=0, stdout=json.dumps(payload).encode("utf-8")
+        )
+        with mock.patch.object(subprocess, "run", return_value=completed):
+            result = build_store.load_price_session_meta("https://example.invalid/meta.json")
+        self.assertEqual(result, payload)
+
+    def test_load_price_session_meta_returns_none_on_curl_failure(self) -> None:
+        with mock.patch.object(
+            subprocess,
+            "run",
+            side_effect=subprocess.CalledProcessError(22, ["curl"]),
+        ):
+            result = build_store.load_price_session_meta("https://example.invalid/meta.json")
+        self.assertIsNone(result)
+
+    def test_load_price_session_meta_returns_none_on_broken_json(self) -> None:
+        completed = subprocess.CompletedProcess(
+            args=["curl"], returncode=0, stdout=b"not json"
+        )
+        with mock.patch.object(subprocess, "run", return_value=completed):
+            result = build_store.load_price_session_meta("https://example.invalid/meta.json")
+        self.assertIsNone(result)
+
+    def test_create_database_falls_back_to_afternoon_close_without_meta(self) -> None:
+        """prices_url が database.csv で終わらないテスト用フィクスチャでは、
+        メタ取得がスキップされ afternoon_close にフォールバックすること。"""
+        financials = [
+            {
+                "code": "9999",
+                "name": "テスト銘柄",
+                "dividendPerShare": {"2026": 20.0},
+            }
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "store.sqlite"
+            with mock.patch.object(
+                build_store,
+                "load_daily_prices",
+                return_value=({"9999": 1000.0}, {"9999": 20.0}, "2026/08/13 15:36:00"),
+            ):
+                build_store.create_database(
+                    path,
+                    financials,
+                    {},
+                    {},
+                    {},
+                    [Path("f"), Path("s"), Path("t"), Path("fc")],
+                    "fixture.csv",
+                    {},
+                    Path("stock_actions.json"),
+                )
+            with sqlite3.connect(path) as connection:
+                payload = json.loads(
+                    connection.execute(
+                        "SELECT payload FROM stocks WHERE code='9999'"
+                    ).fetchone()[0]
+                )
+        self.assertEqual(payload["dailyPricesSession"], "afternoon_close")
+        self.assertEqual(payload["dailyPricesUpdated"], "2026/08/13 15:36:00")

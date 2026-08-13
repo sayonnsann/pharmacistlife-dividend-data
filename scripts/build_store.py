@@ -37,7 +37,18 @@ DAILY_PRICE_CSV_URL = (
     "https://cdn.jsdelivr.net/gh/sayonnsann/"
     "kouhaitou-db@main/data/database.csv"
 )
+# 株価だけを1日2回反映する軽量ワークフロー用。jsDelivrの@main指定は最大12時間
+# キャッシュされるため、purgeに頼らず raw.githubusercontent.com（数分程度の
+# 短いキャッシュ）から直接読む。列構成・フォーマットはjsDelivr版と同一。
+DAILY_PRICE_CSV_URL_NO_CACHE = (
+    "https://raw.githubusercontent.com/sayonnsann/"
+    "kouhaitou-db/main/data/database.csv"
+)
 JST = ZoneInfo("Asia/Tokyo")
+# kouhaitou-db側のCSVヘッダ（最終更新日時）がこれより古い場合、鮮度警告を出す。
+# 更新ジョブの失敗やjsDelivr/raw.githubusercontentのキャッシュ滞留に人が気づける
+# ようにするための健全性チェックで、ビルド自体は止めない。
+PRICE_FRESHNESS_WARN_AFTER = timedelta(hours=3)
 
 
 def parse_args() -> argparse.Namespace:
@@ -73,7 +84,20 @@ def parse_args() -> argparse.Namespace:
         default=DAILY_PRICE_CSV_URL,
         help="日次株価CSV URL（file://を含むcurl対応URLも可）",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "--prices-no-cache",
+        action="store_true",
+        help=(
+            "株価CSVをjsDelivr(@main、最大12時間キャッシュ)ではなく"
+            "raw.githubusercontent.com(数分程度のキャッシュ)から取得する。"
+            "株価だけを1日複数回反映する軽量ワークフロー用。"
+            "--prices-url を明示指定した場合はそちらを優先する。"
+        ),
+    )
+    args = parser.parse_args()
+    if args.prices_no_cache and args.prices_url == DAILY_PRICE_CSV_URL:
+        args.prices_url = DAILY_PRICE_CSV_URL_NO_CACHE
+    return args
 
 
 def load_json(path: Path, expected_type: type) -> Any:
@@ -1390,6 +1414,45 @@ def json_text(value: Any) -> str:
     )
 
 
+def _parse_price_updated(updated: str) -> datetime | None:
+    """kouhaitou-db CSVヘッダの日時文字列（"YYYY/MM/DD HH:MM:SS", JST）をdatetimeへ。
+
+    解釈できない場合は None を返す。
+    """
+    updated = (updated or "").strip()
+    if not updated:
+        return None
+    try:
+        naive = datetime.strptime(updated, "%Y/%m/%d %H:%M:%S")
+    except ValueError:
+        return None
+    return naive.replace(tzinfo=JST)
+
+
+def check_price_freshness(
+    updated: str, *, now: datetime | None = None
+) -> None:
+    """日次株価CSVヘッダの最終更新日時が古すぎる場合、::warning:: を出す。
+
+    kouhaitou-db側の更新ジョブが止まっている、あるいはCDNキャッシュが
+    想定より長く残っているケースに人が気づけるようにするための健全性
+    チェック。ビルド自体は止めない（例外を投げない）。
+    """
+    now = now or datetime.now(JST)
+    parsed = _parse_price_updated(updated)
+    if parsed is None:
+        print(f"::warning::日次株価CSVの最終更新日時を解釈できません: {updated!r}")
+        return
+    age = now - parsed
+    if age > PRICE_FRESHNESS_WARN_AFTER:
+        hours = age.total_seconds() / 3600
+        print(
+            "::warning::日次株価CSVの最終更新日時が古い可能性があります"
+            f"（{updated}、約{hours:.1f}時間前）。"
+            "kouhaitou-db側の株価更新ジョブとCDNキャッシュの状況を確認してください。"
+        )
+
+
 def load_daily_prices(url: str) -> tuple[dict[str, float], dict[str, float], str]:
     """kouhaitou-dbの19列CSVを取得し、前日終値と年間配当(分割調整済み)を返す。"""
     try:
@@ -1444,7 +1507,54 @@ def load_daily_prices(url: str) -> tuple[dict[str, float], dict[str, float], str
     if not prices:
         raise ValueError("日次株価CSVから有効な株価を1件も取得できませんでした")
     print(f"日次株価: {len(prices):,}銘柄（更新 {updated or '不明'}）")
+    check_price_freshness(updated)
     return prices, daily_dividends, updated
+
+
+def _price_session_meta_url(prices_url: str) -> str:
+    """database.csv のURLから、隣にある price_update_meta.json のURLを組み立てる。
+
+    kouhaitou-db側の株価のみ更新ワークフローが書き出す補助ファイル。
+    URLの形が想定と違う（database.csvで終わらない）場合は空文字を返し、
+    呼び出し側で取得をスキップする。
+    """
+    suffix = "database.csv"
+    if not prices_url.endswith(suffix):
+        return ""
+    return prices_url[: -len(suffix)] + "price_update_meta.json"
+
+
+def load_price_session_meta(url: str) -> dict[str, Any] | None:
+    """kouhaitou-dbの price_update_meta.json を取得する。
+
+    株価のみ更新ワークフロー導入前のkouhaitou-db（ファイルが無い）、
+    ネットワーク不調、JSONとして壊れている等、どの理由でも失敗を
+    ビルド停止にはしない（Noneを返し、呼び出し側でフォールバックする）。
+    """
+    if not url:
+        return None
+    try:
+        completed = subprocess.run(
+            [
+                "curl",
+                "--fail",
+                "--silent",
+                "--show-error",
+                "--location",
+                "--max-time",
+                "30",
+                url,
+            ],
+            capture_output=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    try:
+        data = json.loads(completed.stdout.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def forecast_values(
@@ -1498,6 +1608,14 @@ def create_database(
     if skipped_financials:
         raise ValueError("all_financialsに4桁英数でないコードがあります")
     daily_prices, daily_dividends, prices_updated = load_daily_prices(prices_url)
+    # kouhaitou-dbが株価のみ更新ワークフロー（前場寄付/後場引けの1日2回）を
+    # 導入している場合、隣にある price_update_meta.json からセッション名を読む。
+    # 無い/取れない場合は「afternoon_close」（従来の1日1回更新=終値相当）に
+    # フォールバックする。
+    price_session_meta = load_price_session_meta(_price_session_meta_url(prices_url))
+    price_session = (
+        (price_session_meta or {}).get("session") or "afternoon_close"
+    )
     stock_actions_by_code = stock_actions_by_code or {}
     fiscal_by_code = fiscal_by_code or {}
     calendar_by_code = calendar_by_code or {}
@@ -1831,6 +1949,11 @@ def create_database(
                     )
                 if daily_price:
                     payload["price"] = daily_price
+                    # 表示側が「2026年8月13日 前場寄付時点」のように出すための生データ。
+                    # 日時の直書き表記は取引時間の変更に弱いため、セッション名は
+                    # フロント側でラベルに変換する想定（checker.html参照）。
+                    payload["dailyPricesUpdated"] = prices_updated or None
+                    payload["dailyPricesSession"] = price_session
                 if daily_yield is not None:
                     payload["dividendYield"] = daily_yield
                 elif currently_unpaid:

@@ -82,20 +82,33 @@
   // セッション種別(dailyPricesSession: "morning_open"=前場寄付 / "afternoon_close"=
   // 後場引け)はAPI側のpayloadに入る値をそのまま使う（データ由来。株価取得の
   // 実装は別PRで、朝=当日始値・夕方=終値の1日2回更新に対応済み）。
-  // その値が無い（古いデータ等）場合は、時刻を推測しようとはせず、
-  // 日時のみのフォールバック表示にする。
+  //
+  // 日付部分はdailyPricesUpdated（CSVヘッダの更新日時）ではなくdailyPricesAsOf
+  // （「その株価データが実際にいつ時点のものか」を表す日付。price_update_meta.json
+  // 由来）を優先して使う。朝6:00の既存フル更新はprice_update_meta.jsonを更新しない
+  // ため、6:00〜7:00頃はdailyPricesUpdated(今日)とdailyPricesSession(前日のまま)の
+  // 組み合わせが噛み合わず、誤ったラベル（例:「今日の日付＋前日の前場寄付」）を
+  // 組み立ててしまうおそれがある。dailyPricesAsOfが無い場合はこの誤表示を避ける
+  // ため、日付＋セッション名の組み合わせ表示は使わず、日時のみのフォールバック
+  // 表示にする。
   var PRICE_SESSION_LABELS={morning_open:"前場寄付時点",afternoon_close:"後場引け時点"};
   function parseUpdatedTimestamp(raw){
     var m=/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})[ T](\d{1,2}):(\d{2})/.exec(String(raw||""));
     if(!m)return null;
     return{year:+m[1],month:+m[2],day:+m[3],hour:+m[4],minute:+m[5]}
   }
+  function parseAsOfDate(raw){
+    var m=/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})/.exec(String(raw||""));
+    if(!m)return null;
+    return{year:+m[1],month:+m[2],day:+m[3]}
+  }
   function priceUpdateNote(r){
     var raw=r&&r.dailyPricesUpdated,parsed=parseUpdatedTimestamp(raw);
     if(!parsed)return"";
-    var dateLabel=parsed.year+"年"+parsed.month+"月"+parsed.day+"日";
     var sessionLabel=r&&r.dailyPricesSession&&PRICE_SESSION_LABELS[r.dailyPricesSession];
-    if(sessionLabel)return dateLabel+" "+sessionLabel;
+    var asOf=parseAsOfDate(r&&r.dailyPricesAsOf);
+    if(sessionLabel&&asOf)return asOf.year+"年"+asOf.month+"月"+asOf.day+"日 "+sessionLabel;
+    var dateLabel=parsed.year+"年"+parsed.month+"月"+parsed.day+"日";
     return dateLabel+" "+parsed.hour+":"+(parsed.minute<10?"0":"")+parsed.minute+"頃更新"
   }
   function stat(label,value,title,note){return '<div class="dvc-stat"'+(title?' title="'+esc(title)+'"':"")+'><span class="dvc-stat-label">'+esc(label)+'</span><span class="dvc-stat-value">'+esc(value)+'</span>'+(note?'<span class="dvc-stat-note">'+esc(note)+'</span>':"")+'</div>'}

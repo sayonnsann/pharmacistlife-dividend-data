@@ -792,6 +792,29 @@ class DisplayDerivedMetricsTest(unittest.TestCase):
         # 総額は2年連続増配だが、普通配当だけでは2024年に減配。
         self.assertEqual(value, 0)
 
+    def test_streak_no_decrease_base_replaces_only_breakdown_years(self) -> None:
+        value = build_store.streak_no_decrease_base_from_breakdown(
+            {2022: 100.0, 2023: 120.0, 2024: 150.0},
+            {"2024": {"base": 100.0, "special": 50.0}},
+        )
+        # 総額は2年連続で非減配だが、普通配当だけでは2024年に減配（120→100）。
+        self.assertEqual(value, 0)
+
+    def test_streak_no_decrease_base_allows_flat_years(self) -> None:
+        value = build_store.streak_no_decrease_base_from_breakdown(
+            {2022: 100.0, 2023: 120.0, 2024: 150.0},
+            {"2024": {"base": 120.0, "special": 30.0}},
+        )
+        # 普通配当だけだと2023→2024が横ばい(120→120)。非減配は横ばいを許すので継続。
+        self.assertEqual(value, 2)
+
+    def test_streak_no_decrease_base_is_none_without_breakdown(self) -> None:
+        self.assertIsNone(
+            build_store.streak_no_decrease_base_from_breakdown(
+                {2022: 100.0, 2023: 120.0}, None
+            )
+        )
+
     def test_payload_contains_derived_display_metrics(self) -> None:
         financials = [
             {
@@ -861,6 +884,7 @@ class DisplayDerivedMetricsTest(unittest.TestCase):
 
         self.assertEqual(payload["roeYearEnd"], 10.0)
         self.assertEqual(payload["streakBase"], 0)
+        self.assertEqual(payload["streakNoDecreaseBase"], 0)
 
 
 class FiscalDividendLoaderTest(unittest.TestCase):

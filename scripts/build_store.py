@@ -464,6 +464,21 @@ def streak_base_from_breakdown(
     return fiscal_dividend_stats(base_series)["streakIncrease"]
 
 
+def streak_no_decrease_base_from_breakdown(
+    series: dict[int, float], breakdown: dict[str, Any]
+) -> int | None:
+    """普通配当だけの系列で、連続非減配年数（実質累進配当）を再計算する。
+
+    ``streak_base_from_breakdown``（実質連続増配）と同じ考え方・同じbase系列を
+    使い、増配ではなく非減配を数える版。内訳が無い銘柄はNoneのまま
+    （画面側は全額ベースの streakNonDecrease と同値扱いにしてカードを隠す）。
+    """
+    if not series or not isinstance(breakdown, dict):
+        return None
+    base_series = base_dividend_series(series, breakdown)
+    return fiscal_dividend_stats(base_series)["streakNonDecrease"]
+
+
 def _crosses_break(
     base_year: int, latest_year: int, break_years: list[int] | tuple[int, ...]
 ) -> bool:
@@ -1828,6 +1843,11 @@ def create_database(
                     payload["dividendBreakdown"] = breakdown_entry
                     payload["streakBase"] = streak_base_from_breakdown(
                         series, breakdown_entry
+                    )
+                    payload["streakNoDecreaseBase"] = (
+                        streak_no_decrease_base_from_breakdown(
+                            series, breakdown_entry
+                        )
                     )
                 if daily_price:
                     payload["price"] = daily_price

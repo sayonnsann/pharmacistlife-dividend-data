@@ -251,7 +251,7 @@ edinetdb.jpの無料枠は1日100リクエストなので、既定では95社だ
 止めたいときは、`daily-store.yml` の `DVC_EVENT_SLOTS` を `0` にすると
 イベントAPIを一切呼ばず、従来どおりの巡回だけになります。
 
-### 分割・併合の「要確認リスト」（フェーズ1・準備中／daily-store.ymlには未組み込み）
+### 分割・併合の「要確認リスト」（稼働中）
 
 イベント枠には1日最大31件+持ち越し上限5回/14日という制約があり、決算月は開示が
 集中して取りこぼす銘柄が出ます。取りこぼしに人が気づけるよう、
@@ -260,13 +260,20 @@ edinetdb.jpの無料枠は1日100リクエストなので、既定では95社だ
 `forecasts_state.json`・`data/fiscal_dividends.json` という、日次更新が既に
 取得・生成しているファイルだけを読みます。
 
+`.github/workflows/ir-review-queue.yml` が毎日22:40 UTC（=翌07:40 JST、
+daily-store.yml完了後）に自動実行します（`workflow_dispatch` で手動実行も
+可能）。daily-store.yml は `permissions: contents: read` でコミットできない
+ため、コミット用に別ワークフローとして分離してあります。FTPS取得に失敗しても
+（初回実行でstateが無い場合も含め）ジョブ自体は失敗させず、該当する入口を
+その日だけスキップして warning を出します。
+
 入口は3つ（優先順）です。
 
 1. **主入口 `api_overflow`**: イベント待ち行列（`forecasts_state.json` の
    `events.pending`）で、持ち越し試行回数・経過日数が上限に近い、または
    前回スナップショットには居たのに今回はpending/seenどちらにも居ない
    （＝上限を超えて脱落した）分割・併合イベント。`data/ir_sites.json` /
-   `data/ir_sites_candidates.json`（現状は未整備。整備が前提）から公式IRの
+   `data/ir_sites_candidates.json`（このリポジトリに同梱済み）から公式IRの
    URLを引いて添える。URLが無い銘柄は `irUrl: null` として記録するだけで、
    処理は止めない。
 2. **副入口 `edinetdb_event`**: まだ滞留していない、安全圏の分割・併合イベント。
@@ -280,24 +287,17 @@ edinetdb.jpの無料枠は1日100リクエストなので、既定では95社だ
 
 各エントリは `{code, name, trigger, detail, detectedAt, status}` で、
 `code+trigger+イベントの識別子` 単位で重複排除されます。`status` は
-追加時に `"pending"` で、以後このスクリプトは書き換えません。週次で
-人（Codex収集→Claude検証→台帳登録）が消化し、`status` を更新します。
-消化の手順は `edinet-direct/TASK_BATCH_STATUS.md` のバッチ方式に準じます
-（登録先は `data/stock_actions_manual.json`）。
+追加時に `"pending"` で、以後このスクリプトは書き換えません。**消化
+（`status` の更新）は週次でオーナー側の統括セッションが行います**
+（Codex収集→Claude検証→台帳登録）。手順は
+`edinet-direct/TASK_BATCH_STATUS.md` のバッチ方式に準じます（登録先は
+`data/stock_actions_manual.json`）。
 
 手動実行:
 
 ```bash
 python3 scripts/build_ir_review_queue.py
 ```
-
-**daily-store.ymlへの組み込みは、稼働判断待ちのためコメントアウトした
-状態で用意してあります**（該当箇所のコメントを外すだけで有効化できます）。
-組み込み前に、`data/ir_sites.json` / `data/ir_sites_candidates.json` を
-このリポジトリへ用意する手当て（`fiscal_dividends.json` と同様、ConoHaの
-非公開ディレクトリからのFTPS取得を追加する等）が別途必要です。未整備の
-まま有効化しても動作は止まりませんが、`api_overflow` の `irUrl` が
-全銘柄で `null` になります。
 
 ### 特定の銘柄を今すぐ取り直す
 

@@ -1,0 +1,175 @@
+name: 分割・併合の要確認リストを更新
+
+# 目的: イベント枠(1日最大31件+持ち越し上限5回/14日)を超えて取りこぼした
+# 分割・併合を、人が週次で気づけるように data/pending_ir_review.json へ
+# 積み増す(フェーズ1)。scripts/build_ir_review_queue.py の実装・詳細は
+# README.md「分割・併合の『要確認リスト』」を参照。
+#
+# 新規のEDINETDB APIアクセスはしない。読むのは daily-store.yml が既に
+# 取得・生成している forecasts_state.json / data/fiscal_dividends.json
+# （どちらもFTPS経由で読むだけ。書き戻さない）。
+#
+# daily-store.yml とは意図的に別ワークフローにしてある
+# （daily-store.yml は permissions: contents: read でcommitできないため）。
+# 別ファイルなので、このワークフローが失敗しても daily-store.yml や他の
+# ワークフローの実行には影響しない。FTPS取得の失敗も、初回実行(state無し)
+# や一時的な通信エラーでこのジョブ自体を失敗させたくないため、可能な限り
+# ::warning:: に留めて処理を続行する(要確認リストが1日更新されないだけで、
+# 翌日また試みる)。
+
+on:
+  schedule:
+    # daily-store.yml(22:00 UTC = 07:00 JST完了目安)の後に走らせる。
+    # 22:40 UTC = 翌07:40 JST。
+    - cron: "40 22 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ir-review-queue
+  cancel-in-progress: false
+
+jobs:
+  update-queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASS: ${{ secrets.FTP_PASS }}
+      FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+        # build_ir_review_queue.py は標準ライブラリのみで動く(依存パッケージなし)ため、
+        # scripts/requirements.txt のインストールは行わない。
+
+      - name: FTPS設定を検証
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in FTP_HOST FTP_USER FTP_PASS FTP_REMOTE_DIR; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Secret ${name} が未設定です。"
+              exit 1
+            fi
+          done
+          if [[ "$FTP_HOST" == *"://"* || "$FTP_HOST" == */* ]]; then
+            echo "::error::FTP_HOST はホスト名だけを設定してください。"
+            exit 1
+          fi
+          if [[ "$FTP_REMOTE_DIR" != /* ]]; then
+            echo "::error::FTP_REMOTE_DIR は / から始めてください。"
+            exit 1
+          fi
+          echo "STATE_FILE=${RUNNER_TEMP}/forecasts_state.json" >> "$GITHUB_ENV"
+          echo "FISCAL_FILE=${RUNNER_TEMP}/fiscal_dividends.json" >> "$GITHUB_ENV"
+
+      - name: 予想stateをFTPSから取得
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          state_url="ftp://${FTP_HOST}${remote_dir}/forecasts_state.json"
+          set +e
+          curl \
+            --ssl-reqd \
+            --fail \
+            --silent \
+            --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$STATE_FILE" \
+            "$state_url"
+          status=$?
+          set -e
+          if [[ "$status" -eq 0 ]]; then
+            echo "予想stateを取得しました。"
+          elif [[ "$status" -eq 78 ]]; then
+            rm -f "$STATE_FILE"
+            echo "初回実行: 予想stateがないため、入口1・2(イベント由来)はスキップされます。"
+          else
+            rm -f "$STATE_FILE"
+            echo "::warning::予想stateのFTPS取得に失敗しました(curl終了コード ${status})。入口1・2は今回スキップされます。"
+          fi
+
+      - name: 事業年度の配当系列をFTPSから取得
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          set +e
+          curl \
+            --ssl-reqd \
+            --fail \
+            --silent \
+            --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$FISCAL_FILE" \
+            "ftp://${FTP_HOST}${remote_dir}/fiscal_dividends.json"
+          status=$?
+          set -e
+          if [[ "$status" -ne 0 ]]; then
+            rm -f "$FISCAL_FILE"
+            echo "::warning::事業年度の配当系列のFTPS取得に失敗しました(curl終了コード ${status})。入口3(安全網)は今回スキップされます。"
+          else
+            # 中身がJSONとして読めるか・件数が妥当かまで確認する
+            # (daily-store.ymlの同名ステップと同じ検証)。壊れたファイルで
+            # 走らせると新規発生年の差分検知(入口3)が誤爆するため。
+            if ! python - <<'PY'
+          import json
+          import os
+          import sys
+          path = os.environ["FISCAL_FILE"]
+          try:
+              with open(path, encoding="utf-8") as source:
+                  document = json.load(source)
+          except (OSError, json.JSONDecodeError) as error:
+              print(f"事業年度の配当系列を読めませんでした: {error}", file=sys.stderr)
+              sys.exit(1)
+          if not isinstance(document, dict) or len(document) < 3000:
+              count = len(document) if isinstance(document, dict) else 0
+              print(f"事業年度の配当系列が不足しています({count}銘柄)", file=sys.stderr)
+              sys.exit(1)
+          print(f"事業年度の配当系列を取得しました: {len(document):,}銘柄")
+          PY
+            then
+              rm -f "$FISCAL_FILE"
+              echo "::warning::事業年度の配当系列が不正または不足していたため破棄しました。入口3(安全網)は今回スキップされます。"
+            fi
+          fi
+
+      - name: 分割・併合の要確認リストを更新
+        shell: bash
+        run: |
+          set -euo pipefail
+          # state・fiscal_dividendsのどちらも、無ければスクリプト側が
+          # 該当入口をスキップして続行する(load_json_optionalが存在確認済み)ので、
+          # ここでは存在チェックせずそのまま渡す。
+          python scripts/build_ir_review_queue.py \
+            --state "$STATE_FILE" \
+            --fiscal-dividends "$FISCAL_FILE"
+
+      - name: 変更があれば commit して push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/pending_ir_review.json data/ir_review_snapshot.json
+          if git diff --cached --quiet; then
+            echo "変更なし。commitをスキップします。"
+          else
+            git commit -m "要確認リスト自動更新 ($(date -u '+%Y-%m-%d'))"
+            git push
+          fi
+
+      - name: 完了
+        run: echo "分割・併合の要確認リスト更新が完了しました。"

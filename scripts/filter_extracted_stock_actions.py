@@ -216,6 +216,64 @@ def add_exclusion_metadata(
     return excluded
 
 
+LEGACY_FIELD_RENAMES = {
+    "epsAdjusted": "epsAdjustedByIssuer",
+    "dpsAdjusted": "applyDividendAdjustment",
+}
+
+
+def normalize_legacy_fields(event: dict[str, Any]) -> dict[str, Any]:
+    """台帳(edinet-direct/data/stock_action_ledger.json)の旧フィールド名を、
+    配信側 build_store.py が要求する新フィールド名に直す。
+
+    build_store.py の reject_legacy_split_field_names() は旧名が残っていると
+    ビルドを中断させる（旧名を別名として黙って受け付けない設計）。台帳側は
+    まだ旧名 'epsAdjusted' を使っているため、ここで詰め替えないと月次の
+    自動更新（tools/update_pdd_stock_actions.py）が本番ビルドを壊す。
+    """
+    normalized = dict(event)
+    for legacy_name, new_name in LEGACY_FIELD_RENAMES.items():
+        if legacy_name in normalized:
+            value = normalized.pop(legacy_name)
+            if new_name not in normalized:
+                normalized[new_name] = value
+    # build_store.py は単数形の source（{"url": ...}）を要求するが、台帳の
+    # 自動抽出イベントは複数出典を持つ sources（配列）しか持たない。
+    # build_store.py 側の期待に合わせて、primary種別（無ければ先頭のurl持ち）
+    # から source を組み立てる。
+    if not isinstance(normalized.get("source"), dict):
+        sources = normalized.get("sources")
+        if isinstance(sources, list):
+            candidate = next(
+                (
+                    item
+                    for item in sources
+                    if isinstance(item, dict)
+                    and item.get("kind") == "primary"
+                    and isinstance(item.get("url"), str)
+                    and item["url"].strip()
+                ),
+                None,
+            )
+            if candidate is None:
+                candidate = next(
+                    (
+                        item
+                        for item in sources
+                        if isinstance(item, dict)
+                        and isinstance(item.get("url"), str)
+                        and item["url"].strip()
+                    ),
+                    None,
+                )
+            if candidate is not None:
+                normalized["source"] = {
+                    "url": candidate["url"],
+                    "type": candidate.get("type", candidate.get("kind", "filing")),
+                }
+    return normalized
+
+
 def preserve_existing_excluded(items: Any) -> list[dict[str, Any]]:
     if items is None:
         return []
@@ -225,7 +283,7 @@ def preserve_existing_excluded(items: Any) -> list[dict[str, Any]]:
     for index, item in enumerate(items):
         if not isinstance(item, dict):
             raise ValueError(f"excluded[{index}]がobjectではありません")
-        preserved = dict(item)
+        preserved = normalize_legacy_fields(item)
         if "reasonCode" not in preserved:
             preserved["reasonCode"] = "issuer_mismatch"
         if "reasonCodes" not in preserved:
@@ -276,6 +334,10 @@ def filter_document(
     events = document.get("events")
     if not isinstance(events, list):
         raise ValueError("eventsがarrayではありません")
+    events = [
+        normalize_legacy_fields(event) if isinstance(event, dict) else event
+        for event in events
+    ]
     existing_excluded = preserve_existing_excluded(document.get("excluded"))
     # 月次ジョブは必ず台帳を入力にする。すでに選別済みの成果物を手入力で
     # 再入力した場合は、現在のeventsをスナップショットとして保ち、excluded

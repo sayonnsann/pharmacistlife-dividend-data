@@ -324,5 +324,24 @@ jobs:
           set -euo pipefail
           python scripts/check_split_fallback.py "$SQLITE_FILE"
 
+      # 稼働判断待ち（フェーズ1・準備のみ）: 分割・併合の「要確認リスト」を
+      # forecasts_state.json / data/fiscal_dividends.json から自動蓄積する
+      # scripts/build_ir_review_queue.py。新規のAPI呼び出しはしないので
+      # 既存の巡回・重複取得防止には影響しないが、data/ir_sites.json /
+      # data/ir_sites_candidates.json（IRサイトURLの索引）をこのリポジトリへ
+      # 用意する手当てがまだ無い（README「分割・併合の『要確認リスト』」参照）。
+      # 稼働させる場合は、その手当てをしたうえで下のコメントを外し、
+      # 併せて data/pending_ir_review.json・data/ir_review_snapshot.json を
+      # コミットする手順（このジョブはコミットしない）を決めてから有効化する。
+      #
+      # - name: 分割・併合の要確認リストを更新
+      #   if: ${{ always() && steps.publish_store.outcome == 'success' }}
+      #   shell: bash
+      #   run: |
+      #     set -euo pipefail
+      #     python scripts/build_ir_review_queue.py \
+      #       --state "$STATE_FILE" \
+      #       --fiscal-dividends "$FISCAL_FILE"
+
       - name: 完了
         run: echo "配当チェッカーDBの日次更新が完了しました。"

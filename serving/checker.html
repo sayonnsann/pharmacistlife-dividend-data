@@ -68,7 +68,7 @@
   var API_BASE="/api/api.php";
   var state={data:[],byCode:{},sort:{key:"streak",dir:"desc"},financialByCode:{},sectorStats:{},financialStatus:"loaded",currentCode:"",total:0,searchTimer:null,searchRequest:0,detailRequest:0};
   var BASE_STREAK_TITLE="記念・特別配当を除いた通常配当だけで数えた年数";
-  var SORTABLE_COLUMNS=[{key:"yield",label:"配当利回り"},{key:"forecast_yield",label:"予想利回り"},{key:"streak",label:"連続増配"},{key:"streak_base",label:"実質連続増配",title:BASE_STREAK_TITLE},{key:"streak_nd",label:"連続非減配"},{key:"streak_nd_base",label:"実質累進配当",title:BASE_STREAK_TITLE},{key:"cagr5",label:"5年増配率"}];
+  var SORTABLE_COLUMNS=[{key:"yield",label:"配当利回り"},{key:"forecast_yield",label:"予想利回り"},{key:"streak",label:"連続増配"},{key:"streak_nd",label:"連続非減配"},{key:"streak_base",label:"実質連続増配",title:BASE_STREAK_TITLE},{key:"streak_nd_base",label:"実質連続非減配",title:BASE_STREAK_TITLE},{key:"cagr5",label:"5年増配率"}];
   var COLORS=["#2563eb","#f59e0b","#0891b2","#059669"],SVG_W=620,SVG_H=272,PAD={top:29,right:18,bottom:43,left:62};
 
   function esc(v){return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;")}

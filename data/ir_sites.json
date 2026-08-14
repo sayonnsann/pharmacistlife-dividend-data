@@ -1,0 +1,499 @@
+{
+  "2477": {
+    "name": "手間いらず",
+    "irDomain": "www.temairazu.co.jp",
+    "irTopUrl": "https://www.temairazu.co.jp/",
+    "sampleSourceUrl": "https://www.temairazu.co.jp/pdf/777/ir-news",
+    "confirmedAt": "2026-08-13"
+  },
+  "3191": {
+    "name": "ジョイフル本田",
+    "irDomain": "www.joyfulhonda.co.jp",
+    "irTopUrl": "https://www.joyfulhonda.co.jp/",
+    "sampleSourceUrl": "https://www.joyfulhonda.co.jp/ja/ir/library/result/main/01/teaserItems3/00/linkList/0/link/0279900652606.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3844": {
+    "name": "コムチュア",
+    "irDomain": "www.comture.com",
+    "irTopUrl": "https://www.comture.com/",
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/3844/tdnet/595405/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4452": {
+    "name": "花王",
+    "irDomain": "www.kao.com",
+    "irTopUrl": "https://www.kao.com/",
+    "sampleSourceUrl": "http://www.kao.com/jp/corp_ir/imgs/securities_fy2005_all_01.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4967": {
+    "name": "小林製薬",
+    "irDomain": "www.kobayashi.co.jp",
+    "irTopUrl": "https://www.kobayashi.co.jp/",
+    "sampleSourceUrl": "https://www.kobayashi.co.jp/ir/finance/brief/pdf/9901.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4975": {
+    "name": "JCU",
+    "irDomain": "www.jcu-i.com",
+    "irTopUrl": "https://www.jcu-i.com/",
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/4975/tdnet/494939/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "6200": {
+    "name": "インソース",
+    "irDomain": "www.insource.co.jp",
+    "irTopUrl": "https://www.insource.co.jp/",
+    "sampleSourceUrl": "https://www.insource.co.jp/resource/pdf/ir/16111101.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7164": {
+    "name": "全国保証",
+    "irDomain": "www.zenkoku.co.jp",
+    "irTopUrl": "https://www.zenkoku.co.jp/",
+    "sampleSourceUrl": "https://www.zenkoku.co.jp/ir/stocks/dividend.html",
+    "confirmedAt": "2026-08-13"
+  },
+  "7504": {
+    "name": "高速",
+    "irDomain": "www.kohsoku.com",
+    "irTopUrl": "https://www.kohsoku.com/",
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/7504/yuho_pdf/S1004WS3/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "8113": {
+    "name": "ユニ・チャーム",
+    "irDomain": "www.unicharm.co.jp",
+    "irTopUrl": "https://www.unicharm.co.jp/",
+    "sampleSourceUrl": "https://www.unicharm.co.jp/content/dam/sites/www_unicharm_co_jp/pdf/ir/library/earnings/0503_con.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "1401": {
+    "name": "株式会社エムビーエス",
+    "irDomain": "www.homemakeup.co.jp",
+    "irTopUrl": "https://www.homemakeup.co.jp/",
+    "sampleSourceUrl": "http://web.archive.org/web/20240705060325/https://www.homemakeup.co.jp/pdf/2005/0715_2.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "2585": {
+    "name": "ライフドリンク カンパニー",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/2585/yuho_pdf/S100OKA4/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "2588": {
+    "name": "プレミアムウォーターホールディングス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://pdf.irpocket.com/C2588/Rytt/g765/wFvr.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "296A": {
+    "name": "令和アカウンティング・ホールディングス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/296A/yuho_pdf/S100VYST/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "331A": {
+    "name": "メディックス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS83494/80f49275/3a8d/4591/9ce6/272adf49f310/S100V85E.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3482": {
+    "name": "ロードスターキャピタル",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://data.swcms.net/file/loadstarcapital/dam/jcr:33cbb436-ac49-4ffc-8813-9ab7e741f666/S100CPEH.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3496": {
+    "name": "アズーム",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS03634/4de0ea73/96c7/4ca6/91a9/6d35a933c5bd/S100KEJZ.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3498": {
+    "name": "霞ヶ関キャピタル",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/3498/yuho_pdf/S100HHSS/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3562": {
+    "name": "Ｎｏ．１",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100D25S.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "372A": {
+    "name": "レント",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/372A/yuho_pdf/S100WMBE/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3981": {
+    "name": "ビーグリー",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100COUZ.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3984": {
+    "name": "ユーザーローカル",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/3984/yuho_pdf/S100BFD4/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4012": {
+    "name": "アクシス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS04553/24b8d56b/639f/4e8b/af6a/dea6b522230f/S100L0V9.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4051": {
+    "name": "GMOフィナンシャルゲート",
+    "irDomain": "gmo-fg.com",
+    "irTopUrl": "https://gmo-fg.com/",
+    "sampleSourceUrl": "https://gmo-fg.com/ir/library/20201223_newsrelease_1.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4055": {
+    "name": "ティアンドエスグループ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://pdf.irpocket.com/C4055/uTXp/Jzqp/iFCc.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4058": {
+    "name": "トヨクモ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://toyokumo-ir.viewer.kintoneapp.com/public/file/inline/33953839687a69c2bfc7ea20f8e91bcc8f7aaac5889fcd66b0eeecfb1c5471ea/2021033001310521BF458AFDD540D0921BE7FDD656FED2196",
+    "confirmedAt": "2026-08-13"
+  },
+  "4072": {
+    "name": "電算システムホールディングス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://pdf.irpocket.com/C4072/qlkO/wbf7/UR37.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4433": {
+    "name": "ヒト・コミュニケーションズ・ホールディングス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://data.swcms.net/file/hitocom-hd/dam/jcr:152136a6-2327-4b07-8aa9-80193c927f94/S100HHSP.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4439": {
+    "name": "東名",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/4439/yuho_pdf/S100HHC0/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4495": {
+    "name": "アイキューブドシステムズ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://pdf.irpocket.com/C4495/YDKb/ZaAE/M7yg.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4820": {
+    "name": "株式会社イーエムシステムズ（商号　株式会社ＥＭシステムズ）",
+    "irDomain": "emsystems.co.jp",
+    "irTopUrl": "https://emsystems.co.jp/",
+    "sampleSourceUrl": "https://emsystems.co.jp/ir/financial/ysh18.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "5871": {
+    "name": "ＳＯＬＩＺＥ Ｈｏｌｄｉｎｇｓ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/5871/yuho_pdf/S100VGEQ/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "6037": {
+    "name": "楽待株式会社",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/6037/yuho_pdf/S10064TP/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "6239": {
+    "name": "株式会社ナガオカ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/6239/yuho_pdf/S1005ZU4/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "6532": {
+    "name": "ベイカレント",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100AC3L.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7130": {
+    "name": "ヤマエグループホールディングス",
+    "irDomain": "www.yamaegroup-hd.co.jp",
+    "irTopUrl": "https://www.yamaegroup-hd.co.jp/",
+    "sampleSourceUrl": "https://www.yamaegroup-hd.co.jp/wp/wp-content/themes/yamae2023/assets/pdf/ir/library/securities-report/yghd_yuho01.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7191": {
+    "name": "イントラスト",
+    "irDomain": "www.entrust-inc.jp",
+    "irTopUrl": "https://www.entrust-inc.jp/",
+    "sampleSourceUrl": "https://www.entrust-inc.jp/ir/dividend.php",
+    "confirmedAt": "2026-08-13"
+  },
+  "7361": {
+    "name": "ヒューマンクリエイションホールディングス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/7361/yuho_pdf/S100N2MB/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7367": {
+    "name": "セルム",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS04537/9e56fba3/5e2d/4c87/b230/6bfaed766363/S100LOJI.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7374": {
+    "name": "コンフィデンス・インターワークス",
+    "irDomain": "ciw.jp",
+    "irTopUrl": "https://ciw.jp/",
+    "sampleSourceUrl": "https://ciw.jp/C3yzPR5g/wp-content/themes/ciw/ir/confidence/2021/20210629_c_01.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7380": {
+    "name": "十六フィナンシャルグループ",
+    "irDomain": "www.16fg.co.jp",
+    "irTopUrl": "https://www.16fg.co.jp/",
+    "sampleSourceUrl": "https://www.16fg.co.jp/assets/pdf/ir/kessan/2005_4_1.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7381": {
+    "name": "CCIグループ",
+    "irDomain": "www.hokkokubank.co.jp",
+    "irTopUrl": "https://www.hokkokubank.co.jp/",
+    "sampleSourceUrl": "http://web.archive.org/web/20100821031234/http://www.hokkokubank.co.jp/ir/financial/pdf/as_report/101_090629.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7679": {
+    "name": "薬王堂ホールディングス",
+    "irDomain": "www.yakuodo-hd.co.jp",
+    "irTopUrl": "https://www.yakuodo-hd.co.jp/",
+    "sampleSourceUrl": "https://www.yakuodo-hd.co.jp/wp-content/uploads/2025/04/592296d142471.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7791": {
+    "name": "ドリームベッド",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://data.swcms.net/file/ir-dreambed/dam/jcr:600a3836-c8f3-4d27-b719-d386eed02114/S100OGAP.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "8424": {
+    "name": "芙蓉総合リース",
+    "irDomain": "www.fgl.co.jp",
+    "irTopUrl": "https://www.fgl.co.jp/",
+    "sampleSourceUrl": "https://web.archive.org/web/20100131074233/http://www.fgl.co.jp/IR/stocks/dividend.html",
+    "confirmedAt": "2026-08-13"
+  },
+  "8572": {
+    "name": "アコム株式会社",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://web.archive.org/web/20110630060007/http://www.acom.co.jp/ir/data/current/J-Full_Text2008.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "9450": {
+    "name": "ファイバーゲート",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/9450/yuho_pdf/S100E7JK/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "9558": {
+    "name": "ジャパニアス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS04773/1688b880/b857/40c5/84f1/c7395a23e55a/S100QB4Y.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "276A": {
+    "name": "ククレブ・アドバイザーズ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100UKU3.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "2982": {
+    "name": "ADワークスグループ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/32500/53e09629/458c/442d/9db8/18251369021e/S100L1MX.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "2986": {
+    "name": "LAホールディングス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/2986/yuho_pdf/S100L35A/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3417": {
+    "name": "大木ヘルスケアホールディングス",
+    "irDomain": "www.ohki-net.co.jp",
+    "irTopUrl": "https://www.ohki-net.co.jp/",
+    "sampleSourceUrl": "https://web.archive.org/web/20190914022713/http://www.ohki-net.co.jp/ir/highlight.html",
+    "confirmedAt": "2026-08-13"
+  },
+  "3901": {
+    "name": "マークラインズ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS07754/e58fbead/bf8b/490f/a083/3e6c15afdc8f/S1003FKJ.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3933": {
+    "name": "チエル株式会社",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/As80324/3f553f63/c784/4930/8ca3/629a33ea1169/140120160511483894.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "3962": {
+    "name": "チェンジホールディングス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/3962/yuho_pdf/S1009D0T/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4125": {
+    "name": "三和油化工業",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS04857/a60de40f/f0c0/45a5/bce2/7b133fabe535/S100OEW3.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4174": {
+    "name": "アピリッツ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS01846/3949631d/e304/429d/9c40/08d7617178a5/S100L90X.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4193": {
+    "name": "ファブリカホールディングス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/4193/yuho_pdf/S100OJKQ/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4198": {
+    "name": "テンダ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS81358/270ae335/e366/412d/b8b2/4d5d817e998f/140120210715467182.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4347": {
+    "name": "ブロードメディア",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/4347/yuho_pdf/003058S9/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4373": {
+    "name": "シンプレクス・ホールディングス",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/4373/yuho_pdf/S100OCJT/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4483": {
+    "name": "ＪＭＤＣ",
+    "irDomain": "www.jmdc.co.jp",
+    "irTopUrl": "https://www.jmdc.co.jp/",
+    "sampleSourceUrl": "https://www.jmdc.co.jp/wp-content/uploads/2023/09/news20200514_1.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4886": {
+    "name": "あすか製薬ホールディングス",
+    "irDomain": "www.aska-pharma-hd.co.jp",
+    "irTopUrl": "https://www.aska-pharma-hd.co.jp/",
+    "sampleSourceUrl": "https://www.aska-pharma-hd.co.jp/invest/pastpdf/yuho_843134.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "4928": {
+    "name": "ノエビアホールディングス",
+    "irDomain": "www.noevirholdings.co.jp",
+    "irTopUrl": "https://www.noevirholdings.co.jp/",
+    "sampleSourceUrl": "https://www.noevirholdings.co.jp/ir/library/security-reports/pdf/2012/yuho2.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "6327": {
+    "name": "北川精機株式会社",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://web.archive.org/web/20091122114931/http://www.kitagawaseiki.co.jp/pdf/200906setumei.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "6533": {
+    "name": "Orchestra Holdings",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://ssl4.eir-parts.net/doc/6533/yuho_pdf/S100A04T/00.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7337": {
+    "name": "株式会社ひろぎんホールディングス",
+    "irDomain": "www.hirogin.co.jp",
+    "irTopUrl": "https://www.hirogin.co.jp/",
+    "sampleSourceUrl": "https://web.archive.org/web/20060628171237/http://www.hirogin.co.jp/ir/financial/report/report_93th.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "7792": {
+    "name": "株式会社コラントッテ",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://contents.xj-storage.jp/xcontents/AS71259/94738e53/8e3e/4adf/b941/881e0e6de781/S100N3ZX.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "8425": {
+    "name": "みずほリース",
+    "irDomain": "www.mizuho-ls.co.jp",
+    "irTopUrl": "https://www.mizuho-ls.co.jp/",
+    "sampleSourceUrl": "https://www.mizuho-ls.co.jp/ja/ir/library/securities/main/05/teaserItems1/0/linkList/0/link/sec_2012_4.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "8704": {
+    "name": "トレイダーズホールディングス",
+    "irDomain": "www.tradershd.com",
+    "irTopUrl": "https://www.tradershd.com/",
+    "sampleSourceUrl": "https://www.tradershd.com/pdf/ufo/201103.pdf",
+    "confirmedAt": "2026-08-13"
+  },
+  "9423": {
+    "name": "フォーバル・リアルストレート",
+    "irDomain": null,
+    "irTopUrl": null,
+    "sampleSourceUrl": "https://web.archive.org/web/20060903081751/http://www.fread.co.jp:80/ir/list/list_7.html",
+    "confirmedAt": "2026-08-13"
+  }
+}

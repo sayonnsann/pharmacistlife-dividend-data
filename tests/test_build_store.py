@@ -886,6 +886,113 @@ class DisplayDerivedMetricsTest(unittest.TestCase):
         self.assertEqual(payload["streakBase"], 0)
         self.assertEqual(payload["streakNoDecreaseBase"], 0)
 
+    def test_streak_base_fallback_and_unreliable_cases(self) -> None:
+        """streakBase/streakNoDecreaseBaseのフォールバック挙動を3パターンで確認する。
+
+        - 9433: 内訳DBに登録あり → 独自値（全額ベースとは別値）を維持する
+        - 7203: 内訳DBに登録なし → streakIncrease/streakNonDecreaseへフォールバック
+        - 6501: streak判定不能（分割基準またぎ）→ フォールバック後もNULLのまま
+        """
+        financials = [
+            {"code": "9433", "name": "ＫＤＤＩ"},
+            {"code": "7203", "name": "トヨタ自動車"},
+            {"code": "6501", "name": "日立製作所"},
+        ]
+        fiscal = {
+            "9433": {
+                "series": {2022: 100.0, 2023: 120.0, 2024: 150.0},
+                "fiscalMonth": 3,
+                "connectionStatus": "edinet_only",
+                "connectionReason": "",
+                "externalSource": None,
+                "externalYears": [],
+            },
+            "7203": {
+                "series": {2022: 50.0, 2023: 60.0, 2024: 70.0},
+                "fiscalMonth": 3,
+                "connectionStatus": "edinet_only",
+                "connectionReason": "",
+                "externalSource": None,
+                "externalYears": [],
+            },
+            "6501": {
+                "series": {2022: 100.0, 2023: 62.0, 2024: 70.0},
+                "fiscalMonth": 3,
+                "connectionStatus": "edinet_only",
+                "connectionReason": "",
+                "externalSource": None,
+                "externalYears": [],
+                "streakReliable": False,
+                "streakUnreliableReason": "split_basis",
+                "streakBreakYears": [2023],
+            },
+        }
+        tickers = {
+            "9433": {"code": "9433", "name": "ＫＤＤＩ"},
+            "7203": {"code": "7203", "name": "トヨタ自動車"},
+            "6501": {"code": "6501", "name": "日立製作所"},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "data").mkdir()
+            # 内訳DBには9433だけ登録（7203・6501は登録なし＝記念・特別配当の記録なし）。
+            (root / "data" / "dividend_breakdown.json").write_text(
+                json.dumps(
+                    {"9433": {"2024": {"base": 100.0, "special": 50.0}}}
+                ),
+                encoding="utf-8",
+            )
+            path = root / "store.sqlite"
+            with mock.patch.object(
+                build_store,
+                "REPOSITORY_ROOT",
+                root,
+            ), mock.patch.object(
+                build_store,
+                "load_daily_prices",
+                return_value=({}, {}, "2026-08-05"),
+            ):
+                build_store.create_database(
+                    path,
+                    financials,
+                    {},
+                    tickers,
+                    {},
+                    [Path("f"), Path("s"), Path("t"), Path("fc")],
+                    "fixture.csv",
+                    {},
+                    Path("actions.json"),
+                    fiscal,
+                    Path("fiscal.json"),
+                    {},
+                    Path("calendar.json"),
+                    date(2026, 8, 5),
+                )
+            with sqlite3.connect(path) as connection:
+                payloads = {
+                    code: json.loads(payload_text)
+                    for code, payload_text in connection.execute(
+                        "SELECT code, payload FROM stocks"
+                    ).fetchall()
+                }
+
+        # 内訳あり銘柄: 独自値(0)を維持し、全額ベースの値(2)で上書きされていない。
+        self.assertEqual(payloads["9433"]["streakIncrease"], 2)
+        self.assertEqual(payloads["9433"]["streakBase"], 0)
+        self.assertEqual(payloads["9433"]["streakNoDecreaseBase"], 0)
+
+        # 内訳なし銘柄: 全額ベースの値へそのままフォールバックする。
+        self.assertEqual(payloads["7203"]["streakIncrease"], 2)
+        self.assertEqual(payloads["7203"]["streakNonDecrease"], 2)
+        self.assertEqual(payloads["7203"]["streakBase"], 2)
+        self.assertEqual(payloads["7203"]["streakNoDecreaseBase"], 2)
+
+        # streak判定不能銘柄: 全額ベースがNULLなので、フォールバックもNULLのまま。
+        self.assertIsNone(payloads["6501"]["streakIncrease"])
+        self.assertIsNone(payloads["6501"]["streakNonDecrease"])
+        self.assertIsNone(payloads["6501"]["streakBase"])
+        self.assertIsNone(payloads["6501"]["streakNoDecreaseBase"])
+
 
 class FiscalDividendLoaderTest(unittest.TestCase):
     def load(self, document: dict) -> dict:

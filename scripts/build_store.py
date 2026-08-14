@@ -1975,6 +1975,15 @@ def create_database(
                             series, breakdown_entry
                         )
                     )
+                else:
+                    # 内訳DBに記録が無い銘柄＝記念・特別配当の記録が無い
+                    # （＝全額が普通配当）ので、実質値は全額ベースの
+                    # streakIncrease/streakNonDecrease とそのまま同値になる。
+                    # 全額ベース側がNULL（判定不能）ならフォールバックもNULLのまま。
+                    payload["streakBase"] = payload.get("streakIncrease")
+                    payload["streakNoDecreaseBase"] = payload.get(
+                        "streakNonDecrease"
+                    )
                 if daily_price:
                     payload["price"] = daily_price
                     # 表示側が「2026年8月13日 前場寄付時点」のように出すための生データ。

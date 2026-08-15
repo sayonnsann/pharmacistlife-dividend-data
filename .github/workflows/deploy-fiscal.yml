@@ -1,0 +1,136 @@
+name: fiscal_dividends.json をConoHaへ反映
+
+# workspace(Private)のedinet-direct/data/fiscal_dividends.jsonを、
+# デプロイキー(WORKSPACE_DEPLOY_KEY, read-only)でsparse-checkoutし、
+# 既存のFTPS方式(daily-store.ymlと同じput+サイズ検証+.bak退避)でConoHaの
+# 非公開data/ディレクトリへ反映する。
+#
+# fiscal_dividends.jsonはhaitoukin-checker由来のデータを含むため、この
+# Publicリポジトリには絶対に置かない(daily-store.yml/price-only-store.yml
+# 冒頭の安全確認と同じ理由)。workspace→Actions→ConoHa非公開領域のみを通す
+# ことで、公開制約を満たしたまま自動反映する。
+#
+# 手動実行(workflow_dispatch)のみ。cronでの自動実行はしない
+# (workspace側での更新タイミングが不定期なため、統括からの指示で都度実行する)。
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write  # 反映後にprice-only-store.ymlをトリガーするために必要
+
+jobs:
+  deploy-fiscal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASS: ${{ secrets.FTP_PASS }}
+      FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+
+    steps:
+      - name: このリポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: workspace(Private)からfiscal_dividends.jsonだけをデプロイキーで取得
+        uses: actions/checkout@v4
+        with:
+          repository: sayonnsann/yuruyaku-workspace
+          ssh-key: ${{ secrets.WORKSPACE_DEPLOY_KEY }}
+          sparse-checkout: |
+            edinet-direct/data/fiscal_dividends.json
+          sparse-checkout-cone-mode: false
+          path: workspace-src
+
+      - name: 取得したファイルを検証
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="workspace-src/edinet-direct/data/fiscal_dividends.json"
+          if [[ ! -s "$FILE" ]]; then
+            echo "::error::fiscal_dividends.jsonが取得できませんでした（存在しないか空です）"
+            exit 1
+          fi
+          python3 - "$FILE" <<'PY'
+          import json
+          import sys
+
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as source:
+              document = json.load(source)
+          if not isinstance(document, dict) or len(document) < 3000:
+              raise SystemExit(
+                  f"事業年度の配当系列が不足しています（{type(document).__name__}, "
+                  f"{len(document) if isinstance(document, dict) else 0}銘柄）"
+              )
+          print(f"検証OK: {len(document):,}銘柄")
+          PY
+
+      - name: lftpをインストール
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
+
+      - name: FTPS設定を検証
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in FTP_HOST FTP_USER FTP_PASS FTP_REMOTE_DIR; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Secret ${name} が未設定です。"
+              exit 1
+            fi
+          done
+          if [[ "$FTP_HOST" == *"://"* || "$FTP_HOST" == */* ]]; then
+            echo "::error::FTP_HOST はホスト名だけを設定してください。"
+            exit 1
+          fi
+          if [[ "$FTP_REMOTE_DIR" != /* ]]; then
+            echo "::error::FTP_REMOTE_DIR は / から始めてください。"
+            exit 1
+          fi
+
+      - name: fiscal_dividends.jsonをFTPSへ原子的に反映
+        id: publish_fiscal
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="workspace-src/edinet-direct/data/fiscal_dividends.json"
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
+                put -O ${remote_dir}/ \"$FILE\" -o fiscal_dividends.json.new; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          # 実サイズ検証（申告ではなく現物を確認）
+          local_size=$(wc -c < "$FILE" | tr -d ' ')
+          remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
+            "ftp://${FTP_HOST}${remote_dir}/fiscal_dividends.json.new" | awk '/Content-Length/ {print $2}' | tr -d '\r')
+          if [ "$local_size" != "$remote_size" ]; then
+            echo "::error::fiscal_dividends.json のアップロード検証に失敗（local=$local_size remote=$remote_size）"
+            exit 1
+          fi
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; \
+                rm -f ${remote_dir}/fiscal_dividends.json.bak; \
+                mv ${remote_dir}/fiscal_dividends.json ${remote_dir}/fiscal_dividends.json.bak || true; \
+                mv ${remote_dir}/fiscal_dividends.json.new ${remote_dir}/fiscal_dividends.json; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          echo "fiscal_dividends.json を検証つきで差し替えました（$local_size bytes）"
+
+      - name: price-only-store.ymlをトリガー
+        if: ${{ always() && steps.publish_fiscal.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -uo pipefail
+          if gh workflow run price-only-store.yml --repo sayonnsann/pharmacistlife-dividend-data; then
+            echo "price-only-store.yml の起動を予約しました（stocks.sqliteへ反映されます）。"
+          else
+            echo "::warning::price-only-store.ymlの自動起動に失敗しました。Actionsタブから手動でworkflow_dispatch実行してください。"
+          fi
+
+      - name: 完了
+        run: echo "fiscal_dividends.json のConoHaへの反映が完了しました。"

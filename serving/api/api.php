@@ -249,7 +249,7 @@ try {
         if (filter_var($limitRaw, FILTER_VALIDATE_INT) === false) {
             errorResponse('limit は整数で指定してください', 400);
         }
-        $limit = max(1, min(100, (int) $limitRaw));
+        $limit = max(1, min(300, (int) $limitRaw));
         $nullOrder = $order === 'desc' ? 'DESC' : 'ASC';
         $sql = $rowSelect
             . ' ORDER BY (' . $sortExpressions[$sort] . ' IS NULL) ASC, '
@@ -301,7 +301,7 @@ try {
 
         $statement = $database->prepare(
             $rowSelect . $where
-            . ' ORDER BY (streak IS NULL) ASC, streak DESC, yield DESC, code ASC LIMIT 100'
+            . ' ORDER BY (streak IS NULL) ASC, streak DESC, yield DESC, code ASC LIMIT 300'
         );
         $statement->execute($parameters);
         respond(['total' => $total, 'rows' => fetchRows($statement)]);

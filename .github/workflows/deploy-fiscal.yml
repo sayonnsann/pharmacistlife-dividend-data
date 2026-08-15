@@ -44,6 +44,16 @@ jobs:
           sparse-checkout-cone-mode: false
           path: workspace-src
 
+      - name: デバッグ：取得内容を確認
+        shell: bash
+        run: |
+          echo "--- workspace-src 直下 ---"
+          ls -la workspace-src || true
+          echo "--- find ---"
+          find workspace-src -maxdepth 4 || true
+          echo "--- sparse-checkout設定 ---"
+          cat workspace-src/.git/info/sparse-checkout || true
+
       - name: 取得したファイルを検証
         shell: bash
         run: |

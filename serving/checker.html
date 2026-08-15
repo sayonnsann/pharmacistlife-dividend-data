@@ -45,7 +45,7 @@
   .dvc-stat-grid,.dvc-fin-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:16px 0}.dvc-stat,.dvc-fin-summary-item{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;text-align:center}.dvc-stat-label,.dvc-fin-summary-label{display:block;font-size:12px;color:#6b7280}.dvc-stat-value,.dvc-fin-summary-value{display:block;font-size:18px;font-weight:700;margin-top:4px;color:#172554}.dvc-stat-note{display:block;margin-top:3px;color:#9ca3af;font-size:10px}
   .dvc-forecast{display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:2px 6px;margin:-4px 0 16px;padding:9px 12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;color:#1e3a8a;font-size:13px}.dvc-forecast-main{font-weight:700}.dvc-forecast-detail{color:#475569;font-size:12px}
   .dvc-earnings-card{margin:14px 0 0;background:#fff}.dvc-earnings-card.dvc-earnings-next{border-color:#cbd5e1;background:#f8fafc}.dvc-earnings-card.dvc-earnings-next h4{color:#475569}.dvc-earnings-card.dvc-earnings-next .dvc-earnings-metric{background:#fff;border-color:#e2e8f0}.dvc-earnings-subtitle{margin:2px 0 0;color:var(--dvc-muted);font-size:12px}.dvc-earnings-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.dvc-earnings-metric{min-width:0;padding:10px 9px;border:1px solid #dbeafe;border-radius:9px;background:#f8fbff;text-align:center}.dvc-earnings-label{display:block;color:#475569;font-size:12px;font-weight:700}.dvc-earnings-value{display:block;margin-top:3px;color:#172554;font-size:18px;font-weight:800;white-space:nowrap}.dvc-earnings-change{display:block;margin-top:2px;color:#64748b;font-size:12px}.dvc-earnings-change.dvc-growth-pos{color:#16a34a}.dvc-earnings-change.dvc-growth-neg{color:#dc2626}.dvc-roe-note{margin:8px 0 0}
-  .dvc-chart-wrap{margin-top:20px;overflow-x:auto}.dvc-bar-label{font-size:11px;fill:#6b7280}.dvc-bar-value{font-size:11px;fill:#2b2b2b}.dvc-growth-label{font-size:10px}.dvc-growth-pos{fill:#16a34a;color:#16a34a}.dvc-growth-neg{fill:#dc2626;color:#dc2626}.dvc-payout-label{font-size:10px;fill:#b45309}.dvc-lane-divider{stroke:#dfe7f1;stroke-width:1}
+  .dvc-chart-wrap{margin-top:20px;overflow-x:auto}.dvc-bar-label{font-size:11px;fill:#6b7280}.dvc-bar-value{font-size:11px;fill:#2b2b2b}.dvc-growth-label{font-size:10px}.dvc-growth-pos{fill:#16a34a;color:#16a34a}.dvc-growth-neg{fill:#dc2626;color:#dc2626}.dvc-payout-label{font-size:10px;fill:#b45309}.dvc-lane-divider{stroke:#dfe7f1;stroke-width:1}.dvc-bar-missing-tick{stroke:#cbd5e1;stroke-width:2;stroke-dasharray:2 3}.dvc-bar-label-missing{fill:#b6c2cf}
   .dvc-chart-legend,.dvc-fin-legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11px;color:#6b7280;margin-top:8px}.dvc-chart-legend span,.dvc-fin-legend span{display:flex;align-items:center;gap:6px}.dvc-legend-swatch{display:inline-block;width:12px;height:12px;border-radius:2px}.dvc-legend-line{width:15px;height:3px;border-radius:0}.dvc-legend-average{width:18px;height:0;border-top:2px dashed currentColor;opacity:.65}.dvc-legend-sector{width:18px;height:0;border-top:2px dotted #7c3aed}.dvc-legend-text{font-style:normal;font-weight:700}
   .dvc-source{margin:7px 0 0;color:#64748b;font-size:11px}.dvc-source strong{color:#475569}
   .dvc-financials{margin-top:24px;padding-top:18px;border-top:2px solid #e2e8f0}.dvc-fin-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.dvc-fin-head h3{margin:0;color:#172554;font-size:19px}.dvc-fin-head p{margin:3px 0 0;color:#64748b;font-size:12px}.dvc-fin-source{flex:0 0 auto;padding:4px 9px;border:1px solid #bfdbfe;border-radius:6px;color:#2563eb;background:#eff6ff;font-size:11px;font-weight:700}
@@ -158,33 +158,54 @@
       }).catch(function(err){if(requestId!==state.searchRequest)return;box.innerHTML='<div class="dvc-suggest-item dvc-load-error">'+esc(apiErrorMessage(err))+"</div>";box.style.display="block"})
     },300)
   }
-  function yoyGrowthByYear(annual,years){var growth={};years.forEach(function(y,i){var p,c;if(!i)return;p=annual[years[i-1]];c=annual[y];if(p>0)growth[y]=((c-p)/p)*100});return growth}
+  // 隣接インデックスであっても、実際の年が1年差でなければ(欠測年をまたいで
+  // いれば)前年比とは呼べないため、真に暦年で1年差の場合だけ計算する。
+  function yoyGrowthByYear(annual,years){var growth={};years.forEach(function(y,i){var p,c;if(!i)return;if(Number(y)-Number(years[i-1])!==1)return;p=annual[years[i-1]];c=annual[y];if(p>0)growth[y]=((c-p)/p)*100});return growth}
   // 金額・増配率ラベルは基本すべての年で表示する。バー間隔にラベルが物理的に
   // 収まらない（4桁円が並ぶ・本数が多い等）場合だけ、主要年(最初・最後・最大・
   // 直近5年)に間引く保険を残す。
   function estimateLabelWidth(text){return String(text).length*6.6+4}
+  // values は displayYears と同じ長さの配列で、データの無い(欠測)年は null。
+  // 最大値・桁数の判定やラベル表示可否の判定から欠測年は除外する。
   function barLabelPlan(years,values,barW,gap){
-    var slot=barW+(gap||0),maxLen=1,i,len;
-    for(i=0;i<values.length;i+=1){len=String(Math.round(values[i])).length;if(len>maxLen)maxLen=len}
+    var slot=barW+(gap||0),maxLen=1,i,len,maxValue=-Infinity,maxIndex=-1;
+    for(i=0;i<values.length;i+=1){
+      if(values[i]===null||values[i]===undefined)continue;
+      len=String(Math.round(values[i])).length;if(len>maxLen)maxLen=len;
+      if(values[i]>maxValue){maxValue=values[i];maxIndex=i}
+    }
     var amountFits=slot>=estimateLabelWidth(new Array(maxLen+1).join("9")),
         growthFits=slot>=estimateLabelWidth("+99%"),
         showAll=amountFits&&growthFits,
-        amount={},growth={},maxValue=Math.max.apply(null,values),maxIndex=values.indexOf(maxValue),recentStart=Math.max(0,years.length-5);
-    years.forEach(function(year,index){if(showAll||index===0||index===years.length-1||index===maxIndex||index>=recentStart)amount[year]=true;if(showAll||index>=recentStart)growth[year]=true});
+        amount={},growth={},recentStart=Math.max(0,years.length-5);
+    years.forEach(function(year,index){
+      if(values[index]===null||values[index]===undefined)return;
+      if(showAll||index===0||index===years.length-1||index===maxIndex||index>=recentStart)amount[year]=true;
+      if(showAll||index>=recentStart)growth[year]=true;
+    });
     return{amount:amount,growth:growth,dense:!showAll}
   }
   function buildBarChart(annual,payoutRatio,dividendBreakdown,annualPartial,confirmed,pending,seriesInfo){
-    var years=Object.keys(annual).sort(),growth,values,max,payoutYears,payoutValues,payoutMax,barW=34,gap=10,chartH=200,leftPad=4,topPad=26,w,h,xCenter={},bars,payoutLine="",legend,hasBreakdown=false,hasPartial=false,hasForecast=false,hasConfirmed=false,partialSet={},displayYears,labelPlan;
+    var confirmedYears=Object.keys(annual).sort(),growth,values,max,payoutYears,payoutValues,payoutMax,barW=34,gap=10,chartH=200,leftPad=4,topPad=26,w,h,xCenter={},bars,payoutLine="",legend,hasBreakdown=false,hasForecast=false,hasConfirmed=false,partialSet={},displayYears,labelPlan,hasGap=false;
     annualPartial=annualPartial||{};dividendBreakdown=dividendBreakdown||{};payoutRatio=payoutRatio||{};confirmed=confirmed||{};pending=pending||{};seriesInfo=seriesInfo||{};
     var isFiscal=seriesInfo.basis!=="calendar",axisText=isFiscal?"事業年度":"暦年・更新停止";
-    displayYears=years.slice();
-    Object.keys(annualPartial).sort().forEach(function(y){var v=annualPartial[y];if(typeof v==="number"&&isFinite(v)&&v>0&&years.indexOf(y)<0){displayYears.push(y);partialSet[y]=true;hasPartial=true}});
-    if(!displayYears.length)return"<p>配当データがありません</p>";
-    growth=yoyGrowthByYear(annual,years);
-    values=displayYears.map(function(y){return partialSet[y]?annualPartial[y]:annual[y]});
-    max=Math.max.apply(null,values)*1.15||1;
+    Object.keys(annualPartial).sort().forEach(function(y){var v=annualPartial[y];if(typeof v==="number"&&isFinite(v)&&v>0)partialSet[y]=true});
+    var knownYears=confirmedYears.concat(Object.keys(partialSet).filter(function(y){return confirmedYears.indexOf(y)<0})).sort();
+    if(!knownYears.length)return"<p>配当データがありません</p>";
+    // 欠測年(annual・annualPartialのどちらにも値が無い年)を軸から省略すると、
+    // 例えば2005年の隣が2009年でも隣り合って見え、連続したデータだと誤解
+    // されてしまう。最初〜最後の年まで1年刻みの連続軸にし、欠測年はバー無しの
+    // 「空白スロット」として位置だけ確保する。
+    var minYear=Math.min.apply(null,knownYears.map(Number)),maxYear=Math.max.apply(null,knownYears.map(Number));
+    displayYears=[];
+    for(var yr=minYear;yr<=maxYear;yr+=1)displayYears.push(String(yr));
+    hasGap=displayYears.length>knownYears.length;
+    growth=yoyGrowthByYear(annual,confirmedYears);
+    values=displayYears.map(function(y){if(partialSet[y])return annualPartial[y];return(typeof annual[y]==="number"&&isFinite(annual[y]))?annual[y]:null});
+    var numericValues=values.filter(function(v){return v!==null});
+    max=(numericValues.length?Math.max.apply(null,numericValues):0)*1.15||1;
     labelPlan=barLabelPlan(displayYears,values,barW,gap);
-    payoutYears=years.filter(function(y){return payoutRatio[y]!==undefined&&payoutRatio[y]!==null});payoutValues=payoutYears.map(function(y){return payoutRatio[y]});payoutMax=Math.max(100,Math.max.apply(null,payoutValues.concat([0]))*1.15);
+    payoutYears=confirmedYears.filter(function(y){return payoutRatio[y]!==undefined&&payoutRatio[y]!==null});payoutValues=payoutYears.map(function(y){return payoutRatio[y]});payoutMax=Math.max(100,Math.max.apply(null,payoutValues.concat([0]))*1.15);
     w=displayYears.length*(barW+gap)+leftPad;h=chartH+topPad+56;
     // 配当性向の折れ線は棒グラフと同じ領域に重ねず、上部の専用レーンに分離する。
     // payoutLaneH=上部(目安28%)を配当性向専用、残りを棒グラフ専用にする。
@@ -197,17 +218,50 @@
         barLaneH=barBaseline-barLaneTop,
         labelHeadroom=34,
         barPlotH=Math.max(20,barLaneH-labelHeadroom);
-    bars=displayYears.map(function(year,i){var isPartial=!!partialSet[year],pin=pending[year]||null,isConfirmed=false,partialLabel="",v=isPartial?annualPartial[year]:annual[year],bh=(v/max)*barPlotH,x=leftPad+i*(barW+gap),yt=barBaseline-bh,g=isPartial?undefined:growth[year],gl="",isConfirmed=isPartial&&(pin?pin.kind==="confirmed":(typeof confirmed.value==="number"&&confirmed.year===year&&Math.abs(confirmed.value-v)<0.01)),partialLabel=isPartial?((pin&&pin.label)?pin.label:(isConfirmed?"確定":"予想")):"",mainFill=(isPartial&&!isConfirmed)?"#cbd5e1":"#3b82f6",titleText=year+"年: 配当"+formatValue(v,"円"),bar,bd=dividendBreakdown[year],base,special,specialH,baseH,kind,tooltip,showAmount=!!labelPlan.amount[year],showGrowth=!!labelPlan.growth[year];
+    bars=displayYears.map(function(year,i){
+      var isPartial=!!partialSet[year],hasAnnual=typeof annual[year]==="number"&&isFinite(annual[year]),x=leftPad+i*(barW+gap);
+      xCenter[year]=x+barW/2;
+      if(!isPartial&&!hasAnnual){
+        // データが無い年: バーは描かず、位置だけ確保する。カーソルを合わせると
+        // 「データ未確認」と分かるように<title>を付ける。
+        return '<g><title>'+esc(year+"年: データ未確認（未収集または確認中のため空白表示）")+'</title>'+
+          '<line class="dvc-bar-missing-tick" x1="'+(x+3)+'" y1="'+barBaseline+'" x2="'+(x+barW-3)+'" y2="'+barBaseline+'"></line>'+
+          '<text class="dvc-bar-label dvc-bar-label-missing" x="'+(x+barW/2)+'" y="'+(topPad+chartH+16)+'" text-anchor="middle">'+esc(year.slice(2))+'</text>'+
+          '</g>';
+      }
+      var pin=pending[year]||null,isConfirmed=false,partialLabel="",v=isPartial?annualPartial[year]:annual[year],bh=(v/max)*barPlotH,yt=barBaseline-bh,g=isPartial?undefined:growth[year],gl="",bar,bd=dividendBreakdown[year],base,special,specialH,baseH,kind,tooltip,showAmount=!!labelPlan.amount[year],showGrowth=!!labelPlan.growth[year];
+      isConfirmed=isPartial&&(pin?pin.kind==="confirmed":(typeof confirmed.value==="number"&&confirmed.year===year&&Math.abs(confirmed.value-v)<0.01));
+      partialLabel=isPartial?((pin&&pin.label)?pin.label:(isConfirmed?"確定":"予想")):"";
+      var mainFill=(isPartial&&!isConfirmed)?"#cbd5e1":"#3b82f6",titleText=year+"年: 配当"+formatValue(v,"円");
       if(g!==undefined)titleText+=" / 前年比 "+(g>=0?"+":"")+g.toFixed(0)+"%";
       if(partialLabel)titleText+=" / "+partialLabel;
       bar='<rect x="'+x+'" y="'+yt+'" width="'+barW+'" height="'+bh+'" rx="3" fill="'+mainFill+'"><title>'+esc(titleText)+'</title></rect>';
-      if(bd&&typeof bd.base==="number"&&isFinite(bd.base)&&typeof bd.special==="number"&&isFinite(bd.special)&&bd.special>=0&&bd.special<=v){base=bd.base;special=bd.special;if(Math.abs(base+special-v)>0.000001)base=v-special;specialH=(special/max)*barPlotH;baseH=(base/max)*barPlotH;kind=bd.kind?String(bd.kind):"";tooltip="記念・特別配当 "+special+"円"+(kind?"("+kind+")":"");titleText+=" / "+tooltip;bar='<rect x="'+x+'" y="'+(yt+specialH)+'" width="'+barW+'" height="'+baseH+'" fill="'+mainFill+'"><title>'+esc(titleText)+'</title></rect><rect x="'+x+'" y="'+yt+'" width="'+barW+'" height="'+specialH+'" rx="3" fill="#93c5fd"><title>'+esc(tooltip)+'</title></rect>';hasBreakdown=true}xCenter[year]=x+barW/2;if(g!==undefined&&showGrowth)gl='<text class="dvc-growth-label '+(g>=0?"dvc-growth-pos":"dvc-growth-neg")+'" x="'+(x+barW/2)+'" y="'+(yt-18)+'" text-anchor="middle">'+(g>=0?"+":"")+g.toFixed(0)+'%</text>';return bar+gl+(showAmount?'<text class="dvc-bar-value" x="'+(x+barW/2)+'" y="'+(yt-4)+'" text-anchor="middle">'+esc(v)+'</text>':"")+'<text class="dvc-bar-label" x="'+(x+barW/2)+'" y="'+(topPad+chartH+16)+'" text-anchor="middle">'+esc(year.slice(2))+'</text>'+(isPartial?'<text class="dvc-bar-label" x="'+(x+barW/2)+'" y="'+(topPad+chartH+30)+'" text-anchor="middle" fill="'+(isConfirmed?"#2563eb":"#94a3b8")+'">'+esc(partialLabel)+'</text>':"")}).join("");
-    displayYears.forEach(function(y){if(!partialSet[y])return;var pin=pending[y];if(pin&&pin.kind==="confirmed"){hasConfirmed=true}else if(pin){hasForecast=true}else{hasForecast=true}});
+      if(bd&&typeof bd.base==="number"&&isFinite(bd.base)&&typeof bd.special==="number"&&isFinite(bd.special)&&bd.special>=0&&bd.special<=v){base=bd.base;special=bd.special;if(Math.abs(base+special-v)>0.000001)base=v-special;specialH=(special/max)*barPlotH;baseH=(base/max)*barPlotH;kind=bd.kind?String(bd.kind):"";tooltip="記念・特別配当 "+special+"円"+(kind?"("+kind+")":"");titleText+=" / "+tooltip;bar='<rect x="'+x+'" y="'+(yt+specialH)+'" width="'+barW+'" height="'+baseH+'" fill="'+mainFill+'"><title>'+esc(titleText)+'</title></rect><rect x="'+x+'" y="'+yt+'" width="'+barW+'" height="'+specialH+'" rx="3" fill="#93c5fd"><title>'+esc(tooltip)+'</title></rect>';hasBreakdown=true}
+      if(g!==undefined&&showGrowth)gl='<text class="dvc-growth-label '+(g>=0?"dvc-growth-pos":"dvc-growth-neg")+'" x="'+(x+barW/2)+'" y="'+(yt-18)+'" text-anchor="middle">'+(g>=0?"+":"")+g.toFixed(0)+'%</text>';
+      return bar+gl+(showAmount?'<text class="dvc-bar-value" x="'+(x+barW/2)+'" y="'+(yt-4)+'" text-anchor="middle">'+esc(v)+'</text>':"")+'<text class="dvc-bar-label" x="'+(x+barW/2)+'" y="'+(topPad+chartH+16)+'" text-anchor="middle">'+esc(year.slice(2))+'</text>'+(isPartial?'<text class="dvc-bar-label" x="'+(x+barW/2)+'" y="'+(topPad+chartH+30)+'" text-anchor="middle" fill="'+(isConfirmed?"#2563eb":"#94a3b8")+'">'+esc(partialLabel)+'</text>':"")
+    }).join("");
+    displayYears.forEach(function(y){if(!partialSet[y])return;var pin=pending[y];if(pin&&pin.kind==="confirmed"){hasConfirmed=true}else{hasForecast=true}});
     var laneBackground='<rect x="0" y="'+topPad+'" width="'+w+'" height="'+payoutLaneH+'" fill="#f8fafc"></rect>',
         laneDivider='<line x1="0" y1="'+(topPad+payoutLaneH+laneGap/2)+'" x2="'+w+'" y2="'+(topPad+payoutLaneH+laneGap/2)+'" class="dvc-lane-divider"></line>';
-    if(payoutYears.length){var points=payoutYears.map(function(y){return xCenter[y]+","+(topPad+payoutLaneH-(payoutRatio[y]/payoutMax)*payoutLaneH)}).join(" "),dots=payoutYears.map(function(y){var py=topPad+payoutLaneH-(payoutRatio[y]/payoutMax)*payoutLaneH;return '<circle cx="'+xCenter[y]+'" cy="'+py+'" r="3" fill="#f59e0b"></circle><text class="dvc-payout-label" x="'+xCenter[y]+'" y="'+(py-8)+'" text-anchor="middle">'+payoutRatio[y].toFixed(0)+'%</text>'}).join("");payoutLine='<polyline points="'+points+'" fill="none" stroke="#f59e0b" stroke-width="2"></polyline>'+dots}
+    if(payoutYears.length){
+      // 配当性向の点も、欠測年をまたぐ区間では線をつながず切る(でないと欠測年の
+      // 数値を線形補間しているかのように見えてしまう)。
+      var segments=[],seg=[],lastYear=null;
+      payoutYears.forEach(function(y){
+        if(lastYear!==null&&Number(y)-Number(lastYear)>1&&seg.length){segments.push(seg);seg=[]}
+        seg.push(y);lastYear=y;
+      });
+      if(seg.length)segments.push(seg);
+      var polylines=segments.map(function(segYears){
+        if(segYears.length<2)return"";
+        var pts=segYears.map(function(y){return xCenter[y]+","+(topPad+payoutLaneH-(payoutRatio[y]/payoutMax)*payoutLaneH)}).join(" ");
+        return '<polyline points="'+pts+'" fill="none" stroke="#f59e0b" stroke-width="2"></polyline>';
+      }).join(""),
+      dots=payoutYears.map(function(y){var py=topPad+payoutLaneH-(payoutRatio[y]/payoutMax)*payoutLaneH;return '<circle cx="'+xCenter[y]+'" cy="'+py+'" r="3" fill="#f59e0b"></circle><text class="dvc-payout-label" x="'+xCenter[y]+'" y="'+(py-8)+'" text-anchor="middle">'+payoutRatio[y].toFixed(0)+'%</text>'}).join("");
+      payoutLine=polylines+dots;
+    }
     legend='<div class="dvc-chart-legend"><span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>年間配当金(円、棒グラフ・'+esc(axisText)+')</span>'+(hasForecast?'<span><i class="dvc-legend-swatch" style="background:#cbd5e1"></i>グレー+「予想」=会社発表の配当予想(まだ確定していない年度)</span>':"")+(hasConfirmed?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>青+「確定」=会社発表の確定額(有価証券報告書はまだ出ていない年度)</span>':"")+(hasBreakdown?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>■通常配当　<i class="dvc-legend-swatch" style="background:#93c5fd"></i>■記念・特別配当</span>':"")+'<span><i class="dvc-legend-swatch dvc-legend-line" style="background:#f59e0b"></i>配当性向(%、上部帯)</span><span><i class="dvc-legend-text dvc-growth-pos">+12%</i>は前年比の増配率</span>'+(labelPlan.dense?'<span class="dvc-legend-text">バーが多い場合は主要年のみ表示。各バーにカーソルを合わせると詳細を確認できます。</span>':"")+'</div>';
-    return '<div class="dvc-chart-wrap"><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+" "+h+'">'+laneBackground+laneDivider+bars+payoutLine+"</svg></div>"+legend+'<p class="dvc-source"><strong>出典:</strong> '+(isFiscal?'配当実績: EDINET(有価証券報告書)':'配当実績: 外部データの凍結分(EDINETに配当の記載が無いため更新していません)')+' / 配当性向: EDINET(有価証券報告書) / 配当予想・確定額: EDINET DB</p>'
+    return '<div class="dvc-chart-wrap"><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+" "+h+'">'+laneBackground+laneDivider+bars+payoutLine+"</svg></div>"+legend+'<p class="dvc-source"><strong>出典:</strong> '+(isFiscal?'配当実績: EDINET(有価証券報告書)':'配当実績: 外部データの凍結分(EDINETに配当の記載が無いため更新していません)')+' / 配当性向: EDINET(有価証券報告書) / 配当予想・確定額: EDINET DB</p>'+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
   }
   function confirmedInfo(r){
     var v=r.confirmedDividend,fy=r.confirmedFiscalYearEnd;
@@ -271,10 +325,16 @@
   function legend(series,type,unit){var labels=[];series.forEach(function(item,i){if(item.isSector){labels.push('<span><i class="dvc-legend-sector"></i>'+esc(item.label)+"</span>");return}var color=item.color||COLORS[i],a=average(item.data);labels.push('<span><i class="dvc-legend-swatch'+(type==="line"?" dvc-legend-line":"")+'" style="background:'+color+'"></i>'+esc(item.label)+"</span>");if(a!==null)labels.push('<span><i class="dvc-legend-average" style="color:'+color+'"></i>'+esc("期間平均 "+compactValue(a,unit))+"</span>")});return '<div class="dvc-fin-legend">'+labels.join("")+"</div>"}
   function chart(series,unit,type,label){
     var graph=series.filter(function(s){return validYears(s.data).length>=2});if(!graph.length)return"";
-    var years=unionYears(graph),br=detectBreak(graph,unit),d=domainFor(graph,br),s=scalesFor(years,d),body=axes(years,d,s,unit)+averageLines(graph,s,d),zero=s.y(0);
+    // データのある年だけを詰めて並べると、間の欠測年が無いかのように見えて
+    // しまうため、最初〜最後の年まで1年刻みの連続軸にする。欠測年はバー・点を
+    // 描かず(折れ線は繋がず切る)、軸の位置だけ確保する。
+    var dataYears=unionYears(graph),minYear=Math.min.apply(null,dataYears.map(Number)),maxYear=Math.max.apply(null,dataYears.map(Number)),years=[];
+    for(var yr=minYear;yr<=maxYear;yr+=1)years.push(String(yr));
+    var hasGap=years.length>dataYears.length;
+    var br=detectBreak(graph,unit),d=domainFor(graph,br),s=scalesFor(years,d),body=axes(years,d,s,unit)+averageLines(graph,s,d),zero=s.y(0);
     if(type==="bar"){var groupW=s.plotW/years.length,barW=Math.min(38,Math.max(10,groupW-18));s.x=function(i){return PAD.left+groupW*i+groupW/2};body=axes(years,d,s,unit)+averageLines(graph,s,d);years.forEach(function(y,yi){graph.forEach(function(item,si){var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;var vy=s.y(v),top=Math.min(vy,zero),height=Math.max(1.5,Math.abs(zero-vy)),x=s.x(yi)-barW/2,isOut=br&&br.isOutlier(v),ly=v>=0?Math.max(PAD.top+9,top-6):Math.min(SVG_H-PAD.bottom-2,top+height+13);body+='<rect x="'+x+'" y="'+top+'" width="'+barW+'" height="'+height+'" rx="3" fill="'+(item.color||COLORS[si])+'"><title>'+esc(item.label+" "+y+"年: "+formatValue(v,unit))+'</title></rect><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):axisValue(v,unit))+"</text>"})})}else{graph.forEach(function(item,si){var color=item.color||COLORS[si],segments=[],seg=[],last=null;years.forEach(function(y,yi){var v=item.data[y];if(typeof v==="number"&&isFinite(v)){if(last!==null&&Number(y)-Number(last)>1&&seg.length){segments.push(seg);seg=[]}seg.push(s.x(yi)+","+s.y(v));last=y}else if(seg.length){segments.push(seg);seg=[];last=null}});if(seg.length)segments.push(seg);segments.forEach(function(points){if(points.length>=2)body+='<polyline points="'+points.join(" ")+'" fill="none" stroke="'+color+'" stroke-width="'+(item.isSector?2:3)+'"'+(item.isSector?' stroke-dasharray="2 5"':'')+' stroke-linecap="round" stroke-linejoin="round"></polyline>'});if(item.isSector)return;years.forEach(function(y,yi){var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;var cy=s.y(v),isOut=br&&br.isOutlier(v),ly=cy<PAD.top+18?cy+20:cy-10;body+='<circle cx="'+s.x(yi)+'" cy="'+cy+'" r="5" fill="#fff" stroke="'+color+'" stroke-width="3"><title>'+esc(item.label+" "+y+"年: "+formatValue(v,unit))+'</title></circle><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):formatValue(v,unit).replace(unit,""))+"</text>"})})}
     if(br)body+=breakMarks(s);
-    return '<div class="dvc-fin-chart"><svg viewBox="0 0 '+SVG_W+" "+SVG_H+'" role="img" aria-label="'+esc(label)+'">'+body+"</svg></div>"+legend(graph,type,unit)+(br?'<p class="dvc-chart-note">※縦軸の一部を二重波線の位置で省略しています。上側の点には実際の数値を表示しています。</p>':"")
+    return '<div class="dvc-fin-chart"><svg viewBox="0 0 '+SVG_W+" "+SVG_H+'" role="img" aria-label="'+esc(label)+'">'+body+"</svg></div>"+legend(graph,type,unit)+(br?'<p class="dvc-chart-note">※縦軸の一部を二重波線の位置で省略しています。上側の点には実際の数値を表示しています。</p>':"")+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
   }
   function miniMetric(title,data,unit,type,color,description,emptyMessage,company,key){
     var count=validYears(data).length,series=[{label:title,data:data||{},color:color}],med=sectorSeries(company,key,data||{}),content;

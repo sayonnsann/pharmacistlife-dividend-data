@@ -1,4 +1,4 @@
-name: fiscal_dividends.json をConoHaへ反映
+name: fiscal_dividends.json / checker本体 をConoHaへ反映
 
 # workspace(Private)のedinet-direct/data/fiscal_dividends.jsonを、
 # デプロイキー(WORKSPACE_DEPLOY_KEY, read-only)でsparse-checkoutし、
@@ -25,6 +25,14 @@ on:
         description: "workspaceリポジトリの取得元ブランチ/タグ/SHA"
         required: true
         default: "edinet-direct/fix-streak-basis-manual-restated"
+      deploy_fiscal:
+        description: "fiscal_dividends.jsonを反映する"
+        type: boolean
+        default: true
+      deploy_checker_body:
+        description: "serving/checker.htmlをshared/checker-body.htmlへ反映する"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -45,6 +53,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: workspace(Private)からfiscal_dividends.jsonだけをデプロイキーで取得
+        if: ${{ inputs.deploy_fiscal }}
         uses: actions/checkout@v4
         with:
           repository: sayonnsann/yuruyaku-workspace
@@ -56,6 +65,7 @@ jobs:
           path: workspace-src
 
       - name: 取得したファイルを検証
+        if: ${{ inputs.deploy_fiscal }}
         shell: bash
         run: |
           set -euo pipefail
@@ -102,6 +112,7 @@ jobs:
           fi
 
       - name: fiscal_dividends.jsonをFTPSへ原子的に反映
+        if: ${{ inputs.deploy_fiscal }}
         id: publish_fiscal
         shell: bash
         run: |
@@ -130,8 +141,52 @@ jobs:
             "ftp://${FTP_HOST}"
           echo "fiscal_dividends.json を検証つきで差し替えました（$local_size bytes）"
 
+      - name: checker.htmlをshared/checker-body.htmlへ原子的に反映
+        if: ${{ inputs.deploy_checker_body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="serving/checker.html"
+          if [[ ! -s "$FILE" ]]; then
+            echo "::error::serving/checker.html が見つかりません"
+            exit 1
+          fi
+          # スクリプト部分が壊れていないかの最低限の検証(タグの対応)
+          python3 - "$FILE" <<'PY'
+          import sys
+          html = open(sys.argv[1], encoding="utf-8").read()
+          if html.count("<script>") != html.count("</script>") or html.count("<script>") < 1:
+              raise SystemExit("scriptタグの対応が壊れています")
+          if "API_BASE" not in html:
+              raise SystemExit("チェッカー本体の目印(API_BASE)が見つかりません")
+          print(f"検証OK: {len(html.encode('utf-8')):,} bytes")
+          PY
+          # shared/ は FTP_REMOTE_DIR(非公開data/)の親ディレクトリ直下にある
+          remote_root="$(dirname "${FTP_REMOTE_DIR%/}")"
+          shared_dir="${remote_root%/}/shared"
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
+                put -O ${shared_dir}/ \"$FILE\" -o checker-body.html.new; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          local_size=$(wc -c < "$FILE" | tr -d ' ')
+          remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
+            "ftp://${FTP_HOST}${shared_dir}/checker-body.html.new" | awk '/Content-Length/ {print $2}' | tr -d '\r')
+          if [ "$local_size" != "$remote_size" ]; then
+            echo "::error::checker-body.html のアップロード検証に失敗（local=$local_size remote=$remote_size）"
+            exit 1
+          fi
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; \
+                rm -f ${shared_dir}/checker-body.html.bak; \
+                mv ${shared_dir}/checker-body.html ${shared_dir}/checker-body.html.bak || true; \
+                mv ${shared_dir}/checker-body.html.new ${shared_dir}/checker-body.html; \
+                bye" \
+            "ftp://${FTP_HOST}"
+          echo "checker-body.html を検証つきで差し替えました（$local_size bytes、旧版は.bakに退避）"
+
       - name: price-only-store.ymlをトリガー
-        if: ${{ always() && steps.publish_fiscal.outcome == 'success' }}
+        if: ${{ always() && inputs.deploy_fiscal && steps.publish_fiscal.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -144,4 +199,4 @@ jobs:
           fi
 
       - name: 完了
-        run: echo "fiscal_dividends.json のConoHaへの反映が完了しました。"
+        run: echo "ConoHaへの反映が完了しました（fiscal=${{ inputs.deploy_fiscal }} / checker_body=${{ inputs.deploy_checker_body }}）。"

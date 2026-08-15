@@ -12,9 +12,19 @@ name: fiscal_dividends.json をConoHaへ反映
 #
 # 手動実行(workflow_dispatch)のみ。cronでの自動実行はしない
 # (workspace側での更新タイミングが不定期なため、統括からの指示で都度実行する)。
+#
+# workspace_ref: fiscal_dividends.jsonを取得するworkspace側のブランチ/コミット。
+# fiscal_dividends.jsonの更新が進行中の作業ブランチでコミットされ、mainへは
+# 都度マージされない運用になっているため、実行時に取得元を指定できるようにする
+# (デフォルトは現在の最新反映元ブランチ)。
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      workspace_ref:
+        description: "workspaceリポジトリの取得元ブランチ/タグ/SHA"
+        required: true
+        default: "edinet-direct/fix-streak-basis-manual-restated"
 
 permissions:
   contents: read
@@ -38,21 +48,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: sayonnsann/yuruyaku-workspace
+          ref: ${{ inputs.workspace_ref }}
           ssh-key: ${{ secrets.WORKSPACE_DEPLOY_KEY }}
           sparse-checkout: |
             edinet-direct/data/fiscal_dividends.json
           sparse-checkout-cone-mode: false
           path: workspace-src
-
-      - name: デバッグ：取得内容を確認
-        shell: bash
-        run: |
-          echo "--- workspace-src 直下 ---"
-          ls -la workspace-src || true
-          echo "--- find ---"
-          find workspace-src -maxdepth 4 || true
-          echo "--- sparse-checkout設定 ---"
-          cat workspace-src/.git/info/sparse-checkout || true
 
       - name: 取得したファイルを検証
         shell: bash

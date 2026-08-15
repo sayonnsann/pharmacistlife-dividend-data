@@ -141,6 +141,19 @@ jobs:
             "ftp://${FTP_HOST}"
           echo "fiscal_dividends.json を検証つきで差し替えました（$local_size bytes）"
 
+      - name: FTP構成の調査(一時デバッグ)
+        if: ${{ inputs.deploy_checker_body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set ssl:verify-certificate true; set ftp:ssl-force true; \
+                echo '=== ls / ==='; cls -1 /; \
+                echo '=== ls remote_dir/.. ==='; cls -1 ${remote_dir}/..; \
+                bye" \
+            "ftp://${FTP_HOST}" || true
+
       - name: checker.htmlをshared/checker-body.htmlへ原子的に反映
         if: ${{ inputs.deploy_checker_body }}
         shell: bash

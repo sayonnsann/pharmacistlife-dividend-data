@@ -30,7 +30,7 @@ on:
         type: boolean
         default: true
       deploy_checker_body:
-        description: "serving/checker.htmlをshared/checker-body.htmlへ反映する"
+        description: "serving/checker.htmlをdata/checker-body.htmlへ反映する"
         type: boolean
         default: false
 
@@ -141,19 +141,6 @@ jobs:
             "ftp://${FTP_HOST}"
           echo "fiscal_dividends.json を検証つきで差し替えました（$local_size bytes）"
 
-      - name: FTP構成の調査(一時デバッグ)
-        if: ${{ inputs.deploy_checker_body }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          remote_dir="${FTP_REMOTE_DIR%/}"
-          lftp -u "${FTP_USER},${FTP_PASS}" \
-            -e "set ssl:verify-certificate true; set ftp:ssl-force true; \
-                echo '=== ls / ==='; cls -1 /; \
-                echo '=== ls remote_dir/.. ==='; cls -1 ${remote_dir}/..; \
-                bye" \
-            "ftp://${FTP_HOST}" || true
-
       - name: checker.htmlをshared/checker-body.htmlへ原子的に反映
         if: ${{ inputs.deploy_checker_body }}
         shell: bash
@@ -174,9 +161,10 @@ jobs:
               raise SystemExit("チェッカー本体の目印(API_BASE)が見つかりません")
           print(f"検証OK: {len(html.encode('utf-8')):,} bytes")
           PY
-          # shared/ は FTP_REMOTE_DIR(非公開data/)の親ディレクトリ直下にある
-          remote_root="$(dirname "${FTP_REMOTE_DIR%/}")"
-          shared_dir="${remote_root%/}/shared"
+          # FTPアカウントはdata/(FTP_REMOTE_DIR)に閉じ込められておりshared/へは
+          # 届かないため、data/checker-body.htmlへ配置する。サイト側の読み込み元
+          # (index.php等のinclude先)をshared/→data/へ切り替えて有効になる
+          shared_dir="${FTP_REMOTE_DIR%/}"
           lftp -u "${FTP_USER},${FTP_PASS}" \
             -e "set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
                 put -O ${shared_dir}/ \"$FILE\" -o checker-body.html.new; \

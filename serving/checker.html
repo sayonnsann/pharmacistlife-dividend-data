@@ -354,7 +354,18 @@
     if(state.financialStatus==="loading")return '<section class="dvc-financials"><div class="dvc-empty">財務データを読み込んでいます…</div></section>';
     if(state.financialStatus==="failed")return '<section class="dvc-financials"><div class="dvc-empty">財務データを読み込めませんでした。配当情報はそのままご利用いただけます。</div></section>';
     var c=state.financialByCode[code];if(!c)return"";
+    // 連結決算を始めた会社(basisTransition)は、切替前の単体値をつないだ表示用系列で
+    // 財務グラフを埋める。1株あたり指標(EPS/BPS)は株式分割の基準合わせと干渉するため
+    // 対象外とし、素の系列(連結開始後のみ)のまま表示する。
+    var bt=c.basisTransitionMetrics,btInfo=c.basisTransition,btNote="";
+    if(bt&&btInfo&&btInfo.fiscalYear){
+      var btKeys=["roe","roa","equityRatio","deRatio","revenue","netIncome","totalAssets","cashAndEquivalents","doe","payoutRatioTotalBased","numberOfEmployees"];
+      var merged=Object.assign({},c);var used=false;
+      btKeys.forEach(function(k){if(bt[k]&&validYears(bt[k]).length){merged[k]=bt[k];used=true}});
+      if(used){c=merged;btNote="この会社は"+String(btInfo.fiscalYear)+"年から連結決算(子会社を含めたグループ全体の数値)を開始しました。それより前の年は単体(親会社のみ)の数値です。EPS・BPSは基準をまたがないよう連結開始後の年のみ表示しています。"}
+    }
     var cash=c.cashAndEquivalents||c.cash||{},payout=validYears(c.payoutRatioTotalBased||{}).length?c.payoutRatioTotalBased:(c.payoutRatioConsolidated||{}),payoutKey=validYears(c.payoutRatioTotalBased||{}).length?"payoutRatioTotalBased":"payoutRatioConsolidated",warnings=warningMessages(c),html;
+    if(btNote)warnings=warnings.concat([{split:false,text:btNote}]);
     html='<section class="dvc-financials"><div class="dvc-fin-head"><div><h3>財務指標の推移</h3><p>薄い破線は期間平均、紫の点線は業種中央値です。横軸は開示年です。</p></div><span class="dvc-fin-source">出典: EDINET（金融庁）</span></div>';
     if(warnings.length)html+='<ul class="dvc-warnings">'+warnings.map(function(w){return '<li class="'+(w.split?"dvc-warning-split":"dvc-warning-note")+'">'+esc(w.text)+"</li>"}).join("")+"</ul>";
     html+=earningsForecastCard(c);

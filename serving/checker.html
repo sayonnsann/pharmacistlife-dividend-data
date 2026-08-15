@@ -66,6 +66,7 @@
 (function(){
   "use strict";
   var API_BASE="/api/api.php";
+  var API_CACHE_VERSION="20260815a";
   var state={data:[],byCode:{},sort:{key:"streak",dir:"desc"},financialByCode:{},sectorStats:{},financialStatus:"loaded",currentCode:"",total:0,searchTimer:null,searchRequest:0,detailRequest:0};
   var BASE_STREAK_TITLE="記念・特別配当を除いた通常配当だけで数えた年数";
   var SORTABLE_COLUMNS=[{key:"yield",label:"配当利回り"},{key:"forecast_yield",label:"予想利回り"},{key:"streak",label:"連続増配"},{key:"streak_nd",label:"連続非減配"},{key:"streak_base",label:"実質連続増配",title:BASE_STREAK_TITLE},{key:"streak_nd_base",label:"実質連続非減配",title:BASE_STREAK_TITLE},{key:"cagr5",label:"5年増配率"}];
@@ -140,7 +141,7 @@
   function unionYears(series){var seen={};series.forEach(function(s){validYears(s.data).forEach(function(y){seen[y]=true})});return Object.keys(seen).sort()}
   function median(values){var a=values.slice().sort(function(x,y){return x-y}),m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2}
 
-  function apiURL(action,params){var query=new URLSearchParams();query.set("action",action);Object.keys(params||{}).forEach(function(key){var value=params[key];if(value!==""&&value!==null&&value!==undefined)query.set(key,value)});return API_BASE+"?"+query.toString()}
+  function apiURL(action,params){var query=new URLSearchParams();query.set("action",action);Object.keys(params||{}).forEach(function(key){var value=params[key];if(value!==""&&value!==null&&value!==undefined)query.set(key,value)});query.set("v",API_CACHE_VERSION);return API_BASE+"?"+query.toString()}
   function apiErrorMessage(err){return err&&err.rateLimited?"アクセスが集中しています。しばらくしてからお試しください":(err&&err.message?err.message:"データの読み込みに失敗しました")}
   function requestJSON(url){return fetch(url).then(function(res){return res.json().catch(function(){return{}}).then(function(body){if(!res.ok){var err=new Error(body&&body.error?body.error:"データの読み込みに失敗しました");err.rateLimited=res.status===429;throw err}return body})})}
   function renderSuggest(query){

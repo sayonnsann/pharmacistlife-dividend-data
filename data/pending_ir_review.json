@@ -1,1824 +1,2024 @@
 {
-  "queue": [
-    {
-      "code": "146A",
-      "name": "コロンビア・ワークス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "146A",
-      "name": "コロンビア・ワークス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1723",
-      "name": "日本電技",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1723",
-      "name": "日本電技",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1793",
-      "name": "大本組",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1793",
-      "name": "大本組",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1861",
-      "name": "熊谷組",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1861",
-      "name": "熊谷組",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1972",
-      "name": "三晃金属工業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1972",
-      "name": "三晃金属工業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1975",
-      "name": "朝日工業社",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "1975",
-      "name": "朝日工業社",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2003",
-      "name": "日東富士製粉",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2003",
-      "name": "日東富士製粉",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2146",
-      "name": "UTグループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2146",
-      "name": "UTグループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2173",
-      "name": "博展",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2173",
-      "name": "博展",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2175",
-      "name": "エス・エム・エス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2018"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2175",
-      "name": "エス・エム・エス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2019"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2222",
-      "name": "寿スピリッツ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2222",
-      "name": "寿スピリッツ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2303",
-      "name": "ドーン",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2016"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2303",
-      "name": "ドーン",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2017"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2327",
-      "name": "日鉄ソリューションズ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2327",
-      "name": "日鉄ソリューションズ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2436",
-      "name": "共同ピーアール",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2436",
-      "name": "共同ピーアール",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2676",
-      "name": "高千穂交易",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2676",
-      "name": "高千穂交易",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2805",
-      "name": "ヱスビー食品",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2018"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2805",
-      "name": "ヱスビー食品",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2019"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2938",
-      "name": "オカムラ食品工業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2938",
-      "name": "オカムラ食品工業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2991",
-      "name": "ランドネット",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "2991",
-      "name": "ランドネット",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3002",
-      "name": "グンゼ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3002",
-      "name": "グンゼ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3288",
-      "name": "オープンハウスグループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2019"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3288",
-      "name": "オープンハウスグループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2020"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3371",
-      "name": "ソフトクリエイトホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3371",
-      "name": "ソフトクリエイトホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3399",
-      "name": "丸千代山岡家",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3399",
-      "name": "丸千代山岡家",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3445",
-      "name": "RS Technologies",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3445",
-      "name": "RS Technologies",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3771",
-      "name": "システムリサーチ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3771",
-      "name": "システムリサーチ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3984",
-      "name": "ユーザーローカル",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "3984",
-      "name": "ユーザーローカル",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4183",
-      "name": "三井化学",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4183",
-      "name": "三井化学",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4612",
-      "name": "日本ペイントホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2020"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4612",
-      "name": "日本ペイントホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4626",
-      "name": "太陽ホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4626",
-      "name": "太陽ホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4722",
-      "name": "フューチャー",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4722",
-      "name": "フューチャー",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4825",
-      "name": "ウェザーニューズ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "4825",
-      "name": "ウェザーニューズ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5021",
-      "name": "コスモエネルギーホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5021",
-      "name": "コスモエネルギーホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5038",
-      "name": "eWeLL",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5038",
-      "name": "eWeLL",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5285",
-      "name": "ヤマックス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5285",
-      "name": "ヤマックス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5401",
-      "name": "日本製鉄",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5401",
-      "name": "日本製鉄",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5445",
-      "name": "東京鐵鋼",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5445",
-      "name": "東京鐵鋼",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5463",
-      "name": "丸一鋼管",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5463",
-      "name": "丸一鋼管",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5471",
-      "name": "大同特殊鋼",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5471",
-      "name": "大同特殊鋼",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5482",
-      "name": "愛知製鋼",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5482",
-      "name": "愛知製鋼",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5588",
-      "name": "ファーストアカウンティング",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5588",
-      "name": "ファーストアカウンティング",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5711",
-      "name": "三菱マテリアル",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "5711",
-      "name": "三菱マテリアル",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6031",
-      "name": "ZETA",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6031",
-      "name": "ZETA",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6037",
-      "name": "楽待",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6037",
-      "name": "楽待",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6040",
-      "name": "日本スキー場開発",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6040",
-      "name": "日本スキー場開発",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6050",
-      "name": "イー・ガーディアン",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2015"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6050",
-      "name": "イー・ガーディアン",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2016"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6062",
-      "name": "チャーム・ケア・コーポレーション",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2019"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6062",
-      "name": "チャーム・ケア・コーポレーション",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2020"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6137",
-      "name": "小池酸素工業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6137",
-      "name": "小池酸素工業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6200",
-      "name": "インソース",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2020"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6200",
-      "name": "インソース",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6369",
-      "name": "トーヨーカネツ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6369",
-      "name": "トーヨーカネツ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6544",
-      "name": "ジャパンエレベーターサービスホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2020"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6544",
-      "name": "ジャパンエレベーターサービスホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6590",
-      "name": "芝浦メカトロニクス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6590",
-      "name": "芝浦メカトロニクス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6772",
-      "name": "東京コスモス電機",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "6772",
-      "name": "東京コスモス電機",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7013",
-      "name": "IHI",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7013",
-      "name": "IHI",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7059",
-      "name": "コプロ・ホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7059",
-      "name": "コプロ・ホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7066",
-      "name": "ピアズ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7066",
-      "name": "ピアズ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7242",
-      "name": "カヤバ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7242",
-      "name": "カヤバ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7273",
-      "name": "イクヨ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7273",
-      "name": "イクヨ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7327",
-      "name": "第四北越フィナンシャルグループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7327",
-      "name": "第四北越フィナンシャルグループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7367",
-      "name": "セルム",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7367",
-      "name": "セルム",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7417",
-      "name": "南陽",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7417",
-      "name": "南陽",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7552",
-      "name": "ハピネット",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7552",
-      "name": "ハピネット",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7649",
-      "name": "スギホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7649",
-      "name": "スギホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7685",
-      "name": "BuySell Technologies",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2020"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7685",
-      "name": "BuySell Technologies",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7723",
-      "name": "愛知時計電機",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7723",
-      "name": "愛知時計電機",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7735",
-      "name": "SCREENホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7735",
-      "name": "SCREENホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7821",
-      "name": "前田工繊",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7821",
-      "name": "前田工繊",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7846",
-      "name": "パイロットコーポレーション",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7846",
-      "name": "パイロットコーポレーション",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7878",
-      "name": "光・彩",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7878",
-      "name": "光・彩",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7949",
-      "name": "小松ウオール工業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7949",
-      "name": "小松ウオール工業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7979",
-      "name": "松風",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "7979",
-      "name": "松風",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8136",
-      "name": "サンリオ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8136",
-      "name": "サンリオ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8194",
-      "name": "ライフコーポレーション",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8194",
-      "name": "ライフコーポレーション",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8316",
-      "name": "三井住友フィナンシャルグループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8316",
-      "name": "三井住友フィナンシャルグループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8425",
-      "name": "みずほリース",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8425",
-      "name": "みずほリース",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8473",
-      "name": "SBIホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8473",
-      "name": "SBIホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8697",
-      "name": "日本取引所グループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8697",
-      "name": "日本取引所グループ",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8725",
-      "name": "MS&ADインシュアランスグループホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8725",
-      "name": "MS&ADインシュアランスグループホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8803",
-      "name": "平和不動産",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8803",
-      "name": "平和不動産",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8818",
-      "name": "京阪神ビルディング",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8818",
-      "name": "京阪神ビルディング",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8914",
-      "name": "エリアリンク",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "8914",
-      "name": "エリアリンク",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9145",
-      "name": "ビーイングホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9145",
-      "name": "ビーイングホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9368",
-      "name": "キムラユニティー",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9368",
-      "name": "キムラユニティー",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9418",
-      "name": "U-NEXT HOLDINGS",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9418",
-      "name": "U-NEXT HOLDINGS",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9616",
-      "name": "共立メンテナンス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9616",
-      "name": "共立メンテナンス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9658",
-      "name": "ビジネスブレイン太田昭和",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2020"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9658",
-      "name": "ビジネスブレイン太田昭和",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9684",
-      "name": "スクウェア・エニックス・ホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9684",
-      "name": "スクウェア・エニックス・ホールディングス",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9702",
-      "name": "アイ・エス・ビー",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2020"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9702",
-      "name": "アイ・エス・ビー",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9824",
-      "name": "泉州電業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9824",
-      "name": "泉州電業",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2023"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9882",
-      "name": "イエローハット",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9882",
-      "name": "イエローハット",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9960",
-      "name": "東テク",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2024"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9960",
-      "name": "東テク",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9983",
-      "name": "ファーストリテイリング",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2021"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9983",
-      "name": "ファーストリテイリング",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2022"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9987",
-      "name": "スズケン",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2025"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    },
-    {
-      "code": "9987",
-      "name": "スズケン",
-      "trigger": "new_suspect_year",
-      "detail": {
-        "year": "2026"
-      },
-      "detectedAt": "2026-08-14",
-      "status": "pending"
-    }
-  ]
+ "queue": [
+  {
+   "code": "146A",
+   "name": "コロンビア・ワークス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "146A",
+   "name": "コロンビア・ワークス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "1723",
+   "name": "日本電技",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "1723",
+   "name": "日本電技",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "1793",
+   "name": "大本組",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "1793",
+   "name": "大本組",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "1861",
+   "name": "熊谷組",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "1861",
+   "name": "熊谷組",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "1972",
+   "name": "三晃金属工業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "1972",
+   "name": "三晃金属工業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "1975",
+   "name": "朝日工業社",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "1975",
+   "name": "朝日工業社",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2003",
+   "name": "日東富士製粉",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "2003",
+   "name": "日東富士製粉",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "2146",
+   "name": "UTグループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2146",
+   "name": "UTグループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2173",
+   "name": "博展",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2173",
+   "name": "博展",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2175",
+   "name": "エス・エム・エス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2018"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "2175",
+   "name": "エス・エム・エス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2019"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "2222",
+   "name": "寿スピリッツ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2222",
+   "name": "寿スピリッツ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2303",
+   "name": "ドーン",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2016"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2303",
+   "name": "ドーン",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2017"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2327",
+   "name": "日鉄ソリューションズ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2327",
+   "name": "日鉄ソリューションズ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "2436",
+   "name": "共同ピーアール",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "2436",
+   "name": "共同ピーアール",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "2676",
+   "name": "高千穂交易",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "2676",
+   "name": "高千穂交易",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "2805",
+   "name": "ヱスビー食品",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2018"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "2805",
+   "name": "ヱスビー食品",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2019"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "2938",
+   "name": "オカムラ食品工業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "2938",
+   "name": "オカムラ食品工業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "2991",
+   "name": "ランドネット",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "2991",
+   "name": "ランドネット",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "3002",
+   "name": "グンゼ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "3002",
+   "name": "グンゼ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "3288",
+   "name": "オープンハウスグループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2019"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "3288",
+   "name": "オープンハウスグループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2020"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "3371",
+   "name": "ソフトクリエイトホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "3371",
+   "name": "ソフトクリエイトホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "3399",
+   "name": "丸千代山岡家",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "3399",
+   "name": "丸千代山岡家",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "3445",
+   "name": "RS Technologies",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "3445",
+   "name": "RS Technologies",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "3771",
+   "name": "システムリサーチ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "3771",
+   "name": "システムリサーチ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "3984",
+   "name": "ユーザーローカル",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "3984",
+   "name": "ユーザーローカル",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "4183",
+   "name": "三井化学",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "4183",
+   "name": "三井化学",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "4612",
+   "name": "日本ペイントホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2020"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "4612",
+   "name": "日本ペイントホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "4626",
+   "name": "太陽ホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "4626",
+   "name": "太陽ホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "4722",
+   "name": "フューチャー",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "4722",
+   "name": "フューチャー",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "4825",
+   "name": "ウェザーニューズ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "4825",
+   "name": "ウェザーニューズ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5021",
+   "name": "コスモエネルギーホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "5021",
+   "name": "コスモエネルギーホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "5038",
+   "name": "eWeLL",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "5038",
+   "name": "eWeLL",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "5285",
+   "name": "ヤマックス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5285",
+   "name": "ヤマックス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5401",
+   "name": "日本製鉄",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5401",
+   "name": "日本製鉄",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5445",
+   "name": "東京鐵鋼",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5445",
+   "name": "東京鐵鋼",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5463",
+   "name": "丸一鋼管",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5463",
+   "name": "丸一鋼管",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5471",
+   "name": "大同特殊鋼",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5471",
+   "name": "大同特殊鋼",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5482",
+   "name": "愛知製鋼",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "5482",
+   "name": "愛知製鋼",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "5588",
+   "name": "ファーストアカウンティング",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "5588",
+   "name": "ファーストアカウンティング",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "5711",
+   "name": "三菱マテリアル",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "5711",
+   "name": "三菱マテリアル",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "6031",
+   "name": "ZETA",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "6031",
+   "name": "ZETA",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "6037",
+   "name": "楽待",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "6037",
+   "name": "楽待",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "6040",
+   "name": "日本スキー場開発",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "6040",
+   "name": "日本スキー場開発",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "6050",
+   "name": "イー・ガーディアン",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2015"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "今回の再生成で判定不能マークが解消(台帳登録・棚卸しの波及効果)"
+  },
+  {
+   "code": "6050",
+   "name": "イー・ガーディアン",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2016"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "今回の再生成で判定不能マークが解消(台帳登録・棚卸しの波及効果)"
+  },
+  {
+   "code": "6062",
+   "name": "チャーム・ケア・コーポレーション",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2019"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "6062",
+   "name": "チャーム・ケア・コーポレーション",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2020"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "6137",
+   "name": "小池酸素工業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "6137",
+   "name": "小池酸素工業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "6200",
+   "name": "インソース",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2020"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "6200",
+   "name": "インソース",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "6369",
+   "name": "トーヨーカネツ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "6369",
+   "name": "トーヨーカネツ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "6544",
+   "name": "ジャパンエレベーターサービスホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2020"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "今回の再生成で判定不能マークが解消(台帳登録・棚卸しの波及効果)"
+  },
+  {
+   "code": "6544",
+   "name": "ジャパンエレベーターサービスホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "今回の再生成で判定不能マークが解消(台帳登録・棚卸しの波及効果)"
+  },
+  {
+   "code": "6590",
+   "name": "芝浦メカトロニクス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "6590",
+   "name": "芝浦メカトロニクス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "6772",
+   "name": "東京コスモス電機",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "6772",
+   "name": "東京コスモス電機",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "7013",
+   "name": "IHI",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7013",
+   "name": "IHI",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7059",
+   "name": "コプロ・ホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "7059",
+   "name": "コプロ・ホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "7066",
+   "name": "ピアズ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7066",
+   "name": "ピアズ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7242",
+   "name": "カヤバ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7242",
+   "name": "カヤバ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7273",
+   "name": "イクヨ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7273",
+   "name": "イクヨ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7327",
+   "name": "第四北越フィナンシャルグループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7327",
+   "name": "第四北越フィナンシャルグループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7367",
+   "name": "セルム",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "7367",
+   "name": "セルム",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "7417",
+   "name": "南陽",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7417",
+   "name": "南陽",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7552",
+   "name": "ハピネット",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7552",
+   "name": "ハピネット",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7649",
+   "name": "スギホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7649",
+   "name": "スギホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7685",
+   "name": "BuySell Technologies",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2020"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7685",
+   "name": "BuySell Technologies",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7723",
+   "name": "愛知時計電機",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7723",
+   "name": "愛知時計電機",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7735",
+   "name": "SCREENホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "7735",
+   "name": "SCREENホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "7821",
+   "name": "前田工繊",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "7821",
+   "name": "前田工繊",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "7846",
+   "name": "パイロットコーポレーション",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7846",
+   "name": "パイロットコーポレーション",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7878",
+   "name": "光・彩",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7878",
+   "name": "光・彩",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "7949",
+   "name": "小松ウオール工業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "7949",
+   "name": "小松ウオール工業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "7979",
+   "name": "松風",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "7979",
+   "name": "松風",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "8136",
+   "name": "サンリオ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "8136",
+   "name": "サンリオ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "8194",
+   "name": "ライフコーポレーション",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8194",
+   "name": "ライフコーポレーション",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8316",
+   "name": "三井住友フィナンシャルグループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8316",
+   "name": "三井住友フィナンシャルグループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8425",
+   "name": "みずほリース",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "8425",
+   "name": "みずほリース",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "8473",
+   "name": "SBIホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8473",
+   "name": "SBIホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8697",
+   "name": "日本取引所グループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8697",
+   "name": "日本取引所グループ",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8725",
+   "name": "MS&ADインシュアランスグループホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "8725",
+   "name": "MS&ADインシュアランスグループホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "8803",
+   "name": "平和不動産",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "8803",
+   "name": "平和不動産",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "8818",
+   "name": "京阪神ビルディング",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8818",
+   "name": "京阪神ビルディング",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "8914",
+   "name": "エリアリンク",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "8914",
+   "name": "エリアリンク",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9145",
+   "name": "ビーイングホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9145",
+   "name": "ビーイングホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9368",
+   "name": "キムラユニティー",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9368",
+   "name": "キムラユニティー",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9418",
+   "name": "U-NEXT HOLDINGS",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9418",
+   "name": "U-NEXT HOLDINGS",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9616",
+   "name": "共立メンテナンス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "9616",
+   "name": "共立メンテナンス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "9658",
+   "name": "ビジネスブレイン太田昭和",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2020"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9658",
+   "name": "ビジネスブレイン太田昭和",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9684",
+   "name": "スクウェア・エニックス・ホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "9684",
+   "name": "スクウェア・エニックス・ホールディングス",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "9702",
+   "name": "アイ・エス・ビー",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2020"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "9702",
+   "name": "アイ・エス・ビー",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "9824",
+   "name": "泉州電業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "9824",
+   "name": "泉州電業",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2023"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "9882",
+   "name": "イエローハット",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9882",
+   "name": "イエローハット",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "一次資料で分割を確認し手動確定台帳へ登録"
+  },
+  {
+   "code": "9960",
+   "name": "東テク",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2024"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "9960",
+   "name": "東テク",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "9983",
+   "name": "ファーストリテイリング",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2021"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "9983",
+   "name": "ファーストリテイリング",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2022"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "processed",
+   "processedAt": "2026-08-16",
+   "resolution": "棚卸しで判定不能リストから除外(パイプラインの分割調整で既に系列が揃っていた)"
+  },
+  {
+   "code": "9987",
+   "name": "スズケン",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2025"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  },
+  {
+   "code": "9987",
+   "name": "スズケン",
+   "trigger": "new_suspect_year",
+   "detail": {
+    "year": "2026"
+   },
+   "detectedAt": "2026-08-14",
+   "status": "pending"
+  }
+ ]
 }

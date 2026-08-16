@@ -1374,7 +1374,22 @@ def pending_dividends(
     confirmed_year = None
     if isinstance(fiscal_year_end, str) and fiscal_year_end[:4].isdigit():
         confirmed_year = int(fiscal_year_end[:4])
-    if confirmed is not None and confirmed > 0 and acceptable(confirmed_year):
+    # 「確定」を名乗れるのは期末を過ぎた年度だけ。進行中の年度の短信
+    # (Q1〜Q3)でも同じ欄に年間額が入ってくることがあり(実態は予想)、
+    # それを確定と表示すると誤り(例: 3837アドソル日進の2027年3月期)。
+    # 期末前の値はここでは出さず、後段の予想(kind=forecast)に任せる。
+    fiscal_year_ended = False
+    if isinstance(fiscal_year_end, str):
+        try:
+            fiscal_year_ended = date.fromisoformat(fiscal_year_end[:10]) <= today
+        except ValueError:
+            fiscal_year_ended = False
+    if (
+        confirmed is not None
+        and confirmed > 0
+        and fiscal_year_ended
+        and acceptable(confirmed_year)
+    ):
         result[str(confirmed_year)] = {
             "value": round(float(confirmed) * factor_for(confirmed_year), 4),
             "kind": "confirmed",

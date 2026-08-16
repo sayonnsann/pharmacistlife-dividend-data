@@ -1674,11 +1674,13 @@ class PendingDividendsTest(unittest.TestCase):
     def test_split_factor_does_not_apply_to_a_confirmed_year_after_the_split(
         self,
     ) -> None:
+        # 期末(2026-03-31)を過ぎた年度の確定額。分割(2025-04-01発効)より
+        # 後の期なので、会社発表額はすでに新株数基準=係数を掛けない。
         adjustment = {
             "events": [
                 {
                     "adjustmentFactor": 0.5,
-                    "effectiveDate": "2026-04-01",
+                    "effectiveDate": "2025-04-01",
                     "applyDividendAdjustment": True,
                 }
             ]
@@ -1686,13 +1688,31 @@ class PendingDividendsTest(unittest.TestCase):
         result = self.pending(
             {
                 "confirmedDividend": 41.0,
-                "confirmedFiscalYearEnd": "2027-03-31",
+                "confirmedFiscalYearEnd": "2026-03-31",
             },
-            {2025, 2026},
+            {2024, 2025},
             adjustment=adjustment,
             fiscal_month=3,
         )
-        self.assertEqual(result["2027"]["value"], 41.0)
+        self.assertEqual(result["2026"]["value"], 41.0)
+
+    def test_a_confirmed_amount_for_a_year_still_in_progress_becomes_a_forecast(
+        self,
+    ) -> None:
+        # 進行中の年度(期末が未来)はQ1短信の年間欄に額が入っていても
+        # 「確定」を名乗れない。予想欄があればそちらで表示する
+        # (3837アドソル日進の2027年3月期)。
+        result = self.pending(
+            {
+                "confirmedDividend": 48.0,
+                "confirmedFiscalYearEnd": "2027-03-31",
+                "forecastDividend": 48.0,
+                "forecastFiscalYear": 2027,
+            },
+            {2025, 2026},
+        )
+        self.assertEqual(result["2027"]["kind"], "forecast")
+        self.assertEqual(result["2027"]["value"], 48.0)
 
 
 # 東計電算(4746 / E05066 / 12月決算)の実データ。2026-08-03開示のQ2。

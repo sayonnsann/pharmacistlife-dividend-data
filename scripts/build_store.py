@@ -1374,10 +1374,15 @@ def pending_dividends(
     confirmed_year = None
     if isinstance(fiscal_year_end, str) and fiscal_year_end[:4].isdigit():
         confirmed_year = int(fiscal_year_end[:4])
-    # 「確定」を名乗れるのは期末を過ぎた年度だけ。進行中の年度の短信
-    # (Q1〜Q3)でも同じ欄に年間額が入ってくることがあり(実態は予想)、
-    # それを確定と表示すると誤り(例: 3837アドソル日進の2027年3月期)。
+    # 「確定」を名乗れるのは、本決算(Q4)短信に載った実績だけ。
+    # Q1〜Q3短信の年間配当欄には予想込みの額が入ってくるため、それを
+    # 確定と表示すると誤り(例: 3837アドソル日進の2027年3月期のQ1短信)。
+    # 期末日チェックだけだと、期末後〜本決算短信発表前(3月決算なら4〜5月)に
+    # Q3短信の予想込み額が確定を名乗る穴が残るので、短信の四半期区分で判定
+    # する。区分が無い古いレコードは期末日チェックのみ(従来動作の維持)。
     # 期末前の値はここでは出さず、後段の予想(kind=forecast)に任せる。
+    quarter = forecast_record.get("forecastQuarter")
+    from_full_year_report = quarter == 4 or quarter is None
     fiscal_year_ended = False
     if isinstance(fiscal_year_end, str):
         try:
@@ -1387,6 +1392,7 @@ def pending_dividends(
     if (
         confirmed is not None
         and confirmed > 0
+        and from_full_year_report
         and fiscal_year_ended
         and acceptable(confirmed_year)
     ):

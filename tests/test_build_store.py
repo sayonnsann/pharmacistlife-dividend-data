@@ -1186,14 +1186,18 @@ class FiscalSeriesInStoreTest(unittest.TestCase):
                 "externalYears": [],
             }
         }
+        # 本決算(Q4)短信の形: 対象年度(2026年3月期)の実績80円が確定欄に、
+        # 翌期(2027年3月期)の予想84円が予想欄に同居する。confirmedFiscalYearEnd
+        # は常に「短信の対象年度末」(3837アドソル日進の実データで確認)なので、
+        # Q1〜Q3短信でこの組み合わせは起こらない。
         forecasts = {
             "9433": {
                 "forecastDividend": 84.0,
                 "forecastPeriod": "2027年3月期(予)",
                 "forecastFiscalYear": 2027,
-                "forecastQuarter": 2,
-                "forecastQuarterLabel": "Q2",
-                "forecastPeriodType": "current",
+                "forecastQuarter": 4,
+                "forecastQuarterLabel": "Q4",
+                "forecastPeriodType": "next",
                 "forecastRevenue": 5_400_000,
                 "forecastRevenueChange": 4.5,
                 "forecastOperatingIncome": 560_000,
@@ -1231,13 +1235,13 @@ class FiscalSeriesInStoreTest(unittest.TestCase):
         self.assertEqual(payload["forecastOperatingIncomeChange"], 7.2)
         self.assertEqual(payload["forecastEps"], 123.4)
         self.assertEqual(payload["forecastEpsChange"], 9.0)
-        self.assertEqual(payload["forecastQuarter"], 2)
-        self.assertEqual(payload["forecastPeriodType"], "current")
+        self.assertEqual(payload["forecastQuarter"], 4)
+        self.assertEqual(payload["forecastPeriodType"], "next")
         self.assertEqual(payload["earnings"]["forecast"]["kind"], "forecast")
         self.assertEqual(
             payload["earnings"]["forecast"]["period"], "2027年3月期(予)"
         )
-        self.assertEqual(payload["earnings"]["forecast"]["sourceQuarter"], 2)
+        self.assertEqual(payload["earnings"]["forecast"]["sourceQuarter"], 4)
         self.assertIsNone(payload["earnings"]["actual"])
 
     def test_earnings_payload_exposes_actual_when_the_annual_report_arrives(
@@ -1695,6 +1699,35 @@ class PendingDividendsTest(unittest.TestCase):
             fiscal_month=3,
         )
         self.assertEqual(result["2026"]["value"], 41.0)
+
+    def test_a_q3_report_amount_is_not_confirmed_even_after_fiscal_year_end(
+        self,
+    ) -> None:
+        # 3月決算の4〜5月: 期末日は過ぎたが最新短信はまだQ3(予想込みの額)。
+        # 本決算(Q4)短信が出るまで確定を名乗れない。
+        result = self.pending(
+            {
+                "confirmedDividend": 48.0,
+                "confirmedFiscalYearEnd": "2026-03-31",
+                "forecastQuarter": 3,
+                "forecastDividend": 48.0,
+                "forecastFiscalYear": 2026,
+            },
+            {2024, 2025},
+        )
+        self.assertEqual(result["2026"]["kind"], "forecast")
+
+    def test_a_q4_report_amount_is_confirmed_after_fiscal_year_end(self) -> None:
+        # 本決算(Q4)短信の実績は、期末後なら確定を名乗ってよい。
+        result = self.pending(
+            {
+                "confirmedDividend": 46.0,
+                "confirmedFiscalYearEnd": "2026-03-31",
+                "forecastQuarter": 4,
+            },
+            {2024, 2025},
+        )
+        self.assertEqual(result["2026"]["kind"], "confirmed")
 
     def test_a_confirmed_amount_for_a_year_still_in_progress_becomes_a_forecast(
         self,

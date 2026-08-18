@@ -467,9 +467,9 @@ class SplitAdjustmentTest(unittest.TestCase):
             ROOT / "data" / "stock_actions_manual.json",
             as_of=date(2026, 8, 3),
         )
-        self.assertEqual(len(loaded), 47)  # 2026-08-17: 分割取りこぼし棚卸し44件を追加(as_of時点で有効な件数)
-        self.assertEqual(sum(map(len, loaded.values())), 47)
-        self.assertTrue(loaded["2220"][0]["epsAdjustedByIssuer"])
+        self.assertEqual(len(loaded), 55)  # 2026-08-18: マスター一本化(export_yield_actions.py生成)後の実数
+        self.assertEqual(sum(map(len, loaded.values())), 55)
+        self.assertIsNone(loaded["2220"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)
         self.assertTrue(
             all(
                 item["epsAdjustedByIssuer"] in (True, False, None)
@@ -477,8 +477,8 @@ class SplitAdjustmentTest(unittest.TestCase):
                 for item in events
             )
         )
-        self.assertTrue(loaded["2897"][0]["epsAdjustedByIssuer"])
-        self.assertTrue(loaded["6516"][0]["epsAdjustedByIssuer"])
+        self.assertIsNone(loaded["2897"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)
+        self.assertIsNone(loaded["6516"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)
 
     def test_manual_actions_include_toukei_as_provisional_after_effective_date(
         self,

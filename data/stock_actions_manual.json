@@ -1,349 +1,10 @@
 {
   "schemaVersion": 1,
-  "note": "一次資料で確認した株式分割イベント。有報からの自動抽出(stock_actions.json)で拾えなかった分を人手で補う。有報は年1回しか出ないため、提出後に決議・実施された分割は自動抽出では原理的に拾えない（3月決算以外で顕著）。半期報告書(160)の取得で将来的に自動化できる見込み。決算書類でEPS/BPSの遡及調整を確認できる前のイベントはstatus=provisionalで登録し、配当だけを先に補正する。",
-  "adjustmentRule": "現在株価の基準に揃える場合、effectiveDate より前の1株当たり値に oldShares/newShares を掛ける。status=confirmed は配当とEPS/BPSを補正し、epsAdjustedByIssuer=true は発行体がEPS/BPSを既に遡及調整済みなのでこちらでは補正しない。status=provisional は配当だけを補正し、EPS/BPSは触らない。それ以外のstatusは無視する。applyDividendAdjustment=true はこのイベントの比率で配当を補正し、false は補正不要・対象外、null は比率不明などで補正できなかったことを表す。比率不明をfalseにしてはいけない。省略時は旧データとの互換性のためtrueとして扱う。provisionalからconfirmedへ格上げするときは、先に決算書類でEPS/BPSの遡及調整有無を確認し、epsAdjustedByIssuerをtrueまたはfalseに更新してからstatusをconfirmedに変更する。epsAdjustedByIssuerがnullのままconfirmedになった場合は、EPS/BPSを補正しない安全側へフォールバックして配信を完了し、ジョブの最後に通知して失敗させる。通知を見たら決算書類を確認し、epsAdjustedByIssuerをtrueまたはfalseに直す。",
-  "confirmedBy": "confirmedイベントはCodex(GPT-5.6 Sol)によるWeb調査、2026-08-02。provisionalイベントは各checkedAt時点のWeb調査。各eventのsource.urlが一次資料",
+  "note": "edinet-direct側マスターから配当利回り補正に必要なイベントを自動生成した派生台帳。イベントのnoteは公開用定型文のみを出力する。",
+  "adjustmentRule": "現在株価の基準に揃える場合、effectiveDate より前の1株当たり値に oldShares/newShares を掛ける。status=confirmed は配当とEPS/BPSを補正し、epsAdjustedByIssuer=true は発行体がEPS/BPSを既に遡及調整済みなのでこちらでは補正しない。status=provisional は配当だけを補正し、EPS/BPSは触らない。applyDividendAdjustment=true のイベントだけ配当を補正する。",
+  "selectionRule": "action=split、上場コード、newShares/oldSharesが50倍未満、かつ効力発生日がfiscal_dividendsの最終年度末より後。yield_action_overrides.jsonの明示指定を最後に適用する。",
+  "confirmedBy": "edinet-direct側マスターのdpsRestated/epsAdjusted判定。各eventのsource.urlが根拠資料",
   "events": [
-    {
-      "eventId": "8053-2026-07-01-split-1-to-4",
-      "securityCode": "8053",
-      "name": "住友商事",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 4,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www.sumitomocorp.com/-/media/Files/hq/ir/report/summary/2025/2603Tanshin.pdf?sc_lang=ja",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "5802-2026-07-01-split-1-to-4",
-      "securityCode": "5802",
-      "name": "住友電気工業",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 4,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://sumitomoelectric.com/jp/sites/japan/files/2026-05/download_documents/prs053v.pdf",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "5801-2026-07-01-split-1-to-10",
-      "securityCode": "5801",
-      "name": "古河電気工業",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 10,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/58010/140120260511523194.pdf",
-        "type": "jpx"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "1414-2026-01-01-split-1-to-4",
-      "securityCode": "1414",
-      "name": "ショーボンドホールディングス",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 4,
-      "effectiveDate": "2026-01-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/14140/140120251110593695.pdf",
-        "type": "jpx"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "2264-2026-07-01-split-1-to-4",
-      "securityCode": "2264",
-      "name": "森永乳業",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 4,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www.morinagamilk.co.jp/release/newsentry-4693.html",
-        "type": "issuer_ir"
-      },
-      "note": "別に2023-12-01の1→2分割もあるが、FY2026のEPSはその分割後の株数で算定済みのため、今回掛けるのは4倍のみ",
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "7236-2026-07-01-split-1-to-10",
-      "securityCode": "7236",
-      "name": "ティラド",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 10,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/72360/140120260525546492.pdf",
-        "type": "jpx"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "7173-2026-07-01-split-1-to-8",
-      "securityCode": "7173",
-      "name": "東京きらぼしフィナンシャルグループ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 8,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/71730/140120260507518894.pdf",
-        "type": "jpx"
-      },
-      "note": "2026年5月に第一種優先株式を普通株式5,498,532株へ転換しており、分割補正だけでは完全でない。潜在株式調整後EPSベースの参考PERは13.28倍",
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "8057-2026-01-21-split-1-to-5",
-      "securityCode": "8057",
-      "name": "内田洋行",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 5,
-      "effectiveDate": "2026-01-21",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www.uchida.co.jp/company/news/customer/251014a.html",
-        "type": "issuer_ir"
-      },
-      "note": "2026年中間報告書では過年度の1株指標を5分割後基準へ遡及調整済み。次回有報取得時は二重適用に注意",
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "2220-2026-04-01-split-1-to-3",
-      "securityCode": "2220",
-      "name": "亀田製菓",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-04-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": true,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/22200/140120260218564292.pdf",
-        "type": "jpx"
-      },
-      "note": "FY2026有報が「2022年3月期の期首に分割が行われたと仮定」してEPS/BPSを遡及調整済み。PERは補正不要、配当のみ補正が必要",
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "4641-2026-07-01-split-1-to-3",
-      "securityCode": "4641",
-      "name": "アルプス技研",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www.alpsgiken.co.jp/ir/images/report/2026/ir20260514_01.pdf",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "2986-2026-07-01-split-1-to-3",
-      "securityCode": "2986",
-      "name": "ＬＡホールディングス",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/29860/140120260514533330.pdf",
-        "type": "jpx"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "3712-2026-04-01-split-1-to-5",
-      "securityCode": "3712",
-      "name": "情報企画",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 5,
-      "effectiveDate": "2026-04-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www.jyohokikaku.co.jp/contents/wp-content/uploads/2026/02/20260205_01.pdf",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "9562-2026-04-01-split-1-to-3",
-      "securityCode": "9562",
-      "name": "ビジネスコーチ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-04-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/95620/140120260213560433.pdf",
-        "type": "jpx"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "4976-2026-01-01-split-1-to-3",
-      "securityCode": "4976",
-      "name": "東洋ドライルーブ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-01-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/49760/140120260514532203.pdf",
-        "type": "jpx"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "7846-2026-07-01-split-1-to-3",
-      "securityCode": "7846",
-      "name": "パイロットコーポレーション",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/78460/140120260213560067.pdf",
-        "type": "jpx"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "3804-2026-05-01-split-1-to-3",
-      "securityCode": "3804",
-      "name": "システム　ディ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-05-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www.systemd.co.jp/wordpress/wp-content/uploads/2026/03/20260325_ir.pdf",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "7460-2026-07-01-split-1-to-3",
-      "securityCode": "7460",
-      "name": "ヤギ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www.yaginet.co.jp/ja/news/ir_news/auto_20260529554017/pdfFile.pdf",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "3277-2026-07-01-split-1-to-2",
-      "securityCode": "3277",
-      "name": "サンセイランディック",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/32770/140120260515536591.pdf",
-        "type": "jpx"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "1899-2026-07-01-split-1-to-2",
-      "securityCode": "1899",
-      "name": "福田組",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www.fkd.co.jp/wp-content/uploads/2026/05/20260508_bunkatuhaitouyosou_osirase.pdf",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "3176-2026-07-01-split-1-to-2",
-      "securityCode": "3176",
-      "name": "三洋貿易",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/31760/140120260507517527.pdf",
-        "type": "jpx"
-      },
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "7425-2026-07-01-split-1-to-2",
-      "securityCode": "7425",
-      "name": "初穂商事",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www.hatsuho.co.jp/ir/pdf/IR_k260612.pdf",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-02"
-    },
     {
       "eventId": "2897-2024-01-01-split-1-to-3",
       "securityCode": "2897",
@@ -352,12 +13,14 @@
       "oldShares": 1,
       "newShares": 3,
       "effectiveDate": "2024-01-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": true,
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
       "source": {
-        "url": "https://www.nissin.com/jp/company/news/12074/",
-        "type": "issuer_ir"
+        "type": "issuer_ir",
+        "url": "https://www.nissin.com/jp/company/news/12074/"
       },
+      "note": "edinet-direct側マスター(2897-2024-01-01-split-1-to-3)から自動生成",
       "checkedAt": "2026-08-09"
     },
     {
@@ -369,12 +32,14 @@
       "newShares": 3,
       "effectiveDate": "2024-01-01",
       "status": "confirmed",
+      "applyDividendAdjustment": true,
       "epsAdjustedByIssuer": true,
       "source": {
-        "url": "https://www.kureha.co.jp/newsrelease/uploads/Stock%20Split_jp.pdf",
-        "type": "issuer_ir"
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100TRYX.pdf",
+        "type": "edinet"
       },
-      "checkedAt": "2026-08-09"
+      "note": "edinet-direct側マスター(4023-2024-01-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-16"
     },
     {
       "eventId": "6594-2024-10-01-split-1-to-2",
@@ -384,12 +49,14 @@
       "oldShares": 1,
       "newShares": 2,
       "effectiveDate": "2024-10-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": true,
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
       "source": {
-        "url": "https://www.nidec.com/jp/ir/stockholder/issue-sprit/",
-        "type": "issuer_ir"
+        "type": "issuer_ir",
+        "url": "https://www.nidec.com/jp/ir/stockholder/issue-sprit/"
       },
+      "note": "edinet-direct側マスター(6594-2024-10-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-08-09"
     },
     {
@@ -400,61 +67,14 @@
       "oldShares": 1,
       "newShares": 5,
       "effectiveDate": "2025-03-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": true,
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
       "source": {
-        "url": "https://www2.jpx.co.jp/disc/277A0/140120250123554343.pdf",
-        "type": "jpx"
+        "type": "jpx",
+        "url": "https://www2.jpx.co.jp/disc/277A0/140120250123554343.pdf"
       },
-      "checkedAt": "2026-08-09"
-    },
-    {
-      "eventId": "5401-2025-10-01-split-1-to-5",
-      "securityCode": "5401",
-      "name": "日本製鉄",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 5,
-      "effectiveDate": "2025-10-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": true,
-      "source": {
-        "url": "https://www.nipponsteel.com/newsroom/news/2025/__icsFiles/afieldfile/2025/09/10/20250801_200.pdf",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-09"
-    },
-    {
-      "eventId": "6516-2025-10-01-split-1-to-3",
-      "securityCode": "6516",
-      "name": "山洋電気",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2025-10-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": true,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YCEQ.pdf",
-        "type": "edinet",
-        "note": "有価証券報告書 第124期(2026-06-17提出)「1株当たり情報」注記: 2025-10-01付株式分割につき第120期期首に遡及して1株当たり純資産額・当期純利益を算定と明記"
-      },
-      "checkedAt": "2026-08-11"
-    },
-    {
-      "eventId": "7781-2026-07-01-split-1-to-2",
-      "securityCode": "7781",
-      "name": "平山ホールディングス",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-07-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": false,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/77810/140120260216562891.pdf",
-        "type": "jpx"
-      },
+      "note": "edinet-direct側マスター(277A-2025-03-01-split-1-to-5)から自動生成",
       "checkedAt": "2026-08-09"
     },
     {
@@ -465,47 +85,15 @@
       "oldShares": 1,
       "newShares": 2,
       "effectiveDate": "2025-06-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": true,
-      "source": {
-        "url": "https://pdf.irpocket.com/C9305/dRUj/kiZH/Y3Cp.pdf",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-09"
-    },
-    {
-      "eventId": "7327-2025-10-01-split-1-to-3",
-      "securityCode": "7327",
-      "name": "第四北越フィナンシャルグループ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2025-10-01",
-      "status": "confirmed",
-      "epsAdjustedByIssuer": true,
-      "source": {
-        "url": "https://www.dhfg.co.jp/financial/stock/",
-        "type": "issuer_ir"
-      },
-      "checkedAt": "2026-08-09"
-    },
-    {
-      "eventId": "4746-2026-10-01-split-1-to-4",
-      "securityCode": "4746",
-      "name": "東計電算",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 4,
-      "effectiveDate": "2026-10-01",
       "status": "provisional",
       "applyDividendAdjustment": true,
       "epsAdjustedByIssuer": null,
       "source": {
-        "url": "https://www.toukei.co.jp/wp-content/uploads/2026/08/260803-ir-news.pdf",
-        "type": "issuer_ir"
+        "type": "issuer_ir",
+        "url": "https://pdf.irpocket.com/C9305/dRUj/kiZH/Y3Cp.pdf"
       },
-      "note": "基準日は2026年9月30日。発行体IRで1株→4株、効力発生日2026年10月1日を確認。EPS/BPSの遡及調整有無は取得不能（決算書類確認前）のため、provisional中は配当だけ補正する。",
-      "checkedAt": "2026-08-08"
+      "note": "edinet-direct側マスター(9305-2025-06-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-09"
     },
     {
       "eventId": "5137-2025-07-01-split-1-to-6",
@@ -522,7 +110,117 @@
         "url": "https://www2.jpx.co.jp/disc/51370/140120250514550688.pdf",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(5137-2025-07-01-split-1-to-6)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "3498-2025-09-01-split-1-to-2",
+      "securityCode": "3498",
+      "name": "霞ヶ関キャピタル",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2025-09-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://ssl4.eir-parts.net/doc/3498/tdnet/2693699/00.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(3498-2025-09-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-15"
+    },
+    {
+      "eventId": "4439-2025-09-01-split-1-to-2",
+      "securityCode": "4439",
+      "name": "東名",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2025-09-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://ssl4.eir-parts.net/doc/4439/yuho_pdf/S100X6GX/00.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(4439-2025-09-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-15"
+    },
+    {
+      "eventId": "3496-2025-10-01-split-1-to-2",
+      "securityCode": "3496",
+      "name": "アズーム",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2025-10-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://contents.xj-storage.jp/xcontents/AS03634/5d599f03/f4c9/427d/ba19/a4367d68ce1c/S100XADZ.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(3496-2025-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-15"
+    },
+    {
+      "eventId": "5401-2025-10-01-split-1-to-5",
+      "securityCode": "5401",
+      "name": "日本製鉄",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 5,
+      "effectiveDate": "2025-10-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100X053.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(5401-2025-10-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "6516-2025-10-01-split-1-to-3",
+      "securityCode": "6516",
+      "name": "山洋電気",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2025-10-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "type": "edinet",
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YCEQ.pdf",
+        "note": "有価証券報告書 第124期(2026-06-17提出)「1株当たり情報」注記: 2025-10-01付株式分割につき第120期期首に遡及して1株当たり純資産額・当期純利益を算定と明記"
+      },
+      "note": "edinet-direct側マスター(6516-2025-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-11"
+    },
+    {
+      "eventId": "7327-2025-10-01-split-1-to-3",
+      "securityCode": "7327",
+      "name": "第四北越フィナンシャルグループ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2025-10-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100X403.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(7327-2025-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "7532-2025-10-01-split-1-to-5",
@@ -539,7 +237,8 @@
         "url": "https://www.nikkei.com/nkd/disclosure/tdnr/20250814542634/",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(7532-2025-10-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "9399-2025-10-28-split-1-to-10",
@@ -556,7 +255,206 @@
         "url": "https://www2.jpx.co.jp/disc/93990/140120250930565335.pdf",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(9399-2025-10-28-split-1-to-10)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "1414-2026-01-01-split-1-to-4",
+      "securityCode": "1414",
+      "name": "ショーボンドホールディングス",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 4,
+      "effectiveDate": "2026-01-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/14140/140120251110593695.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(1414-2026-01-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "4976-2026-01-01-split-1-to-3",
+      "securityCode": "4976",
+      "name": "東洋ドライルーブ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-01-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/49760/140120260514532203.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(4976-2026-01-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "8057-2026-01-21-split-1-to-5",
+      "securityCode": "8057",
+      "name": "内田洋行",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 5,
+      "effectiveDate": "2026-01-21",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.uchida.co.jp/company/news/customer/251014a.html",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(8057-2026-01-21-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "2003-2026-04-01-split-1-to-4",
+      "securityCode": "2003",
+      "name": "日東富士製粉",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 4,
+      "effectiveDate": "2026-04-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YK99.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(2003-2026-04-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-16"
+    },
+    {
+      "eventId": "2220-2026-04-01-split-1-to-3",
+      "securityCode": "2220",
+      "name": "亀田製菓",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-04-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/22200/140120260218564292.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(2220-2026-04-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "3712-2026-04-01-split-1-to-5",
+      "securityCode": "3712",
+      "name": "情報企画",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 5,
+      "effectiveDate": "2026-04-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.jyohokikaku.co.jp/contents/wp-content/uploads/2026/02/20260205_01.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(3712-2026-04-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "6196-2026-04-01-split-1-to-3",
+      "securityCode": "6196",
+      "name": "ストライクグループ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-04-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/61960/140120260430514227.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(6196-2026-04-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-14"
+    },
+    {
+      "eventId": "7735-2026-04-01-split-1-to-2",
+      "securityCode": "7735",
+      "name": "SCREENホールディングス",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-04-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YK9N.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(7735-2026-04-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-16"
+    },
+    {
+      "eventId": "8341-2026-04-01-split-1-to-3",
+      "securityCode": "8341",
+      "name": "七十七銀行",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-04-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YAM0.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(8341-2026-04-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-14"
+    },
+    {
+      "eventId": "9533-2026-04-01-split-1-to-4",
+      "securityCode": "9533",
+      "name": "東邦瓦斯",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 4,
+      "effectiveDate": "2026-04-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YGFW.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(9533-2026-04-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-14"
+    },
+    {
+      "eventId": "9562-2026-04-01-split-1-to-3",
+      "securityCode": "9562",
+      "name": "ビジネスコーチ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-04-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/95620/140120260213560433.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(9562-2026-04-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-02"
     },
     {
       "eventId": "334A-2026-05-01-split-1-to-2",
@@ -573,7 +471,26 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20262.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(334A-2026-05-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "3804-2026-05-01-split-1-to-3",
+      "securityCode": "3804",
+      "name": "システム　ディ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-05-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.systemd.co.jp/wordpress/wp-content/uploads/2026/03/20260325_ir.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(3804-2026-05-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-02"
     },
     {
       "eventId": "2303-2026-06-01-split-1-to-2",
@@ -590,7 +507,8 @@
         "url": "https://www.daiwair.co.jp/td_download.cgi?c=2303&i=3187454",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(2303-2026-06-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "485A-2026-06-01-split-1-to-3",
@@ -607,7 +525,8 @@
         "url": "https://assets.ctfassets.net/rvycng606pot/vEOM0ajHummhU48muGlM3/88c2a3a5ea4519bcab4accbd028c2b4f/Public_Notice_of_Record_Date.pdf",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(485A-2026-06-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "6083-2026-06-01-split-1-to-3",
@@ -624,7 +543,8 @@
         "url": "https://www.h-eri.co.jp/ir/stock/kabu.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(6083-2026-06-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "1663-2026-07-01-split-1-to-2",
@@ -641,7 +561,44 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20262.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(1663-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "1899-2026-07-01-split-1-to-2",
+      "securityCode": "1899",
+      "name": "福田組",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.fkd.co.jp/wp-content/uploads/2026/05/20260508_bunkatuhaitouyosou_osirase.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(1899-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "2264-2026-07-01-split-1-to-4",
+      "securityCode": "2264",
+      "name": "森永乳業",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 4,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.morinagamilk.co.jp/release/newsentry-4693.html",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(2264-2026-07-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-02"
     },
     {
       "eventId": "2436-2026-07-01-split-1-to-2",
@@ -658,7 +615,62 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20262.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(2436-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "2986-2026-07-01-split-1-to-3",
+      "securityCode": "2986",
+      "name": "ＬＡホールディングス",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/29860/140120260514533330.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(2986-2026-07-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "3176-2026-07-01-split-1-to-2",
+      "securityCode": "3176",
+      "name": "三洋貿易",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/31760/140120260507517527.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(3176-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "3277-2026-07-01-split-1-to-2",
+      "securityCode": "3277",
+      "name": "サンセイランディック",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/32770/140120260515536591.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(3277-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-02"
     },
     {
       "eventId": "3673-2026-07-01-split-1-to-2",
@@ -675,7 +687,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20262.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(3673-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "378A-2026-07-01-split-1-to-2",
@@ -692,7 +705,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20262.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(378A-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "4099-2026-07-01-split-1-to-2",
@@ -709,7 +723,98 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20262.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(4099-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "4641-2026-07-01-split-1-to-3",
+      "securityCode": "4641",
+      "name": "アルプス技研",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.alpsgiken.co.jp/ir/images/report/2026/ir20260514_01.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(4641-2026-07-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "5801-2026-07-01-split-1-to-10",
+      "securityCode": "5801",
+      "name": "古河電気工業",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 10,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/58010/140120260511523194.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(5801-2026-07-01-split-1-to-10)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "5802-2026-07-01-split-1-to-4",
+      "securityCode": "5802",
+      "name": "住友電気工業",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 4,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://sumitomoelectric.com/jp/sites/japan/files/2026-05/download_documents/prs053v.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(5802-2026-07-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "7173-2026-07-01-split-1-to-8",
+      "securityCode": "7173",
+      "name": "東京きらぼしフィナンシャルグループ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 8,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/71730/140120260507518894.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(7173-2026-07-01-split-1-to-8)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "7236-2026-07-01-split-1-to-10",
+      "securityCode": "7236",
+      "name": "ティラド",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 10,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/72360/140120260525546492.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(7236-2026-07-01-split-1-to-10)から自動生成",
+      "checkedAt": "2026-08-02"
     },
     {
       "eventId": "7409-2026-07-01-split-1-to-2",
@@ -726,7 +831,98 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20262.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(7409-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "7425-2026-07-01-split-1-to-2",
+      "securityCode": "7425",
+      "name": "初穂商事",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.hatsuho.co.jp/ir/pdf/IR_k260612.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(7425-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "7460-2026-07-01-split-1-to-3",
+      "securityCode": "7460",
+      "name": "ヤギ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.yaginet.co.jp/ja/news/ir_news/auto_20260529554017/pdfFile.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(7460-2026-07-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "7781-2026-07-01-split-1-to-2",
+      "securityCode": "7781",
+      "name": "平山ホールディングス",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "type": "jpx",
+        "url": "https://www2.jpx.co.jp/disc/77810/140120260216562891.pdf"
+      },
+      "note": "edinet-direct側マスター(7781-2026-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "7846-2026-07-01-split-1-to-3",
+      "securityCode": "7846",
+      "name": "パイロットコーポレーション",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/78460/140120260213560067.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(7846-2026-07-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "8053-2026-07-01-split-1-to-4",
+      "securityCode": "8053",
+      "name": "住友商事",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 4,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.sumitomocorp.com/-/media/Files/hq/ir/report/summary/2025/2603Tanshin.pdf?sc_lang=ja",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(8053-2026-07-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-02"
     },
     {
       "eventId": "2163-2026-08-01-split-1-to-2",
@@ -743,7 +939,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(2163-2026-08-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "2961-2026-08-01-split-1-to-4",
@@ -760,7 +957,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(2961-2026-08-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "3193-2026-08-01-split-1-to-2",
@@ -777,7 +975,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(3193-2026-08-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "6863-2026-08-01-split-1-to-3",
@@ -794,7 +993,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(6863-2026-08-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "9900-2026-08-31-split-1-to-2",
@@ -811,7 +1011,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(9900-2026-08-31-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "6834-2026-09-01-split-1-to-5",
@@ -828,7 +1029,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(6834-2026-09-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "9279-2026-09-01-split-1-to-2",
@@ -845,7 +1047,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(9279-2026-09-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "1815-2026-10-01-split-1-to-2",
@@ -862,7 +1065,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(1815-2026-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "1926-2026-10-01-split-1-to-4",
@@ -879,7 +1083,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(1926-2026-10-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "1965-2026-10-01-split-1-to-3",
@@ -896,7 +1101,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(1965-2026-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "285A-2026-10-01-split-1-to-3",
@@ -913,7 +1119,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(285A-2026-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "3099-2026-10-01-split-1-to-2",
@@ -930,7 +1137,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(3099-2026-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "3932-2026-10-01-split-1-to-3",
@@ -947,7 +1155,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(3932-2026-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "4062-2026-10-01-split-1-to-2",
@@ -964,7 +1173,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(4062-2026-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "4471-2026-10-01-split-1-to-4",
@@ -981,7 +1191,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(4471-2026-10-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "4667-2026-10-01-split-1-to-3",
@@ -998,7 +1209,26 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(4667-2026-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "4746-2026-10-01-split-1-to-4",
+      "securityCode": "4746",
+      "name": "東計電算",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 4,
+      "effectiveDate": "2026-10-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(4746-2026-10-01-split-1-to-4)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "5232-2026-10-01-split-1-to-3",
@@ -1015,7 +1245,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(5232-2026-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "5334-2026-10-01-split-1-to-2",
@@ -1032,7 +1263,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(5334-2026-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "5706-2026-10-01-split-1-to-10",
@@ -1049,7 +1281,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(5706-2026-10-01-split-1-to-10)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "6135-2026-10-01-split-1-to-5",
@@ -1066,7 +1299,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(6135-2026-10-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "6379-2026-10-01-split-1-to-3",
@@ -1083,7 +1317,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(6379-2026-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "6622-2026-10-01-split-1-to-5",
@@ -1100,7 +1335,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(6622-2026-10-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "6627-2026-10-01-split-1-to-5",
@@ -1117,7 +1353,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(6627-2026-10-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "7433-2026-10-01-split-1-to-3",
@@ -1134,7 +1371,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(7433-2026-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "7716-2026-10-01-split-1-to-2",
@@ -1151,7 +1389,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(7716-2026-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "8084-2026-10-01-split-1-to-2",
@@ -1168,7 +1407,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(8084-2026-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "8360-2026-10-01-split-1-to-5",
@@ -1185,7 +1425,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(8360-2026-10-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "8377-2026-10-01-split-1-to-10",
@@ -1202,7 +1443,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(8377-2026-10-01-split-1-to-10)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "8551-2026-10-01-split-1-to-3",
@@ -1219,7 +1461,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(8551-2026-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "9068-2026-10-01-split-1-to-2",
@@ -1236,7 +1479,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(9068-2026-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "9956-2026-10-01-split-1-to-2",
@@ -1253,7 +1497,8 @@
         "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20263.html",
         "type": "issuer_ir"
       },
-      "note": "直近2年の分割取りこぼし棚卸し(edinet-direct ir_recent_splits_audit)より。決算書類確認前のためprovisionalで配当だけ補正。有報提出後にedinet-direct側の機械検証で確定させる"
+      "note": "edinet-direct側マスター(9956-2026-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-17"
     }
   ]
 }

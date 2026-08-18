@@ -467,7 +467,7 @@ class SplitAdjustmentTest(unittest.TestCase):
             ROOT / "data" / "stock_actions_manual.json",
             as_of=date(2026, 8, 3),
         )
-        self.assertEqual(len(loaded), 30)
+        self.assertEqual(len(loaded), 47)  # 2026-08-17: 分割取りこぼし棚卸し44件を追加(as_of時点で有効な件数)
         self.assertEqual(sum(map(len, loaded.values())), 30)
         self.assertTrue(loaded["2220"][0]["epsAdjustedByIssuer"])
         self.assertTrue(

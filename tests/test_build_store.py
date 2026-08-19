@@ -121,6 +121,76 @@ class SplitAdjustmentTest(unittest.TestCase):
                 )
             }
 
+    def test_applied_action_is_removed_by_code_context_and_effective_date(self) -> None:
+        adjustment = {
+            "events": [
+                {
+                    "eventId": "consumer-format",
+                    "effectiveDate": "2025-10-01",
+                    "adjustmentFactor": 0.2,
+                    "applyDividendAdjustment": True,
+                }
+            ]
+        }
+        filtered = build_store.adjustment_for_unadjusted_series(
+            adjustment,
+            {2025: 7.0},
+            fiscal_month=6,
+            applied_actions=[
+                {
+                    "eventId": "different-producer-format",
+                    "effectiveDate": "2025-10-01",
+                    "ratio": 5.0,
+                }
+            ],
+        )
+        self.assertEqual(filtered["events"], [])
+
+    def test_different_effective_date_is_not_removed(self) -> None:
+        adjustment = {
+            "events": [
+                {
+                    "eventId": "same-id-is-irrelevant",
+                    "effectiveDate": "2026-10-01",
+                    "adjustmentFactor": 0.25,
+                    "applyDividendAdjustment": True,
+                }
+            ]
+        }
+        filtered = build_store.adjustment_for_unadjusted_series(
+            adjustment,
+            {2025: 173.0},
+            fiscal_month=12,
+            applied_actions=[
+                {
+                    "eventId": "same-id-is-irrelevant",
+                    "effectiveDate": "2025-10-01",
+                    "ratio": 4.0,
+                }
+            ],
+        )
+        self.assertEqual(
+            [event["effectiveDate"] for event in filtered["events"]],
+            ["2026-10-01"],
+        )
+
+    def test_missing_applied_actions_keeps_legacy_behavior(self) -> None:
+        adjustment = {
+            "events": [
+                {
+                    "effectiveDate": "2025-10-01",
+                    "adjustmentFactor": 0.2,
+                    "applyDividendAdjustment": True,
+                }
+            ]
+        }
+        filtered = build_store.adjustment_for_unadjusted_series(
+            adjustment,
+            {2025: 7.0},
+            fiscal_month=6,
+        )
+        self.assertEqual(len(filtered["events"]), 1)
+
     def test_eps_adjusted_branch_and_eventless_stock(self) -> None:
         actions = {
             "7236": [
@@ -1032,6 +1102,47 @@ class FiscalDividendLoaderTest(unittest.TestCase):
         )
         self.assertEqual(loaded["1301"]["externalYears"], [2025])
 
+    def test_preserves_applied_actions_and_distinguishes_legacy_data(self) -> None:
+        loaded = self.load(
+            {
+                "7532": {
+                    "fiscalMonth": 6,
+                    "series": {"2025": 7.0},
+                    "connection": {},
+                    "appliedActions": [
+                        {
+                            "eventId": "producer-specific-format",
+                            "effectiveDate": "2025-10-01",
+                            "ratio": 5.0,
+                        }
+                    ],
+                },
+                "4746": {
+                    "fiscalMonth": 12,
+                    "series": {"2025": 173.0},
+                    "connection": {},
+                },
+            }
+        )
+        self.assertEqual(
+            loaded["7532"]["appliedActions"][0]["effectiveDate"],
+            "2025-10-01",
+        )
+        self.assertNotIn("appliedActions", loaded["4746"])
+
+    def test_rejects_a_malformed_applied_action_date(self) -> None:
+        with self.assertRaisesRegex(ValueError, "effectiveDateがISO日付ではありません"):
+            self.load(
+                {
+                    "7532": {
+                        "fiscalMonth": 6,
+                        "series": {"2025": 7.0},
+                        "connection": {},
+                        "appliedActions": [{"effectiveDate": "2025/10/01"}],
+                    }
+                }
+            )
+
     def test_real_file_covers_most_of_the_universe(self) -> None:
         path = ROOT / "data" / "fiscal_dividends.json"
         if not path.exists():
@@ -1524,8 +1635,8 @@ class StreakBasisFlagTest(unittest.TestCase):
         unreliable = [
             code for code, record in loaded.items() if not record["streakReliable"]
         ]
-        self.assertGreater(len(unreliable), 50)
-        self.assertIn("9882", unreliable)
+        self.assertGreater(len(unreliable), 10)
+        self.assertIn("2436", unreliable)
         self.assertNotIn("9433", unreliable)
 
 

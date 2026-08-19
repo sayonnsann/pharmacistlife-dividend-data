@@ -283,6 +283,30 @@ def load_fiscal_dividends(path: Path) -> dict[str, dict[str, Any]]:
             int(year) for year in break_years if isinstance(year, int)
         ] if isinstance(break_years, list) else []
 
+        # 新しいedinet-directは、DPS系列の換算へ実際に使った台帳イベントを
+        # 明示する。銘柄コードはこのrecordの親キーなので、ここでは効力発生日を
+        # 同一イベント判定に使う。フィールド自体が無い旧データは従来動作を保つ。
+        applied_actions = None
+        if "appliedActions" in record:
+            raw_applied_actions = record["appliedActions"]
+            if not isinstance(raw_applied_actions, list):
+                raise ValueError(
+                    f"{path}: {raw_code}.appliedActionsがarrayではありません"
+                )
+            applied_actions = []
+            for index, action in enumerate(raw_applied_actions):
+                label = f"{path}: {raw_code}.appliedActions[{index}]"
+                if not isinstance(action, dict):
+                    raise ValueError(f"{label}がobjectではありません")
+                effective_date = action.get("effectiveDate")
+                try:
+                    date.fromisoformat(str(effective_date))
+                except ValueError as error:
+                    raise ValueError(
+                        f"{label}.effectiveDateがISO日付ではありません"
+                    ) from error
+                applied_actions.append(dict(action))
+
         result[code] = {
             "series": series,
             "fiscalMonth": finite_number(record.get("fiscalMonth")),
@@ -299,6 +323,8 @@ def load_fiscal_dividends(path: Path) -> dict[str, dict[str, Any]]:
             ),
             "streakBreakYears": [] if streak_reliable else sorted(break_years),
         }
+        if applied_actions is not None:
+            result[code]["appliedActions"] = applied_actions
     return result
 
 
@@ -896,8 +922,14 @@ def adjustment_for_unadjusted_series(
     series: dict[Any, Any],
     *,
     fiscal_month: int | None,
+    applied_actions: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """既に過年度の分割を反映済みの系列へ、未反映イベントだけを渡す。"""
+    """既に過年度の分割を反映済みの系列へ、未反映イベントだけを渡す。
+
+    applied_actions がある新契約では、同一銘柄の同じ効力発生日を持つイベントを
+    明示的に除外する。eventIdは生成側と利用側で形式が違ってもよい。
+    フィールドが無い旧データ（None）は、従来の最新年度による判定だけを使う。
+    """
     if not series:
         return adjustment
     years = []
@@ -917,13 +949,21 @@ def adjustment_for_unadjusted_series(
         latest_period_end = (
             date(latest_year, fiscal_month + 1, 1) - timedelta(days=1)
         )
+    applied_dates = {
+        str(action.get("effectiveDate"))
+        for action in (applied_actions or [])
+        if isinstance(action, dict) and action.get("effectiveDate")
+    }
     events = []
     for event in adjustment.get("events", []):
         try:
             effective_date = date.fromisoformat(str(event["effectiveDate"]))
         except (KeyError, TypeError, ValueError):
             continue
-        if effective_date > latest_period_end:
+        if (
+            effective_date > latest_period_end
+            and effective_date.isoformat() not in applied_dates
+        ):
             events.append(event)
     return {**adjustment, "events": events}
 
@@ -1836,6 +1876,7 @@ def create_database(
                             adjustment,
                             series,
                             fiscal_month=fiscal.get("fiscalMonth"),
+                            applied_actions=fiscal.get("appliedActions"),
                         )
                         # 既存系列に未反映の分割だけを、各年度の期末基準で揃える。
                         series = {

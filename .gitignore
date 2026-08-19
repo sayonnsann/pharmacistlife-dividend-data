@@ -51,3 +51,4 @@ calendar_dividends_frozen.json
 
 # OS
 .DS_Store
+.pytest_cache/

@@ -78,6 +78,24 @@
       "checkedAt": "2026-08-09"
     },
     {
+      "eventId": "3350-2025-04-01-split-1-to-10",
+      "securityCode": "3350",
+      "name": "株式会社メタプラネット",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 10,
+      "effectiveDate": "2025-04-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XTWY.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(3350-2025-04-01-split-1-to-10)から自動生成",
+      "checkedAt": "2026-08-19"
+    },
+    {
       "eventId": "9305-2025-06-01-split-1-to-2",
       "securityCode": "9305",
       "name": "ヤマタネ",

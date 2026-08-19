@@ -51,7 +51,7 @@
   .dvc-financials{margin-top:24px;padding-top:18px;border-top:2px solid #e2e8f0}.dvc-fin-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.dvc-fin-head h3{margin:0;color:#172554;font-size:19px}.dvc-fin-head p{margin:3px 0 0;color:#64748b;font-size:12px}.dvc-fin-source{flex:0 0 auto;padding:4px 9px;border:1px solid #bfdbfe;border-radius:6px;color:#2563eb;background:#eff6ff;font-size:11px;font-weight:700}
   .dvc-warnings{margin:14px 0;padding:10px 12px 10px 30px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;color:#64748b;font-size:12px}.dvc-warnings li+li{margin-top:4px}.dvc-warning-split{color:#9a3412;font-weight:600}
   .dvc-chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}.dvc-card{min-width:0;padding:17px;border:1px solid var(--dvc-border);border-radius:12px;background:#fff;box-shadow:0 3px 12px rgba(15,23,42,.04)}.dvc-card-wide{grid-column:1/-1}.dvc-card-head{margin-bottom:8px}.dvc-card h4{margin:0;color:#1e3a8a;font-size:16px}.dvc-card-subtitle{margin:2px 0 0;color:var(--dvc-muted);font-size:11px}
-  .dvc-mini-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.dvc-mini-panel{min-width:0;padding-top:4px}.dvc-mini-panel+.dvc-mini-panel{border-left:1px dashed var(--dvc-border);padding-left:12px}.dvc-yield-panel{margin-top:14px;padding-top:14px;border-top:1px dashed var(--dvc-border)}.dvc-metric-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.dvc-mini-title{margin:0;color:#475569;font-size:12px;font-weight:700}.dvc-metric-source{display:block;color:#94a3b8;font-size:10px;font-weight:400}.dvc-trend-badge{max-width:70%;padding:3px 8px;border:1px solid #dbeafe;border-radius:999px;background:#eff6ff;color:#1e40af;font-size:10px;font-weight:700;line-height:1.4;text-align:right}.dvc-metric-description{min-height:2.8em;margin:4px 0 6px;color:var(--dvc-muted);font-size:11px;line-height:1.4}
+  .dvc-mini-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.dvc-mini-panel{min-width:0;padding-top:4px}.dvc-mini-panel+.dvc-mini-panel{border-left:1px dashed var(--dvc-border);padding-left:12px}.dvc-cf-grid .dvc-mini-panel:nth-child(odd){border-left:0;padding-left:0}.dvc-cf-grid .dvc-mini-panel:nth-child(n+3){border-top:1px dashed var(--dvc-border);padding-top:12px}.dvc-yield-panel{margin-top:14px;padding-top:14px;border-top:1px dashed var(--dvc-border)}.dvc-metric-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.dvc-mini-title{margin:0;color:#475569;font-size:12px;font-weight:700}.dvc-metric-source{display:block;color:#94a3b8;font-size:10px;font-weight:400}.dvc-trend-badge{max-width:70%;padding:3px 8px;border:1px solid #dbeafe;border-radius:999px;background:#eff6ff;color:#1e40af;font-size:10px;font-weight:700;line-height:1.4;text-align:right}.dvc-metric-description{min-height:2.8em;margin:4px 0 6px;color:var(--dvc-muted);font-size:11px;line-height:1.4}
   .dvc-sector-position{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:4px 0}.dvc-sector-badge{padding:2px 8px;border-radius:999px;background:#f3e8ff;color:#6b21a8;font-size:10px;font-weight:700}.dvc-sector-median{color:var(--dvc-muted);font-size:10px}
   .dvc-fin-chart{width:100%;overflow:hidden}.dvc-fin-chart svg{display:block;width:100%;height:auto;overflow:visible}.dvc-axis-label{fill:#64748b;font-size:11px}.dvc-value-label{fill:#334155;font-size:10px;font-weight:700}.dvc-grid-line{stroke:#e8eef5;stroke-width:1}.dvc-zero-line{stroke:#94a3b8;stroke-width:1.2}.dvc-axis-break{fill:none;stroke:#64748b;stroke-width:1.6;stroke-linecap:round}.dvc-axis-break-grid{fill:none;stroke:#cbd5e1;stroke-width:1.1}.dvc-outlier-label{fill:#172554;font-weight:800}.dvc-chart-note{margin:7px 0 0;color:var(--dvc-muted);font-size:11px}
   .dvc-single{padding:11px;border:1px solid #dbeafe;border-radius:9px;background:#f8fbff}.dvc-single-label{display:block;color:var(--dvc-muted);font-size:11px}.dvc-single-value{display:block;color:#1e3a8a;font-size:19px;font-weight:700}.dvc-single-year{color:#94a3b8;font-size:10px;font-weight:400}.dvc-empty{display:flex;min-height:120px;align-items:center;justify-content:center;padding:18px;border:1px dashed #cbd5e1;border-radius:9px;background:#f8fafc;color:var(--dvc-muted);text-align:center;font-size:13px}
@@ -66,7 +66,7 @@
 (function(){
   "use strict";
   var API_BASE="/api/api.php";
-  var API_CACHE_VERSION="20260815a";
+  var API_CACHE_VERSION="20260820a";
   var state={data:[],byCode:{},sort:{key:"streak",dir:"desc"},financialByCode:{},sectorStats:{},financialStatus:"loaded",currentCode:"",total:0,searchTimer:null,searchRequest:0,detailRequest:0};
   var BASE_STREAK_TITLE="記念・特別配当を除いた通常配当だけで数えた年数";
   var SORTABLE_COLUMNS=[{key:"yield",label:"配当利回り"},{key:"forecast_yield",label:"予想利回り"},{key:"streak",label:"連続増配"},{key:"streak_nd",label:"連続非減配"},{key:"streak_base",label:"実質連続増配",title:BASE_STREAK_TITLE},{key:"streak_nd_base",label:"実質連続非減配",title:BASE_STREAK_TITLE},{key:"cagr5",label:"5年増配率"}];
@@ -337,15 +337,22 @@
     if(br)body+=breakMarks(s);
     return '<div class="dvc-fin-chart"><svg viewBox="0 0 '+SVG_W+" "+SVG_H+'" role="img" aria-label="'+esc(label)+'">'+body+"</svg></div>"+legend(graph,type,unit)+(br?'<p class="dvc-chart-note">※縦軸の一部を二重波線の位置で省略しています。上側の点には実際の数値を表示しています。</p>':"")+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
   }
-  function miniMetric(title,data,unit,type,color,description,emptyMessage,company,key){
+  function miniMetric(title,data,unit,type,color,description,emptyMessage,company,key,sourceLabel){
     var count=validYears(data).length,series=[{label:title,data:data||{},color:color}],med=sectorSeries(company,key,data||{}),content;
     if(type==="line"&&count>=2&&validYears(med).length>=2)series.push({label:"業種中央値（"+company.industry+"）",data:med,color:"#7c3aed",isSector:true});
     if(count>=2)content=chart(series,unit,type,title+"の推移");else if(count===1){var p=latest(data);content='<div class="dvc-single"><span class="dvc-single-label">'+esc(title)+'（1期のみ）</span><span class="dvc-single-value">'+esc(formatValue(p.value,unit))+' <small class="dvc-single-year">'+esc(p.year)+"年</small></span></div>"}else content='<div class="dvc-empty">'+esc(emptyMessage||title+"のデータはありません")+"</div>";
-    return '<div class="dvc-mini-panel"><div class="dvc-metric-head"><p class="dvc-mini-title">'+esc(title)+'<span class="dvc-metric-source">出典: EDINET（金融庁）</span></p>'+(count>=2?'<span class="dvc-trend-badge">'+esc(trendSummary(data,unit))+"</span>":"")+"</div>"+sectorPosition(company,key,data||{},unit)+'<p class="dvc-metric-description">'+esc(description)+"</p>"+content+"</div>"
+    return '<div class="dvc-mini-panel"><div class="dvc-metric-head"><p class="dvc-mini-title">'+esc(title)+'<span class="dvc-metric-source">'+esc(sourceLabel||"出典: EDINET（金融庁）")+'</span></p>'+(count>=2?'<span class="dvc-trend-badge">'+esc(trendSummary(data,unit))+"</span>":"")+"</div>"+sectorPosition(company,key,data||{},unit)+'<p class="dvc-metric-description">'+esc(description)+"</p>"+content+"</div>"
   }
   function dividendYieldMetric(company){
     var data=company.dividendYieldHistory||{},count=validYears(data).length;
     return '<div class="dvc-yield-panel">'+miniMetric("配当利回りの推移",data,"%","line","#f59e0b","その年度末の株価に対する配当の割合","配当利回りのデータはありません",company,"dividendYieldHistory")+(count?'<p class="dvc-chart-note">各年度末時点の値です。現在の利回りは上部の株価情報または外部サイトをご確認ください。</p>':"")+"</div>"
+  }
+  function freeCashFlow(operating,investing){var out={};validYears(operating).forEach(function(y){if(typeof investing[y]==="number"&&isFinite(investing[y]))out[y]=operating[y]+investing[y]});return out}
+  function cashFlowCard(company){
+    var operating=company.operatingCashFlow||{},investing=company.investingCashFlow||{},financing=company.financingCashFlow||{};
+    if(!validYears(operating).length&&!validYears(investing).length&&!validYears(financing).length)return"";
+    var free=freeCashFlow(operating,investing);
+    return card("キャッシュフロー","金額は億円換算。4項目は別々の軸で表示",'<div class="dvc-mini-grid dvc-cf-grid">'+miniMetric("営業CF",toOku(operating),"億円","bar","#2563eb","本業の活動で、現金をどれだけ生み出したか",null,company,"operatingCashFlow")+miniMetric("投資CF",toOku(investing),"億円","bar","#f59e0b","設備投資や資産の売買で、現金がどれだけ増減したか",null,company,"investingCashFlow")+miniMetric("財務CF",toOku(financing),"億円","bar","#0891b2","借入・返済や配当などで、現金がどれだけ増減したか",null,company,"financingCashFlow")+miniMetric("フリーCF",toOku(free),"億円","bar","#059669","本業で得た現金から投資に使った現金を差し引いた後の余力（営業CF＋投資CF）",null,company,"freeCashFlow","計算: 営業CF＋投資CF")+"</div>",true)
   }
   function card(title,subtitle,content,wide){return '<section class="dvc-card'+(wide?" dvc-card-wide":"")+'"><div class="dvc-card-head"><h4>'+esc(title)+'</h4><p class="dvc-card-subtitle">'+esc(subtitle)+"</p></div>"+content+"</section>"}
   function warningMessages(company){var messages={},split={};(company.splitSuspectYears||[]).forEach(function(y){split[String(y)]=true});(company.warnings||[]).forEach(function(w){var text=String(w),m;if(/dividendPerShare|株式分割|株式併合/.test(text)){(text.match(/(?:19|20)\d{2}/g)||[]).forEach(function(y){split[y]=true});return}m=text.match(/^([A-Za-z][A-Za-z0-9]*):/);if(m&&m[1]==="revenue")messages.revenue="売上高は、この会社の開示形式では取得できませんでした";else if(m&&m[1]==="netIncome")messages.netIncome="純利益は、この会社の開示形式では取得できませんでした";else messages.partial="一部の財務項目は、この会社の開示形式では取得できませんでした"});var years=Object.keys(split).sort(),out=Object.keys(messages).map(function(k){return{text:messages[k],split:false}});if(years.length)out.push({text:years.map(function(y){return y+"年"}).join("・")+"に株式分割・併合があった可能性があります。1株あたりの数値は、この年をまたいで単純に比較できない場合があります",split:true});return out}
@@ -359,7 +366,7 @@
     // 対象外とし、素の系列(連結開始後のみ)のまま表示する。
     var bt=c.basisTransitionMetrics,btInfo=c.basisTransition,btNote="";
     if(bt&&btInfo&&btInfo.fiscalYear){
-      var btKeys=["roe","roa","equityRatio","deRatio","revenue","netIncome","totalAssets","cashAndEquivalents","doe","payoutRatioTotalBased","numberOfEmployees"];
+      var btKeys=["roe","roa","equityRatio","deRatio","revenue","netIncome","totalAssets","operatingCashFlow","investingCashFlow","financingCashFlow","cashAndEquivalents","doe","payoutRatioTotalBased","numberOfEmployees"];
       var merged=Object.assign({},c);var used=false;
       btKeys.forEach(function(k){if(bt[k]&&validYears(bt[k]).length){merged[k]=bt[k];used=true}});
       if(used){c=merged;btNote="この会社は"+String(btInfo.fiscalYear)+"年から連結決算(子会社を含めたグループ全体の数値)を開始しました。それより前の年は単体(親会社のみ)の数値です。EPS・BPSは基準をまたがないよう連結開始後の年のみ表示しています。"}
@@ -375,6 +382,7 @@
       card("安全性","自己資本比率（%）",miniMetric("自己資本比率",c.equityRatio||{},"%","line","#0891b2","総資産のうち返済不要な自己資本が占める割合",null,c,"equityRatio"),false)+
       card("1株価値","EPSとBPSは別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("EPS",c.eps||{},"円","line","#2563eb","1株あたりの利益",null,c,"eps")+miniMetric("BPS",c.bps||{},"円","line","#0891b2","1株あたりの純資産",null,c,"bps")+"</div>",true)+
       card("規模","金額は億円換算。売上高と純利益は別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("売上高",toOku(c.revenue||{}),"億円","bar","#2563eb","商品やサービスの提供で得た収入の規模",null,c,"revenue")+miniMetric("純利益",toOku(c.netIncome||{}),"億円","bar","#059669","税金などを差し引いた後に会社に残った利益",null,c,"netIncome")+"</div>",true)+
+      cashFlowCard(c)+
       card("現金と借入","現金と有利子負債比率は別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("現金等",toOku(cash),"億円","bar","#0891b2","手元にある現金や、すぐに現金化できる資産の規模",null,c,"cashAndEquivalents")+miniMetric("有利子負債比率",c.deRatio||{},"%","line","#f59e0b","自己資本に対する借入の大きさ","有利子負債比率は、この会社の開示形式では算出できませんでした",c,"deRatio")+"</div>",true)+
       card("株主還元","配当性向・DOE・配当利回りは別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("配当性向",payout,"%","line","#2563eb","利益のうち配当に回した割合",null,c,payoutKey)+miniMetric("DOE",c.doe||{},"%","line","#059669","純資産に対する配当の割合",null,c,"doe")+"</div>"+dividendYieldMetric(c),true)+
       "</div></section>";

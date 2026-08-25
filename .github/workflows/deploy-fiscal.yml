@@ -14,9 +14,9 @@ name: fiscal_dividends.json / checker本体 をConoHaへ反映
 # (workspace側での更新タイミングが不定期なため、統括からの指示で都度実行する)。
 #
 # workspace_ref: fiscal_dividends.jsonを取得するworkspace側のブランチ/コミット。
-# fiscal_dividends.jsonの更新が進行中の作業ブランチでコミットされ、mainへは
-# 都度マージされない運用になっているため、実行時に取得元を指定できるようにする
-# (デフォルトは現在の最新反映元ブランチ)。
+# 2026-08-25にworkspace側の作業ブランチをmainへ合流させ、以後はmainを正とする運用にした
+# (母艦の夜間バッチもMacの作業も同じmainへpushする)。過去の版から取りたいときだけ
+# 実行時にブランチ/タグ/SHAを指定する。
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ on:
       workspace_ref:
         description: "workspaceリポジトリの取得元ブランチ/タグ/SHA"
         required: true
-        default: "edinet-direct/fix-streak-basis-manual-restated"
+        default: "main"
       deploy_fiscal:
         description: "fiscal_dividends.jsonを反映する"
         type: boolean

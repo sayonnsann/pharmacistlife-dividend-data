@@ -132,6 +132,24 @@
       "checkedAt": "2026-08-17"
     },
     {
+      "eventId": "6874-2025-07-01-split-1-to-2",
+      "securityCode": "6874",
+      "name": "協立電機",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2025-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://moneyworld.jp/news/PIW6248_headline",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(6874-2025-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-21"
+    },
+    {
       "eventId": "3498-2025-09-01-split-1-to-2",
       "securityCode": "3498",
       "name": "霞ヶ関キャピタル",
@@ -295,6 +313,42 @@
       "checkedAt": "2026-08-02"
     },
     {
+      "eventId": "3916-2026-01-01-split-1-to-2",
+      "securityCode": "3916",
+      "name": "デジタル・インフォメーション・テクノロジー",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-01-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://ssl4.eir-parts.net/doc/3916/tdnet/2719314/00.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(3916-2026-01-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-27"
+    },
+    {
+      "eventId": "3986-2026-01-01-split-1-to-3",
+      "securityCode": "3986",
+      "name": "ビーブレイクシステムズ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-01-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://ssl4.eir-parts.net/doc/3986/tdnet/2714700/00.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(3986-2026-01-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-27"
+    },
+    {
       "eventId": "4976-2026-01-01-split-1-to-3",
       "securityCode": "4976",
       "name": "東洋ドライルーブ",
@@ -383,6 +437,24 @@
       },
       "note": "edinet-direct側マスター(3712-2026-04-01-split-1-to-5)から自動生成",
       "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "4368-2026-04-01-split-1-to-3",
+      "securityCode": "4368",
+      "name": "扶桑化学工業",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-04-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://fusokk.co.jp/wp-content/uploads/2026/02/f93e998dda2bbc145f8319f9f7d4a99c.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(4368-2026-04-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-27"
     },
     {
       "eventId": "6196-2026-04-01-split-1-to-3",

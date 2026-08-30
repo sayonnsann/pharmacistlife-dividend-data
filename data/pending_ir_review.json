@@ -20,7 +20,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "該当分割(2025-08-01 1:2)は手動確定台帳に登録済み。警告は次の有報反映待ちで残存(2026-08-30)"
     },
     {
       "code": "1723",
@@ -54,7 +56,9 @@
         "year": "2024"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "1793",
@@ -64,7 +68,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "該当分割(2025-03-01 1:2)は台帳登録済み。警告は次の有報反映待ち(2026-08-30)"
     },
     {
       "code": "1861",
@@ -314,7 +320,9 @@
         "year": "2021"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "2436",
@@ -324,7 +332,9 @@
         "year": "2022"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "バッチ23: 2022-11-01 split 1:2を機械検証(2021年度14.0->14.0実額のまま)のうえ台帳登録(2026-08-30)"
     },
     {
       "code": "2676",
@@ -394,7 +404,9 @@
         "year": "2024"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "該当分割(2025-01-01 1:2等)は台帳登録済み。警告は次の有報反映待ち(2026-08-30)"
     },
     {
       "code": "2991",
@@ -512,7 +524,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "バッチ23: 2024-05-01及び2025-09-01のsplit 1:2を機械検証のうえ台帳登録。非減配13年に改善(2026-08-30)"
     },
     {
       "code": "3445",
@@ -630,7 +644,9 @@
         "year": "2021"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "該当分割(2021-04-01 1:5)は台帳登録済み(2026-08-30)"
     },
     {
       "code": "4626",
@@ -760,7 +776,9 @@
         "year": "2021"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "台帳既登録の2022-09-01 split 1:2(遡及済み)をバッチ23機械検証で再確認・一致(2026-08-30)"
     },
     {
       "code": "5285",
@@ -806,7 +824,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "5445",
@@ -922,7 +942,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "5711",
@@ -932,7 +954,9 @@
         "year": "2026"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "6031",
@@ -990,7 +1014,9 @@
         "year": "2024"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "バッチ23: 2024窓に分割・併合イベント無し(一次資料)。隣接2025-04-01 split 1:3は機械検証不能(ローカル書類不足)で見送り(2026-08-30)"
     },
     {
       "code": "6040",
@@ -1000,7 +1026,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "6050",
@@ -1046,7 +1074,9 @@
         "year": "2020"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "既知の別要因ブレイク(suspects残3銘柄の一つ)。分割イベントでは説明されず個別調査待ち(2026-08-30)"
     },
     {
       "code": "6137",
@@ -1248,7 +1278,9 @@
         "year": "2021"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "7066",
@@ -1258,7 +1290,9 @@
         "year": "2022"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "該当分割(2021-10-14/2023-07-21各1:2)は台帳登録済み(2026-08-30)"
     },
     {
       "code": "7242",
@@ -1412,7 +1446,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "バッチ23: 2024-03-01 split 1:3を機械検証(2024年度80.0->80.0実額のまま)のうえ台帳登録。2026-09-01分割(予定)は有報待ち見送り(2026-08-30)"
     },
     {
       "code": "7649",
@@ -1422,7 +1458,9 @@
         "year": "2026"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "7685",
@@ -1564,7 +1602,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "バッチ23: 2024-11-01 split 1:2を機械検証(2024年度25.0->25.0実額のまま)のうえ台帳登録。非減配5年に改善(2026-08-30)"
     },
     {
       "code": "7949",
@@ -1658,7 +1698,9 @@
         "year": "2026"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "該当分割(2025-03-01 1:2)は台帳登録済み。警告は次の有報反映待ち(2026-08-30)"
     },
     {
       "code": "8316",
@@ -1668,7 +1710,9 @@
         "year": "2023"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "8316",
@@ -1678,7 +1722,9 @@
         "year": "2024"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "バッチ23: 2024-10-01 split 1:3は部分遡及型(直近5期のみ遡及・古い有報は実額)でtrue/false両登録とも有害と系列diffで確認し登録見送り。ir_investigated_no_action.jsonにneeds_manual_review記録(2026-08-30)"
     },
     {
       "code": "8425",
@@ -1724,7 +1770,9 @@
         "year": "2026"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "該当分割(2025-12-01 1:2)は台帳登録済み。警告は次の有報反映待ち(2026-08-30)"
     },
     {
       "code": "8697",
@@ -1806,7 +1854,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "8818",
@@ -1816,7 +1866,9 @@
         "year": "2026"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "8914",
@@ -2114,7 +2166,9 @@
         "year": "2025"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     },
     {
       "code": "9987",
@@ -2124,7 +2178,9 @@
         "year": "2026"
       },
       "detectedAt": "2026-08-14",
-      "status": "pending"
+      "status": "processed",
+      "processedAt": "2026-08-30",
+      "resolution": "現行ビルドで疑い年解消済みを確認(後続バッチの台帳登録・有報反映による)(2026-08-30)"
     }
   ]
 }

@@ -1,0 +1,72 @@
+name: 配当予想stateの取得状況を監査（手動実行）
+
+on:
+  workflow_dispatch:
+    inputs:
+      codes:
+        description: "確認する銘柄コード（カンマ区切りの4桁英数字。空なら全体サマリのみ）"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-dividend-store
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FTP_HOST: ${{ secrets.FTP_HOST }}
+      FTP_USER: ${{ secrets.FTP_USER }}
+      FTP_PASS: ${{ secrets.FTP_PASS }}
+      FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+      TARGET_CODES: ${{ inputs.codes }}
+
+    steps:
+      - name: リポジトリを取得
+        uses: actions/checkout@v4
+
+      - name: Pythonをセットアップ
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 設定を検証
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in FTP_HOST FTP_USER FTP_PASS FTP_REMOTE_DIR; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "::error::Secret ${name} が未設定です。"
+              exit 1
+            fi
+          done
+          if [[ "$FTP_REMOTE_DIR" != /* ]]; then
+            echo "::error::FTP_REMOTE_DIR は / から始めてください。"
+            exit 1
+          fi
+          echo "STATE_FILE=${RUNNER_TEMP}/forecasts_state.json" >> "$GITHUB_ENV"
+
+      - name: 予想stateをFTPSから取得
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          curl --ssl-reqd --fail --silent --show-error \
+            --user "${FTP_USER}:${FTP_PASS}" \
+            --output "$STATE_FILE" \
+            "ftp://${FTP_HOST}${remote_dir}/forecasts_state.json"
+          echo "取得しました（$(wc -c < "$STATE_FILE" | tr -d ' ') bytes）"
+
+      - name: 配当予想stateを監査
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/audit_forecast_state.py \
+            --state "$STATE_FILE" \
+            --codes "$TARGET_CODES"

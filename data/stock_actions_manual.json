@@ -536,9 +536,9 @@
       "oldShares": 1,
       "newShares": 5,
       "effectiveDate": "2026-04-01",
-      "status": "provisional",
+      "status": "confirmed",
       "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
+      "epsAdjustedByIssuer": true,
       "source": {
         "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YC3L.pdf",
         "type": "edinet"

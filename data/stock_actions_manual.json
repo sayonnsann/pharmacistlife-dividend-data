@@ -277,6 +277,24 @@
       "checkedAt": "2026-08-17"
     },
     {
+      "eventId": "9823-2025-10-01-split-1-to-5",
+      "securityCode": "9823",
+      "name": "マミーマートホールディングス",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 5,
+      "effectiveDate": "2025-10-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XBFS.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(9823-2025-10-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-09-03"
+    },
+    {
       "eventId": "9399-2025-10-28-split-1-to-10",
       "securityCode": "9399",
       "name": "ビート・ホールディングス・リミテッド",

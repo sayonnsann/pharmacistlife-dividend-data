@@ -571,60 +571,87 @@ class StockActionIntegrationTest(unittest.TestCase):
     MANUAL = ROOT / "data" / "stock_actions_manual.json"
     EXTRACTED = ROOT / "data" / "stock_actions_extracted.json"
     FISCAL = Path("/Users/yusuke/workspace/edinet-direct/data/fiscal_dividends.json")
+    BASELINE_APPLIED_DIVIDEND_CODES = frozenset(
+        {
+            "1414", "1436", "1798", "1847", "1925", "1961", "1982", "2220",
+            "2264", "2282", "2469", "2498", "2602", "2612", "2695", "3104",
+            "3106", "3110", "3137", "3176", "3350", "3358", "3465", "3539",
+            "3563", "3565", "3612", "3712", "3804", "3964", "4008", "4022",
+            "4116", "4368", "4380", "4394", "4452", "4565", "4825", "5108",
+            "5273", "5393", "5445", "5578", "5729", "5803", "6061", "6196",
+            "6227", "6264", "6368", "6454", "6549", "6592", "6676", "6745",
+            "6850", "7012", "7050", "7173", "7181", "7236", "7242", "7282",
+            "7305", "7320", "7322", "7380", "7462", "7466", "7578", "7608",
+            "7609", "7678", "7818", "7846", "7875", "7901", "7988", "8012",
+            "8035", "8046", "8053", "8060", "8179", "8219", "8273", "8309",
+            "8316", "8336", "8341", "8345", "8367", "8370", "8392", "8393",
+            "8818", "8923", "9008", "9065", "9235", "9533", "9562", "9602",
+            "9658", "9722", "9757", "9763", "9987",
+        }
+    )
+    # 初期値は事故復旧コミット001c7b3aの109件版
+    # (blob 016cc68a51b7979f18f9afddf0fd7572ffc6b69d)から生成した。
+    # 基準集合の更新手順: 安全と確認済みのstock_actions_extracted.jsonを一時パスに置き、
+    # _applied_dividend_codes(path)のsorted結果で上記を置換する。欠落理由を確認し、
+    # 意図的な安全床変更としてレビューされた場合に限り、集合を縮小してよい。
 
-    def test_extracted_file_is_the_filtered_audited_split_set(self) -> None:
+    @staticmethod
+    def _applied_dividend_codes(path: Path) -> set[str]:
+        loaded = build_store.load_stock_actions(path, as_of=date.max)
+        applied: set[str] = set()
+        for code, events in loaded.items():
+            adjustment = build_store.split_adjustment(events)
+            if adjustment is not None and adjustment["dividendFactor"] != 1.0:
+                applied.add(code)
+        return applied
+
+    def test_extracted_file_obeys_delivery_contract(self) -> None:
+        """配信イベントの契約を検査し、上流台帳の総件数は固定しない。
+
+        旧テストの「採用+除外=1135件」は当時の監査入力のスナップショットであり、
+        現在の台帳からの再選別や--codesによる部分配信では保存されない。代わりに、
+        配信イベントの状態・監査根拠・補正範囲と、採用/除外の排他性を検査する。
+        """
         document = json.loads(self.EXTRACTED.read_text(encoding="utf-8"))
         events = document["events"]
-        # 件数は台帳とfiscal_dividendsの進化で変わるため直値にしない。
-        # 「採用+除外=入力全体」という保存則と、下の性質検査で担保する。
+        excluded = document.get("excluded", [])
+        self.assertIsInstance(events, list)
+        self.assertIsInstance(excluded, list)
         self.assertGreater(len(events), 0)
-        self.assertEqual(
-            len(events) + len(document.get("excluded", [])) - len(
-                [i for i in document["excluded"] if "eventId" not in i]
-            ),
-            1135,
-        )
-        issuer_excluded = {
-            (str(item["securityCode"]), item["effectiveDate"])
-            for item in document["excluded"]
-            if item.get("reasonCode") == "issuer_mismatch"
+        present_event_ids = {event["eventId"] for event in events}
+        self.assertEqual(len(present_event_ids), len(events))
+        excluded_event_ids = {
+            item["eventId"]
+            for item in excluded
+            if isinstance(item.get("eventId"), str)
         }
-        self.assertEqual(
-            issuer_excluded,
-            {("9432", "2022-10-01"), ("2345", "2022-03-02"), ("5711", "2026-10-01")},
-        )
-        present = {
-            (str(event["securityCode"]), event["effectiveDate"]) for event in events
-        }
-        excluded = {
-            (str(item["securityCode"]), item["effectiveDate"])
-            for item in document["excluded"]
-        }
-        self.assertTrue(excluded.isdisjoint(present))
+        self.assertTrue(excluded_event_ids.isdisjoint(present_event_ids))
         self.assertTrue(all(event["action"] == "split" for event in events))
-        self.assertTrue(
-            all(event["status"] == "confirmed" for event in events)
-        )
         self.assertFalse(
             any(event["action"] == "consolidation" for event in events)
         )
-        self.assertTrue(
-            all(
-                event["source"]["audit"]["decision"] == "合格"
-                for event in events
-            )
-        )
-        self.assertEqual(
-            {event["eventId"] for event in events},
-            {
-                event["eventId"]
-                for event in document["events"]
-                if event["source"]["audit"]["decision"] == "合格"
-            },
-        )
-        self.assertTrue(
-            all(item.get("reasonCode") for item in document["excluded"])
-        )
+        for event in events:
+            with self.subTest(eventId=event["eventId"]):
+                source = event.get("source")
+                self.assertIsInstance(source, dict)
+                audit = source.get("audit")
+                self.assertIsInstance(audit, dict)
+                decision = audit.get("decision")
+                self.assertIsInstance(decision, str)
+                expected_status = (
+                    "confirmed" if decision == "合格" else "provisional"
+                )
+                self.assertIn(event.get("status"), {"confirmed", "provisional"})
+                self.assertEqual(event["status"], expected_status)
+                if event["status"] == "provisional":
+                    self.assertIs(event.get("applyDividendAdjustment"), True)
+                    self.assertIn("epsAdjustedByIssuer", event)
+                    self.assertIsNone(event["epsAdjustedByIssuer"])
+                    adjustment = build_store.split_adjustment([event])
+                    self.assertIsNotNone(adjustment)
+                    assert adjustment is not None
+                    self.assertEqual(adjustment["epsBpsFactor"], 1.0)
+        self.assertTrue(all(item.get("reasonCode") for item in excluded))
         self.assertFalse(
             any(
                 event["oldShares"] > 0
@@ -633,7 +660,36 @@ class StockActionIntegrationTest(unittest.TestCase):
             )
         )
 
+    def test_extracted_file_uses_current_split_field_names(self) -> None:
+        document = json.loads(self.EXTRACTED.read_text(encoding="utf-8"))
+        legacy_names = (
+            "".join(("eps", "Adjusted")),
+            "".join(("dps", "Adjusted")),
+        )
+        for event in document["events"]:
+            with self.subTest(eventId=event.get("eventId")):
+                for legacy_name in legacy_names:
+                    self.assertNotIn(legacy_name, event)
+                self.assertIn("epsAdjustedByIssuer", event)
+                self.assertIn("applyDividendAdjustment", event)
+
+    def test_applied_dividend_code_set_does_not_regress(self) -> None:
+        self.assertEqual(len(self.BASELINE_APPLIED_DIVIDEND_CODES), 109)
+        applied = self._applied_dividend_codes(self.EXTRACTED)
+        missing = self.BASELINE_APPLIED_DIVIDEND_CODES - applied
+        self.assertFalse(
+            missing,
+            "現行109件版から配当の分割補正が後退しました: "
+            f"{sorted(missing)}",
+        )
+
     def test_extracted_file_matches_reproducible_selection_script(self) -> None:
+        """現行成果物に対する再選別の冪等性と件数の自己整合を検査する。
+
+        上流台帳は現行4565件から再選別され、--codes更新では既存イベントも保持する。
+        そのため旧監査母集団1135件との保存則ではなく、読み込んだ成果物自身から
+        導ける入力・採用・除外件数だけを比較する。
+        """
         if not self.FISCAL.exists():
             self.skipTest("外部由来のfiscal_dividends.jsonがありません")
         document = json.loads(self.EXTRACTED.read_text(encoding="utf-8"))
@@ -655,14 +711,28 @@ class StockActionIntegrationTest(unittest.TestCase):
             {event.get("eventId") for event in refiltered["excluded"]},
             {event.get("eventId") for event in document["excluded"]},
         )
-        self.assertEqual(counts["input"], 1135)
+        excluded_events = [
+            item
+            for item in document.get("excluded", [])
+            if isinstance(item.get("eventId"), str)
+            and item.get("action") == "split"
+        ]
+        self.assertEqual(
+            counts["input"], len(document["events"]) + len(excluded_events)
+        )
         # 採用件数はfiscal_dividendsの進化で変わるため、ファイルとの一致だけを見る
         self.assertEqual(counts["selected"], len(document["events"]))
-        # 新規除外の件数も選定結果に連動する（除外合計との整合だけを見る）
+        # 新規除外は、再評価対象となるeventId付きsplitの件数と一致する。
         self.assertEqual(
             counts["newlyExcluded"],
-            len(document["excluded"])
-            - len([i for i in document["excluded"] if "eventId" not in i]),
+            len(
+                [
+                    item
+                    for item in refiltered["excluded"]
+                    if isinstance(item.get("eventId"), str)
+                    and item.get("action") == "split"
+                ]
+            ),
         )
 
     def test_spk_2026_dividend_is_adjusted_from_73_to_36_5(self) -> None:

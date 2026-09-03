@@ -193,9 +193,9 @@
       "oldShares": 1,
       "newShares": 2,
       "effectiveDate": "2025-09-01",
-      "status": "provisional",
+      "status": "confirmed",
       "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
+      "epsAdjustedByIssuer": true,
       "source": {
         "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100X5NI.pdf",
         "type": "edinet"
@@ -356,9 +356,9 @@
       "oldShares": 1,
       "newShares": 5,
       "effectiveDate": "2026-01-01",
-      "status": "provisional",
+      "status": "confirmed",
       "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
+      "epsAdjustedByIssuer": true,
       "source": {
         "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XTM0.pdf",
         "type": "edinet"
@@ -446,9 +446,9 @@
       "oldShares": 1,
       "newShares": 3,
       "effectiveDate": "2026-02-01",
-      "status": "provisional",
+      "status": "confirmed",
       "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
+      "epsAdjustedByIssuer": true,
       "source": {
         "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100Y0S6.pdf",
         "type": "edinet"
@@ -608,9 +608,9 @@
       "oldShares": 1,
       "newShares": 2,
       "effectiveDate": "2026-04-01",
-      "status": "provisional",
+      "status": "confirmed",
       "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
+      "epsAdjustedByIssuer": true,
       "source": {
         "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YHM2.pdf",
         "type": "edinet"
@@ -626,9 +626,9 @@
       "oldShares": 1,
       "newShares": 5,
       "effectiveDate": "2026-04-01",
-      "status": "provisional",
+      "status": "confirmed",
       "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
+      "epsAdjustedByIssuer": true,
       "source": {
         "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YED6.pdf",
         "type": "edinet"

@@ -8,6 +8,7 @@ name: 分割・併合の要確認リストを更新
 # 新規のEDINETDB APIアクセスはしない。読むのは daily-store.yml が既に
 # 取得・生成している forecasts_state.json / data/fiscal_dividends.json
 # （どちらもFTPS経由で読むだけ。書き戻さない）。
+# 公開用の data/split_event_feed.json は daily-store のartifactから復元する。
 #
 # daily-store.yml とは意図的に別ワークフローにしてある
 # （daily-store.yml は permissions: contents: read でcommitできないため）。
@@ -25,6 +26,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
+  actions: read
   contents: write
 
 concurrency:
@@ -51,6 +53,111 @@ jobs:
           python-version: "3.12"
         # build_ir_review_queue.py は標準ライブラリのみで動く(依存パッケージなし)ため、
         # scripts/requirements.txt のインストールは行わない。
+
+      - name: daily-storeの当日成功ランを特定
+        id: find_daily_store_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          today="$(date -u '+%Y-%m-%d')"
+          if ! run_list="$(gh run list --workflow daily-store.yml --status success --limit 1 --json databaseId,createdAt 2>/dev/null)"; then
+            echo "::warning::daily-storeの成功ラン一覧を取得できませんでした。分割イベント記録の受け渡しをスキップします。"
+            exit 0
+          fi
+          if ! run_id="$(jq -r --arg today "$today" '
+            [.[] | select((.createdAt // "") | startswith($today)) | .databaseId]
+            | first // empty
+          ' <<<"$run_list")"; then
+            echo "::warning::daily-storeの成功ラン一覧を解析できませんでした。分割イベント記録の受け渡しをスキップします。"
+            exit 0
+          fi
+          if [[ -z "$run_id" ]]; then
+            echo "::warning::当日($today UTC)のdaily-store成功ランがありません。分割イベント記録の受け渡しをスキップします。"
+            exit 0
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "当日のdaily-store成功ランを選択しました(run-id=$run_id)。"
+
+      - name: 当日のdaily-storeから分割イベントartifactを取得
+        id: download_split_event_feed
+        if: ${{ steps.find_daily_store_run.outputs.run_id != '' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: split-event-feed
+          path: ${{ runner.temp }}/split-event-feed
+          run-id: ${{ steps.find_daily_store_run.outputs.run_id }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+
+      - name: 分割イベントartifact未取得を警告
+        if: ${{ steps.find_daily_store_run.outputs.run_id != '' && steps.download_split_event_feed.outcome != 'success' }}
+        run: echo "::warning::split-event-feed artifactを取得できませんでした。前回コミットの data/split_event_feed.json を維持します。"
+
+      - name: 分割イベント記録を作業ツリーへ配置
+        if: ${{ steps.download_split_event_feed.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          download_dir="${RUNNER_TEMP}/split-event-feed"
+          downloaded="$(find "$download_dir" -type f -name 'split_event_feed.json' -print -quit)"
+          if [[ -z "$downloaded" ]]; then
+            echo "::warning::split-event-feed artifact内に data/split_event_feed.json がありません。前回コミットを維持します。"
+            exit 0
+          fi
+          if ! python - "$downloaded" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path(sys.argv[1])
+          try:
+              with path.open(encoding="utf-8") as source:
+                  document = json.load(source)
+          except (OSError, json.JSONDecodeError) as error:
+              print(f"分割イベント記録がJSONとして読めません: {error}", file=sys.stderr)
+              raise SystemExit(1)
+          if (
+              not isinstance(document, dict)
+              or document.get("schemaVersion") != 1
+              or not isinstance(document.get("events"), list)
+          ):
+              raise SystemExit("分割イベント記録の形式が不正です")
+          PY
+          then
+            echo "::warning::分割イベント記録の形式検証に失敗しました。前回コミットを維持します。"
+            exit 0
+          fi
+          staged="data/.split_event_feed.json.artifact.tmp"
+          if ! cp "$downloaded" "$staged"; then
+            echo "::warning::分割イベント記録を一時配置できませんでした。前回コミットを維持します。"
+            exit 0
+          fi
+          if ! mv -f "$staged" data/split_event_feed.json; then
+            echo "::warning::分割イベント記録を作業ツリーへ配置できませんでした。前回コミットを維持します。"
+            exit 0
+          fi
+          echo "分割イベント記録を作業ツリーへ配置しました。"
+
+      - name: 分割イベント記録に差分があれば commit して push
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -f data/split_event_feed.json ]]; then
+            echo "分割イベント記録が無いため、commitをスキップします。"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/split_event_feed.json
+          if git diff --cached --quiet -- data/split_event_feed.json; then
+            echo "分割イベント記録に変更がないため、commitをスキップします。"
+          else
+            git commit -m "分割イベント記録を更新 ($(date -u '+%Y-%m-%d'))"
+            git push
+          fi
 
       - name: FTPS設定を検証
         shell: bash

@@ -267,6 +267,11 @@ daily-store.yml完了後）に自動実行します（`workflow_dispatch` で手
 （初回実行でstateが無い場合も含め）ジョブ自体は失敗させず、該当する入口を
 その日だけスキップして warning を出します。
 
+`daily-store.yml` が生成した `data/split_event_feed.json` は、`split-event-feed` artifact（7日保持）として渡します。
+`ir-review-queue.yml` は `gh run list` で当日UTCの最新成功ランを選び、その run-id を指定してartifactを取得します。
+取得した記録は要確認リストとは別コミット「分割イベント記録を更新 (YYYY-MM-DD)」でpushします。
+当日の成功ランまたはartifactが無い日は前回ファイルを残したまま、この経路だけをスキップします。
+
 入口は3つ（優先順）です。
 
 1. **主入口 `api_overflow`**: イベント待ち行列（`forecasts_state.json` の
@@ -422,7 +427,7 @@ sqlite3 /tmp/stocks.sqlite \
 - 日次・週次どちらのワークフローも先頭で `fiscal_dividends.json` /
   `dividends.json` / `haitoukin_fills.json` が追跡されていないことを確認し、
   入っていたら失敗させます。
-- Actions Artifactへアップロードする処理もありません。
+- 外部由来の非公開データをActions Artifactへアップロードする処理はありません。
 - ワークフローのログにはAPIキー、FTPパスワード、予想値を出力しません。
 - `data/all_financials.json`、`data/sector_stats.json`、`data/tickers.json`、
   `edinet/` は、EDINETとJPXという再配布できる出どころの静的データであり、

@@ -226,6 +226,15 @@ jobs:
             fi
           fi
 
+      - name: 分割イベント記録をartifactへ保存
+        if: ${{ hashFiles('data/split_event_feed.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: split-event-feed
+          path: data/split_event_feed.json
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: 予想stateをFTPSへ書き戻す
         shell: bash
         run: |

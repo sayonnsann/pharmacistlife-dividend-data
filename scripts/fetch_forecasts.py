@@ -11,8 +11,8 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
-from datetime import date, timedelta
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -27,6 +27,7 @@ DEFAULT_CALENDAR_DIVIDENDS = (
 )
 DEFAULT_EDINET_DIR = REPOSITORY_ROOT / "edinet"
 DEFAULT_STATE = REPOSITORY_ROOT / "forecasts_state.json"
+DEFAULT_SPLIT_EVENT_FEED = REPOSITORY_ROOT / "data" / "split_event_feed.json"
 DAILY_PRICE_CSV_URL = (
     "https://cdn.jsdelivr.net/gh/sayonnsann/"
     "kouhaitou-db@main/data/database.csv"
@@ -38,6 +39,7 @@ EDINET_FEED_BASE_URL = (
 EDINETDB_BASE_URL = "https://edinetdb.jp/v1/companies"
 EDINETDB_EVENTS_URL = "https://edinetdb.jp/v1/events"
 STATE_VERSION = 1
+SPLIT_EVENT_FEED_SCHEMA_VERSION = 1
 CODE_PATTERN = re.compile(r"^[0-9A-Z]{4}$")
 EDINET_CODE_PATTERN = re.compile(r"^E[0-9]{5}$")
 # 認証・権限の失敗は「その銘柄が悪い」のではなく設定の問題なので、
@@ -94,6 +96,20 @@ EVENT_PENDING_MAX_ATTEMPTS = 5
 EVENT_PENDING_MAX_DAYS = 14
 # metadata.dividend_direction がこれらのときは「配当に動きなし」とみなす。
 EVENT_NO_DIVIDEND_SIGNAL = frozenset({"", "none", "unchanged", "flat", "-"})
+SPLIT_EVENT_TYPES = frozenset({"stock_split", "reverse_split"})
+
+# GitHub Actionsの実行環境のタイムゾーンに依存しないよう、日本時間を固定で
+# 扱う。日本には夏時間がないため、公開ファイルの日時表現にはこの固定オフセット
+# で十分であり、外部のタイムゾーンデータにも依存しない。
+JST = timezone(timedelta(hours=9))
+
+
+def jst_now() -> datetime:
+    return datetime.now(JST)
+
+
+def jst_today() -> date:
+    return jst_now().date()
 
 
 @dataclass(frozen=True)
@@ -117,6 +133,11 @@ class DisclosureEvent:
     edinet_code: str
     is_earnings: bool
     has_dividend_signal: bool
+    # /v1/events のJSONオブジェクトそのもの。stateへ復元した持ち越しには
+    # rawが無いが、APIから受信したイベントには必ず入る。
+    raw: dict[str, Any] | None = field(
+        default=None, compare=False, hash=False, repr=False
+    )
 
     @property
     def type_rank(self) -> int:
@@ -168,7 +189,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--today",
         type=date.fromisoformat,
-        default=date.today(),
+        default=jst_today(),
         metavar="YYYY-MM-DD",
         help="待ち行列計算に使う日付（テスト用）",
     )
@@ -319,6 +340,123 @@ def write_state(path: Path, state: dict[str, Any]) -> None:
         destination.flush()
         os.fsync(destination.fileno())
     os.replace(temporary, path)
+
+
+def _jst_datetime(value: datetime | None) -> datetime:
+    """日時をJSTのaware datetimeへそろえる（テストでは固定値を受け取る）。"""
+    if value is None:
+        return jst_now()
+    if value.tzinfo is None:
+        return value.replace(tzinfo=JST)
+    return value.astimezone(JST)
+
+
+def save_split_event_feed(
+    events: list[DisclosureEvent],
+    path: Path | None = None,
+    *,
+    first_seen_at: date | None = None,
+    updated_at: datetime | None = None,
+) -> bool:
+    """分割・併合イベントを公開フィードへ追記する。
+
+    APIから受信したイベントだけを対象にし、同じeventIdが既にあれば
+    正規化フィールドとfirstSeenAtは維持したままrawだけを最新化する。
+    対象イベントが無いときはファイルを作らず、Falseを返す。
+    """
+    records: list[dict[str, Any]] = []
+    current = _jst_datetime(updated_at)
+    first_seen_text = (first_seen_at or current.date()).isoformat()
+    for event in events:
+        if event.event_type not in SPLIT_EVENT_TYPES:
+            continue
+        if not isinstance(event.raw, dict):
+            # stateから復元した持ち越しには受信時のrawが無い。次回API応答
+            # ではparse_event_recordがrawを持った新しいイベントを作るので、
+            # ここでは推測したレコードを公開しない。
+            continue
+        records.append(
+            {
+                "raw": event.raw,
+                "eventId": event.event_id,
+                "eventType": event.event_type,
+                "eventDate": event.event_date.isoformat(),
+                "secCode": event.sec_code,
+                "edinetCode": event.edinet_code,
+                "firstSeenAt": first_seen_text,
+            }
+        )
+    if not records:
+        return False
+
+    feed_path = DEFAULT_SPLIT_EVENT_FEED if path is None else path
+    if feed_path.exists():
+        with feed_path.open("r", encoding="utf-8") as source:
+            existing = json.load(source)
+        if not isinstance(existing, dict):
+            raise ValueError(f"{feed_path}: フィードの最上位がobjectではありません")
+        if existing.get("schemaVersion") != SPLIT_EVENT_FEED_SCHEMA_VERSION:
+            raise ValueError(f"{feed_path}: 未対応のsplit event feed versionです")
+        existing_events = existing.get("events")
+        if not isinstance(existing_events, list):
+            raise ValueError(f"{feed_path}: eventsがarrayではありません")
+    else:
+        existing_events = []
+
+    # 既存レコードの順番は維持する。壊れたレコードを黙って落とすと、
+    # 公開フィードの履歴を意図せず失うため、書き込み前にエラーにする。
+    merged_events: list[dict[str, Any]] = []
+    positions: dict[str, int] = {}
+    for item in existing_events:
+        if not isinstance(item, dict):
+            raise ValueError(f"{feed_path}: eventsにobjectでない要素があります")
+        event_id = item.get("eventId")
+        if not isinstance(event_id, str) or not event_id:
+            raise ValueError(f"{feed_path}: eventIdが不正です")
+        if event_id in positions:
+            # 既存ファイル自体に重複があった場合も、出力は重複させない。
+            continue
+        positions[event_id] = len(merged_events)
+        merged_events.append(item)
+
+    for record in records:
+        event_id = record["eventId"]
+        position = positions.get(event_id)
+        if position is None:
+            positions[event_id] = len(merged_events)
+            merged_events.append(record)
+        else:
+            # 初回保存時の正規化値とfirstSeenAtは、既存itemから一切
+            # 取り直さない。生レコードだけは最新応答へ置き換える。
+            merged_events[position]["raw"] = record["raw"]
+
+    document = {
+        "schemaVersion": SPLIT_EVENT_FEED_SCHEMA_VERSION,
+        "updatedAt": current.isoformat(timespec="seconds"),
+        "events": merged_events,
+    }
+    feed_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = feed_path.with_name(f".{feed_path.name}.tmp")
+    try:
+        with temporary.open("w", encoding="utf-8") as destination:
+            json.dump(
+                document,
+                destination,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            destination.write("\n")
+            destination.flush()
+            os.fsync(destination.fileno())
+        os.replace(temporary, feed_path)
+    finally:
+        if temporary.exists():
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
+    return True
 
 
 def normalize_code(value: Any) -> str:
@@ -663,6 +801,7 @@ def parse_event_record(record: Any) -> DisclosureEvent | None:
         edinet_code=edinet_code,
         is_earnings=bool(metadata.get("is_earnings")),
         has_dividend_signal=direction not in EVENT_NO_DIVIDEND_SIGNAL,
+        raw=record,
     )
 
 
@@ -1096,6 +1235,20 @@ def run_event_stage(
         print(f"イベント取得を中止しました（続行）: {error}", file=sys.stderr)
         block["lastError"] = str(error)[:200]
         block["lastErrorAt"] = today.isoformat()
+
+    # 取得に成功したページに含まれる生レコードだけを公開フィードへ残す。
+    # slots=0のときはここへ到達しないため、緊急停止中はファイルに触れない。
+    if ok_pages and any(
+        event.event_type in SPLIT_EVENT_TYPES for event in events
+    ):
+        try:
+            save_split_event_feed(events, first_seen_at=today)
+        except Exception as error:
+            # 公開フィードは補助記録であり、ここで予想取得まで止めない。
+            print(
+                f"分割・併合イベントフィード保存失敗（続行）: {error}",
+                file=sys.stderr,
+            )
 
     if ok_pages:
         # 1ページでも応答があった日だけ「ここまで見た」を進める。全滅した日に

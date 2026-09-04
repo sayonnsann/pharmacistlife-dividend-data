@@ -687,6 +687,7 @@ class ParseEventRecordTest(unittest.TestCase):
     def test_reads_the_real_response_shape(self) -> None:
         event = fetch_forecasts.parse_event_record(TOUKEI_EVENT_RECORD)
         assert event is not None
+        self.assertIs(event.raw, TOUKEI_EVENT_RECORD)
         self.assertEqual(event.event_type, "earnings_summary")
         self.assertEqual(event.sec_code, "4746")
         self.assertEqual(event.edinet_code, "E05066")
@@ -745,6 +746,187 @@ class ParseEventRecordTest(unittest.TestCase):
                 event = fetch_forecasts.parse_event_record(record)
                 assert event is not None
                 self.assertFalse(event.has_dividend_signal)
+
+
+class SplitEventFeedTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.path = Path(self.directory.name) / "split_event_feed.json"
+        self.addCleanup(self.directory.cleanup)
+
+    @staticmethod
+    def record(
+        event_type: str,
+        event_id: str,
+        *,
+        event_date: str = "2026-08-05",
+        sec_code: str = "1234",
+        edinet_code: str = "E12345",
+        **extra,
+    ) -> dict:
+        return {
+            "event_id": event_id,
+            "event_type": event_type,
+            "event_date": event_date,
+            "sec_code": sec_code,
+            "edinet_code": edinet_code,
+            "event_category": "stock_action",
+            "metadata": {"ratio": "4:1"},
+            **extra,
+        }
+
+    def parse(self, record: dict) -> "fetch_forecasts.DisclosureEvent":
+        event = fetch_forecasts.parse_event_record(record)
+        assert event is not None
+        return event
+
+    @staticmethod
+    def timestamp(hour: int) -> "fetch_forecasts.datetime":
+        return fetch_forecasts.datetime(
+            2026, 8, 6, hour, 30, 0, tzinfo=fetch_forecasts.JST
+        )
+
+    def read(self) -> dict:
+        return json.loads(self.path.read_text(encoding="utf-8"))
+
+    def test_only_stock_split_and_reverse_split_are_saved_with_raw_records(self) -> None:
+        records = [
+            self.record("stock_split", "split-1", sec_code="1234"),
+            self.record("reverse_split", "reverse-1", sec_code="5678"),
+            self.record("dividend_revision", "dividend-1", sec_code="9012"),
+            self.record("earnings_summary", "earnings-1", sec_code="3456"),
+        ]
+        events = [self.parse(record) for record in records]
+
+        self.assertTrue(
+            fetch_forecasts.save_split_event_feed(
+                events,
+                self.path,
+                first_seen_at=fetch_forecasts.date(2026, 8, 6),
+                updated_at=self.timestamp(7),
+            )
+        )
+
+        document = self.read()
+        self.assertEqual(document["schemaVersion"], 1)
+        self.assertEqual(document["updatedAt"], "2026-08-06T07:30:00+09:00")
+        self.assertEqual(
+            [item["eventType"] for item in document["events"]],
+            ["stock_split", "reverse_split"],
+        )
+        for item, record in zip(document["events"], records[:2]):
+            self.assertEqual(item["raw"], record)
+            self.assertEqual(item["eventId"], record["event_id"])
+            self.assertEqual(item["eventType"], record["event_type"])
+            self.assertEqual(item["eventDate"], record["event_date"])
+            self.assertEqual(item["secCode"], record["sec_code"])
+            self.assertEqual(item["edinetCode"], record["edinet_code"])
+            self.assertEqual(item["firstSeenAt"], "2026-08-06")
+
+    def test_non_split_events_do_not_create_or_update_the_feed(self) -> None:
+        event = self.parse(self.record("dividend_revision", "dividend-1"))
+        self.path.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "updatedAt": "2026-08-05T07:00:00+09:00",
+                    "events": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        before = self.path.read_text(encoding="utf-8")
+
+        self.assertFalse(
+            fetch_forecasts.save_split_event_feed(
+                [event],
+                self.path,
+                first_seen_at=fetch_forecasts.date(2026, 8, 6),
+                updated_at=self.timestamp(7),
+            )
+        )
+        self.assertEqual(self.path.read_text(encoding="utf-8"), before)
+
+    def test_duplicate_event_keeps_first_values_and_replaces_only_raw(self) -> None:
+        first_record = self.record(
+            "stock_split",
+            "split-1",
+            event_date="2026-08-05",
+            sec_code="1234",
+            edinet_code="E12345",
+            title="old",
+        )
+        latest_record = self.record(
+            "stock_split",
+            "split-1",
+            event_date="2026-08-06",
+            sec_code="9999",
+            edinet_code="E99999",
+            title="new",
+            new_field="appeared_later",
+        )
+
+        self.assertTrue(
+            fetch_forecasts.save_split_event_feed(
+                [self.parse(first_record), self.parse(first_record)],
+                self.path,
+                first_seen_at=fetch_forecasts.date(2026, 8, 6),
+                updated_at=self.timestamp(7),
+            )
+        )
+        self.assertTrue(
+            fetch_forecasts.save_split_event_feed(
+                [self.parse(latest_record)],
+                self.path,
+                first_seen_at=fetch_forecasts.date(2026, 8, 7),
+                updated_at=fetch_forecasts.datetime(
+                    2026, 8, 7, 7, 30, tzinfo=fetch_forecasts.JST
+                ),
+            )
+        )
+
+        document = self.read()
+        self.assertEqual(len(document["events"]), 1)
+        item = document["events"][0]
+        self.assertEqual(item["raw"], latest_record)
+        self.assertEqual(item["eventId"], "split-1")
+        self.assertEqual(item["eventType"], "stock_split")
+        self.assertEqual(item["eventDate"], "2026-08-05")
+        self.assertEqual(item["secCode"], "1234")
+        self.assertEqual(item["edinetCode"], "E12345")
+        self.assertEqual(item["firstSeenAt"], "2026-08-06")
+        self.assertEqual(document["updatedAt"], "2026-08-07T07:30:00+09:00")
+
+    def test_new_event_is_appended_to_an_existing_feed(self) -> None:
+        first = self.parse(self.record("stock_split", "split-1"))
+        second = self.parse(
+            self.record(
+                "reverse_split",
+                "reverse-1",
+                sec_code="5678",
+                edinet_code="E56789",
+            )
+        )
+        fetch_forecasts.save_split_event_feed(
+            [first],
+            self.path,
+            first_seen_at=fetch_forecasts.date(2026, 8, 6),
+            updated_at=self.timestamp(7),
+        )
+        fetch_forecasts.save_split_event_feed(
+            [second],
+            self.path,
+            first_seen_at=fetch_forecasts.date(2026, 8, 7),
+            updated_at=fetch_forecasts.datetime(
+                2026, 8, 7, 7, 30, tzinfo=fetch_forecasts.JST
+            ),
+        )
+
+        document = self.read()
+        self.assertEqual(
+            [item["eventId"] for item in document["events"]],
+            ["split-1", "reverse-1"],
+        )
 
 
 class EventWindowTest(unittest.TestCase):
@@ -1152,6 +1334,7 @@ class EventDrivenQueueTest(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         base = Path(self.directory.name)
         self.state_path = base / "forecasts_state.json"
+        self.feed_path = base / "split_event_feed.json"
         self.edinet_dir = base / "edinet"
         self.edinet_dir.mkdir()
         for index, code in enumerate(self.CODES):
@@ -1299,6 +1482,65 @@ class EventDrivenQueueTest(unittest.TestCase):
             self.state()["stocks"]["9433"]["lastEventAt"], "2026-08-03"
         )
 
+    def test_a_successfully_received_split_event_is_saved_to_the_feed(self) -> None:
+        record = dict(
+            TOUKEI_EVENT_RECORD,
+            event_id="split-1",
+            event_type="stock_split",
+        )
+        event = fetch_forecasts.parse_event_record(record)
+        assert event is not None
+
+        with mock.patch.object(
+            fetch_forecasts, "DEFAULT_SPLIT_EVENT_FEED", self.feed_path
+        ):
+            self.run_main([event], daily_limit=5)
+
+        document = json.loads(self.feed_path.read_text(encoding="utf-8"))
+        self.assertEqual(document["schemaVersion"], 1)
+        self.assertEqual(len(document["events"]), 1)
+        self.assertEqual(document["events"][0]["raw"], record)
+        self.assertEqual(document["events"][0]["eventId"], "split-1")
+        self.assertEqual(document["events"][0]["eventType"], "stock_split")
+        self.assertEqual(document["events"][0]["firstSeenAt"], "2026-08-06")
+
+    def test_a_split_event_is_not_saved_when_no_event_page_succeeded(self) -> None:
+        record = dict(
+            TOUKEI_EVENT_RECORD,
+            event_id="split-1",
+            event_type="reverse_split",
+        )
+        event = fetch_forecasts.parse_event_record(record)
+        assert event is not None
+
+        with mock.patch.object(
+            fetch_forecasts, "DEFAULT_SPLIT_EVENT_FEED", self.feed_path
+        ):
+            self.run_main([event], daily_limit=5, ok_pages=0)
+
+        self.assertFalse(self.feed_path.exists())
+
+    def test_a_feed_write_failure_does_not_stop_forecast_updates(self) -> None:
+        record = dict(
+            TOUKEI_EVENT_RECORD,
+            event_id="split-1",
+            event_type="stock_split",
+        )
+        event = fetch_forecasts.parse_event_record(record)
+        assert event is not None
+        fetch = mock.Mock(
+            return_value=({"forecastDividend": 97.5}, None)
+        )
+
+        with mock.patch.object(
+            fetch_forecasts,
+            "save_split_event_feed",
+            side_effect=OSError("disk full"),
+        ):
+            self.run_main([event], daily_limit=5, fetch=fetch)
+
+        self.assertEqual(fetch.call_count, 1)
+
     def test_a_failed_event_fetch_is_retried_tomorrow(self) -> None:
         event = disclosure("9433", "dividend_revision", "2026-08-03")
         failing = mock.Mock(
@@ -1363,10 +1605,25 @@ class EventDrivenQueueTest(unittest.TestCase):
 
     def test_the_kill_switch_skips_the_event_api_entirely(self) -> None:
         collect = mock.Mock()
-        fetch = self.run_main([], daily_limit=5, slots="0", collect=collect)
+        self.feed_path.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 1,
+                    "updatedAt": "2026-08-05T07:00:00+09:00",
+                    "events": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        before = self.feed_path.read_text(encoding="utf-8")
+        with mock.patch.object(
+            fetch_forecasts, "DEFAULT_SPLIT_EVENT_FEED", self.feed_path
+        ):
+            fetch = self.run_main([], daily_limit=5, slots="0", collect=collect)
         collect.assert_not_called()
         # 枠を丸ごと予想取得に回す
         self.assertEqual(fetch.call_count, 5)
+        self.assertEqual(self.feed_path.read_text(encoding="utf-8"), before)
 
     def test_an_old_state_file_without_events_still_works(self) -> None:
         """本番で動いている state は events を持たない。versionは上げない。"""

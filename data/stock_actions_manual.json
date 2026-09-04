@@ -78,6 +78,24 @@
       "checkedAt": "2026-08-09"
     },
     {
+      "eventId": "373A-2025-03-15-split-1-to-25",
+      "securityCode": "373A",
+      "name": "株式会社リップス",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 25,
+      "effectiveDate": "2025-03-15",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100X6NP.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(373A-2025-03-15-split-1-to-25)から自動生成",
+      "checkedAt": "2026-09-05"
+    },
+    {
       "eventId": "3350-2025-04-01-split-1-to-10",
       "securityCode": "3350",
       "name": "株式会社メタプラネット",
@@ -130,6 +148,24 @@
       },
       "note": "edinet-direct側マスター(9305-2025-06-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "2938-2025-07-01-split-1-to-3",
+      "securityCode": "2938",
+      "name": "株式会社オカムラ食品工業",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2025-07-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100WQVV.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(2938-2025-07-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-09-05"
     },
     {
       "eventId": "5137-2025-07-01-split-1-to-6",
@@ -401,6 +437,24 @@
       },
       "note": "edinet-direct側マスター(2164-2025-11-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-09-04"
+    },
+    {
+      "eventId": "2991-2025-11-01-split-1-to-2",
+      "securityCode": "2991",
+      "name": "株式会社ランドネット",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2025-11-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100WWX1.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(2991-2025-11-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-09-05"
     },
     {
       "eventId": "1414-2026-01-01-split-1-to-4",

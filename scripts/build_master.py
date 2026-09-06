@@ -1,5 +1,5 @@
 """
-JPXの東証上場銘柄一覧(data_j.xls)をダウンロードし、
+JPXの東証上場銘柄一覧(data_j.xlsx。2026-09 に xls から変更)をダウンロードし、
 配当チェッカー対象となる内国普通株式のみを抽出してtickers.jsonを生成する。
 
 sector には証券コード協議会の33業種区分を入れる(ページの業種フィルタ用)。
@@ -14,9 +14,9 @@ from pathlib import Path
 
 import pandas as pd
 
-JPX_URL = "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xls"
+JPX_URL = "https://www.jpx.co.jp/markets/statistics-equities/misc/tvdivq0000001vg2-att/data_j.xlsx"
 OUT_DIR = Path(__file__).resolve().parent.parent / "data"
-XLS_PATH = OUT_DIR / "data_j.xls"
+XLS_PATH = OUT_DIR / "data_j.xlsx"
 
 # 対象とする市場区分(内国普通株式のみ。ETF/REIT/PRO Market等は除外)
 TARGET_MARKETS = {
@@ -29,7 +29,8 @@ TARGET_MARKETS = {
 def download_master():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     subprocess.run(
-        ["curl", "-sL", "-o", str(XLS_PATH), JPX_URL],
+        # -f: 404 などのエラーページを xlsx として保存しないよう、HTTP エラーで失敗させる
+        ["curl", "-sfL", "-o", str(XLS_PATH), JPX_URL],
         check=True,
     )
 

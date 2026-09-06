@@ -6,96 +6,6 @@
   "confirmedBy": "edinet-direct側マスターのdpsRestated/epsAdjusted判定。各eventのsource.urlが根拠資料",
   "events": [
     {
-      "eventId": "3135-2014-02-13-split-1-to-2",
-      "securityCode": "3135",
-      "name": "株式会社マーケットエンタープライズ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2014-02-13",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S1008QIE.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(3135-2014-02-13-split-1-to-2)から自動生成",
-      "checkedAt": "2026-09-05"
-    },
-    {
-      "eventId": "3135-2016-01-01-split-1-to-2",
-      "securityCode": "3135",
-      "name": "株式会社マーケットエンタープライズ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2016-01-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S1008QIE.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(3135-2016-01-01-split-1-to-2)から自動生成",
-      "checkedAt": "2026-09-05"
-    },
-    {
-      "eventId": "3446-2017-12-30-split-1-to-10",
-      "securityCode": "3446",
-      "name": "株式会社ジェイテックコーポレーション",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 10,
-      "effectiveDate": "2017-12-30",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100E799.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(3446-2017-12-30-split-1-to-10)から自動生成",
-      "checkedAt": "2026-09-05"
-    },
-    {
-      "eventId": "7359-2020-08-29-split-1-to-5",
-      "securityCode": "7359",
-      "name": "株式会社東京通信グループ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 5,
-      "effectiveDate": "2020-08-29",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100L2YT.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(7359-2020-08-29-split-1-to-5)から自動生成",
-      "checkedAt": "2026-09-05"
-    },
-    {
-      "eventId": "7359-2023-05-18-split-1-to-2",
-      "securityCode": "7359",
-      "name": "株式会社東京通信グループ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2023-05-18",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100T525.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(7359-2023-05-18-split-1-to-2)から自動生成",
-      "checkedAt": "2026-09-05"
-    },
-    {
       "eventId": "2897-2024-01-01-split-1-to-3",
       "securityCode": "2897",
       "name": "日清食品ホールディングス",
@@ -166,24 +76,6 @@
       },
       "note": "edinet-direct側マスター(277A-2025-03-01-split-1-to-5)から自動生成",
       "checkedAt": "2026-08-09"
-    },
-    {
-      "eventId": "373A-2025-03-15-split-1-to-25",
-      "securityCode": "373A",
-      "name": "株式会社リップス",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 25,
-      "effectiveDate": "2025-03-15",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100X6NP.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(373A-2025-03-15-split-1-to-25)から自動生成",
-      "checkedAt": "2026-09-05"
     },
     {
       "eventId": "3350-2025-04-01-split-1-to-10",
@@ -294,6 +186,42 @@
       "checkedAt": "2026-08-21"
     },
     {
+      "eventId": "6574-2025-08-02-split-1-to-10",
+      "securityCode": "6574",
+      "name": "株式会社コンヴァノ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 10,
+      "effectiveDate": "2025-08-02",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100X2YT.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(6574-2025-08-02-split-1-to-10)から自動生成",
+      "checkedAt": "2026-09-05"
+    },
+    {
+      "eventId": "340A-2025-09-01-split-1-to-3",
+      "securityCode": "340A",
+      "name": "株式会社ジグザグ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2025-09-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100WLLK.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(340A-2025-09-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-09-05"
+    },
+    {
       "eventId": "3498-2025-09-01-split-1-to-2",
       "securityCode": "3498",
       "name": "霞ヶ関キャピタル",
@@ -310,24 +238,6 @@
       },
       "note": "edinet-direct側マスター(3498-2025-09-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-08-15"
-    },
-    {
-      "eventId": "441A-2025-09-01-split-4000000-to-16001001",
-      "securityCode": "441A",
-      "name": "",
-      "action": "split",
-      "oldShares": 4000000,
-      "newShares": 16001001,
-      "effectiveDate": "2025-09-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YRYV.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(441A-2025-09-01-split-4000000-to-16001001)から自動生成",
-      "checkedAt": "2026-09-05"
     },
     {
       "eventId": "4439-2025-09-01-split-1-to-2",
@@ -382,24 +292,6 @@
       },
       "note": "edinet-direct側マスター(3496-2025-10-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-08-15"
-    },
-    {
-      "eventId": "5401-2025-10-01-split-1-to-5",
-      "securityCode": "5401",
-      "name": "日本製鉄",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 5,
-      "effectiveDate": "2025-10-01",
-      "status": "confirmed",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": true,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100X053.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(5401-2025-10-01-split-1-to-5)から自動生成",
-      "checkedAt": "2026-08-17"
     },
     {
       "eventId": "6516-2025-10-01-split-1-to-3",
@@ -562,6 +454,24 @@
         "type": "edinet"
       },
       "note": "edinet-direct側マスター(2991-2025-11-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-09-05"
+    },
+    {
+      "eventId": "350A-2025-11-01-split-1-to-6",
+      "securityCode": "350A",
+      "name": "デジタルグリッド株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 6,
+      "effectiveDate": "2025-11-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100WXET.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(350A-2025-11-01-split-1-to-6)から自動生成",
       "checkedAt": "2026-09-05"
     },
     {
@@ -763,6 +673,24 @@
       "checkedAt": "2026-09-04"
     },
     {
+      "eventId": "7409-2026-01-01-split-1-to-3",
+      "securityCode": "7409",
+      "name": "ＡｅｒｏＥｄｇｅ株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-01-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XKVM.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(7409-2026-01-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-09-05"
+    },
+    {
       "eventId": "9722-2026-01-01-split-1-to-5",
       "securityCode": "9722",
       "name": "藤田観光",
@@ -815,6 +743,24 @@
       },
       "note": "edinet-direct側マスター(2983-2026-02-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-09-04"
+    },
+    {
+      "eventId": "4422-2026-02-01-split-1-to-3",
+      "securityCode": "4422",
+      "name": "ＶＡＬＵＥＮＥＸ株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-02-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XPTS.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(4422-2026-02-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-09-05"
     },
     {
       "eventId": "8142-2026-02-01-split-1-to-3",
@@ -1177,6 +1123,24 @@
       "checkedAt": "2026-09-04"
     },
     {
+      "eventId": "7376-2026-04-01-split-1-to-3",
+      "securityCode": "7376",
+      "name": "ＢＣＣ株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-04-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100Y3XN.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(7376-2026-04-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-09-05"
+    },
+    {
       "eventId": "7389-2026-04-01-split-1-to-5",
       "securityCode": "7389",
       "name": "あいちフィナンシャルグループ",
@@ -1447,6 +1411,24 @@
       "checkedAt": "2026-09-04"
     },
     {
+      "eventId": "6085-2026-04-24-split-1-to-10",
+      "securityCode": "6085",
+      "name": "アーキテクツ・スタジオ・ジャパン株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 10,
+      "effectiveDate": "2026-04-24",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100Y7A6.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(6085-2026-04-24-split-1-to-10)から自動生成",
+      "checkedAt": "2026-09-05"
+    },
+    {
       "eventId": "334A-2026-05-01-split-1-to-2",
       "securityCode": "334A",
       "name": "ビジュアル・プロセッシング・ジャパン",
@@ -1499,6 +1481,24 @@
       },
       "note": "edinet-direct側マスター(441A-2026-05-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-09-04"
+    },
+    {
+      "eventId": "4445-2026-05-12-split-1-to-2",
+      "securityCode": "4445",
+      "name": "リビン・テクノロジーズ株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-05-12",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100Y4HG.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(4445-2026-05-12-split-1-to-2)から自動生成",
+      "checkedAt": "2026-09-05"
     },
     {
       "eventId": "2303-2026-06-01-split-1-to-2",

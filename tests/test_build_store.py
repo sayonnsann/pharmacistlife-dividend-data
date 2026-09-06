@@ -537,7 +537,7 @@ class SplitAdjustmentTest(unittest.TestCase):
             ROOT / "data" / "stock_actions_manual.json",
             as_of=date(2026, 8, 3),
         )
-        self.assertEqual(len(loaded), 109)  # 生成台帳(export_yield_actions)の実数に追随
+        self.assertEqual(len(loaded), 111)  # 生成台帳(export_yield_actions)の実数に追随
         self.assertEqual(sum(map(len, loaded.values())), 112)
         self.assertIsNone(loaded["2220"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)
         self.assertTrue(

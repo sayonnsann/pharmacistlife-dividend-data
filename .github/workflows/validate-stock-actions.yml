@@ -17,6 +17,9 @@ jobs:
   validate:
     name: validate
     runs-on: ubuntu-latest
+    # 利回り用台帳の自動更新PR(auto/yield-actions-*)は data/stock_actions_manual.json と
+    # tests の件数更新を含むため、この「抽出ファイルのみ」の検証は対象外にする
+    if: ${{ !startsWith(github.head_ref, 'auto/yield-actions-') }}
     steps:
       - name: Check out PR
         uses: actions/checkout@v4

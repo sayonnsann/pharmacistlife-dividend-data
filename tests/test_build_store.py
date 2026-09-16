@@ -539,7 +539,8 @@ class SplitAdjustmentTest(unittest.TestCase):
         )
         self.assertEqual(len(loaded), 100)  # 生成台帳(export_yield_actions)の実数に追随
         self.assertEqual(sum(map(len, loaded.values())), 101)
-        self.assertIsNone(loaded["2220"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)
+        # 2220 は抽出台帳(EDINET由来)側に移ったため、手動台帳に残る provisional の 1414 で確認する
+        self.assertIsNone(loaded["1414"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)
         self.assertTrue(
             all(
                 item["epsAdjustedByIssuer"] in (True, False, None)

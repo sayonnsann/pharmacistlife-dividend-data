@@ -475,24 +475,6 @@
       "checkedAt": "2026-09-05"
     },
     {
-      "eventId": "1414-2026-01-01-split-1-to-4",
-      "securityCode": "1414",
-      "name": "ショーボンドホールディングス",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 4,
-      "effectiveDate": "2026-01-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/14140/140120251110593695.pdf",
-        "type": "jpx"
-      },
-      "note": "edinet-direct側マスター(1414-2026-01-01-split-1-to-4)から自動生成",
-      "checkedAt": "2026-08-02"
-    },
-    {
       "eventId": "2501-2026-01-01-split-1-to-5",
       "securityCode": "2501",
       "name": "サッポロビール",
@@ -853,24 +835,6 @@
       "checkedAt": "2026-09-04"
     },
     {
-      "eventId": "3712-2026-04-01-split-1-to-5",
-      "securityCode": "3712",
-      "name": "情報企画",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 5,
-      "effectiveDate": "2026-04-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www.jyohokikaku.co.jp/contents/wp-content/uploads/2026/02/20260205_01.pdf",
-        "type": "issuer_ir"
-      },
-      "note": "edinet-direct側マスター(3712-2026-04-01-split-1-to-5)から自動生成",
-      "checkedAt": "2026-08-02"
-    },
-    {
       "eventId": "3796-2026-04-01-split-1-to-2",
       "securityCode": "3796",
       "name": "いい生活",
@@ -1177,24 +1141,6 @@
       "checkedAt": "2026-09-04"
     },
     {
-      "eventId": "9562-2026-04-01-split-1-to-3",
-      "securityCode": "9562",
-      "name": "ビジネスコーチ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-04-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/95620/140120260213560433.pdf",
-        "type": "jpx"
-      },
-      "note": "edinet-direct側マスター(9562-2026-04-01-split-1-to-3)から自動生成",
-      "checkedAt": "2026-08-02"
-    },
-    {
       "eventId": "9763-2026-04-01-split-1-to-3",
       "securityCode": "9763",
       "name": "丸建リース",
@@ -1247,24 +1193,6 @@
       },
       "note": "edinet-direct側マスター(334A-2026-05-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-08-17"
-    },
-    {
-      "eventId": "3804-2026-05-01-split-1-to-3",
-      "securityCode": "3804",
-      "name": "システム　ディ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 3,
-      "effectiveDate": "2026-05-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www.systemd.co.jp/wordpress/wp-content/uploads/2026/03/20260325_ir.pdf",
-        "type": "issuer_ir"
-      },
-      "note": "edinet-direct側マスター(3804-2026-05-01-split-1-to-3)から自動生成",
-      "checkedAt": "2026-08-02"
     },
     {
       "eventId": "441A-2026-05-01-split-1-to-2",
@@ -1393,24 +1321,6 @@
       "checkedAt": "2026-08-02"
     },
     {
-      "eventId": "2264-2026-07-01-split-1-to-4",
-      "securityCode": "2264",
-      "name": "森永乳業",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 4,
-      "effectiveDate": "2026-07-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www.morinagamilk.co.jp/release/newsentry-4693.html",
-        "type": "issuer_ir"
-      },
-      "note": "edinet-direct側マスター(2264-2026-07-01-split-1-to-4)から自動生成",
-      "checkedAt": "2026-08-02"
-    },
-    {
       "eventId": "2436-2026-07-01-split-1-to-2",
       "securityCode": "2436",
       "name": "共同ピーアール",
@@ -1463,24 +1373,6 @@
       },
       "note": "edinet-direct側マスター(3091-2026-07-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-09-04"
-    },
-    {
-      "eventId": "3176-2026-07-01-split-1-to-2",
-      "securityCode": "3176",
-      "name": "三洋貿易",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-07-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/31760/140120260507517527.pdf",
-        "type": "jpx"
-      },
-      "note": "edinet-direct側マスター(3176-2026-07-01-split-1-to-2)から自動生成",
-      "checkedAt": "2026-08-02"
     },
     {
       "eventId": "3277-2026-07-01-split-1-to-2",
@@ -1609,42 +1501,6 @@
       "checkedAt": "2026-08-02"
     },
     {
-      "eventId": "7173-2026-07-01-split-1-to-8",
-      "securityCode": "7173",
-      "name": "東京きらぼしフィナンシャルグループ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 8,
-      "effectiveDate": "2026-07-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/71730/140120260507518894.pdf",
-        "type": "jpx"
-      },
-      "note": "edinet-direct側マスター(7173-2026-07-01-split-1-to-8)から自動生成",
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "7236-2026-07-01-split-1-to-10",
-      "securityCode": "7236",
-      "name": "ティラド",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 10,
-      "effectiveDate": "2026-07-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www2.jpx.co.jp/disc/72360/140120260525546492.pdf",
-        "type": "jpx"
-      },
-      "note": "edinet-direct側マスター(7236-2026-07-01-split-1-to-10)から自動生成",
-      "checkedAt": "2026-08-02"
-    },
-    {
       "eventId": "7409-2026-07-01-split-1-to-2",
       "securityCode": "7409",
       "name": "AeroEdge",
@@ -1732,24 +1588,6 @@
         "type": "jpx"
       },
       "note": "edinet-direct側マスター(7846-2026-07-01-split-1-to-3)から自動生成",
-      "checkedAt": "2026-08-02"
-    },
-    {
-      "eventId": "8053-2026-07-01-split-1-to-4",
-      "securityCode": "8053",
-      "name": "住友商事",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 4,
-      "effectiveDate": "2026-07-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www.sumitomocorp.com/-/media/Files/hq/ir/report/summary/2025/2603Tanshin.pdf?sc_lang=ja",
-        "type": "issuer_ir"
-      },
-      "note": "edinet-direct側マスター(8053-2026-07-01-split-1-to-4)から自動生成",
       "checkedAt": "2026-08-02"
     },
     {

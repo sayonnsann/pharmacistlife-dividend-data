@@ -539,8 +539,9 @@ class SplitAdjustmentTest(unittest.TestCase):
         )
         self.assertEqual(len(loaded), 91)  # 生成台帳(export_yield_actions)の実数に追随
         self.assertEqual(sum(map(len, loaded.values())), 92)
-        # 2220 は抽出台帳(EDINET由来)側に移ったため、手動台帳に残る provisional の 1414 で確認する
-        self.assertIsNone(loaded["1414"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)
+        # 抽出台帳(EDINET由来・監査合格)と重複する銘柄は手動台帳から自動除外されるため、
+        # 手動台帳に残る provisional の 1663 で確認する
+        self.assertIsNone(loaded["1663"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)
         self.assertTrue(
             all(
                 item["epsAdjustedByIssuer"] in (True, False, None)
@@ -774,12 +775,15 @@ class StockActionIntegrationTest(unittest.TestCase):
         loaded = build_store.load_stock_actions(
             [self.MANUAL, self.EXTRACTED], as_of=date(2026, 8, 3)
         )
-        event = loaded["8053"][0]
+        # 3350 は抽出台帳側が provisional(監査「要確認」)のため手動台帳にも残る唯一の重複。
+        # 手動側(confirmed・監査情報なし)が勝つことを確認する
+        event = loaded["3350"][0]
         self.assertEqual(
             event["source"]["url"],
-            "https://www.sumitomocorp.com/-/media/Files/hq/ir/report/summary/2025/2603Tanshin.pdf?sc_lang=ja",
+            "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XTWY.pdf",
         )
-        self.assertNotEqual(event["source"].get("type"), "edinet")
+        self.assertEqual(event["status"], "confirmed")
+        self.assertNotIn("audit", event["source"])
 
     def test_loader_maps_eps_flag_and_keeps_audit_provenance(self) -> None:
         loaded = build_store.load_stock_actions(

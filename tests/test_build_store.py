@@ -569,6 +569,113 @@ class SplitAdjustmentTest(unittest.TestCase):
         self.assertIsNone(toukei["epsAdjustedByIssuer"])
 
 
+class FilterDocumentReadmissionTest(unittest.TestCase):
+    """選別済みファイルを入力に再選別したときの、除外イベントの扱いを検査する。"""
+
+    FISCAL = {
+        "1111": ({2025: 10.0}, 3),
+        "2222": ({2025: 0.0}, 3),
+    }
+    TICKERS = {"1111", "2222", "3333"}
+
+    @staticmethod
+    def _event(event_id: str, code: str, **overrides: object) -> dict:
+        event = {
+            "eventId": event_id,
+            "securityCode": code,
+            "action": "split",
+            "effectiveDate": "2026-04-01",
+            "oldShares": 1,
+            "newShares": 2,
+        }
+        event.update(overrides)
+        return event
+
+    def _document(self, events: list, excluded: list) -> dict:
+        return {
+            "generatedFrom": {"selection": {"maxSplitRatioExclusive": 50.0}},
+            "events": events,
+            "excluded": excluded,
+        }
+
+    def test_previously_excluded_event_returns_to_events_when_it_requalifies(
+        self,
+    ) -> None:
+        """以前は除外されたが今は条件を満たすイベントは、eventsへ戻す。
+
+        以前は「fiscal_dividends.jsonに有効な配当系列がない」で除外されたが、
+        その後に系列（無配のゼロ系列を含む）が入って条件を満たすようになった
+        ケース。eventsにもexcludedにも残らず消えることがあってはならない。
+        """
+        kept = self._event("kept", "1111")
+        requalified = dict(
+            self._event("requalified", "2222"),
+            reasonCode="fiscal_series_missing",
+            reasonCodes=["fiscal_series_missing"],
+            reason="fiscal_dividends.json に有効な配当系列がない",
+        )
+        still_excluded = dict(
+            self._event("still-excluded", "3333"),
+            reasonCode="fiscal_series_missing",
+            reasonCodes=["fiscal_series_missing"],
+            reason="fiscal_dividends.json に有効な配当系列がない",
+        )
+        document = self._document([kept], [requalified, still_excluded])
+
+        output, counts = filter_extracted_stock_actions.filter_document(
+            document, self.FISCAL, self.TICKERS
+        )
+
+        self.assertEqual(
+            [event["eventId"] for event in output["events"]],
+            ["kept", "requalified"],
+        )
+        self.assertEqual(
+            [item["eventId"] for item in output["excluded"]],
+            ["still-excluded"],
+        )
+        self.assertEqual(counts["readmitted"], 1)
+        self.assertEqual(counts["selected"], 2)
+        self.assertEqual(counts["newlyExcluded"], 1)
+        self.assertEqual(
+            output["generatedFrom"]["selection"]["readmittedCount"], 1
+        )
+        restored = output["events"][1]
+        for field in ("reasonCode", "reasonCodes", "reason"):
+            self.assertNotIn(field, restored)
+
+    def test_requalified_event_is_not_duplicated_when_already_delivered(
+        self,
+    ) -> None:
+        delivered = self._event("shared", "1111")
+        stale_copy = dict(
+            self._event("shared", "1111"),
+            reasonCode="fiscal_series_missing",
+            reasonCodes=["fiscal_series_missing"],
+            reason="fiscal_dividends.json に有効な配当系列がない",
+        )
+        document = self._document([delivered], [stale_copy])
+
+        output, counts = filter_extracted_stock_actions.filter_document(
+            document, self.FISCAL, self.TICKERS
+        )
+
+        self.assertEqual([event["eventId"] for event in output["events"]], ["shared"])
+        self.assertEqual(counts["readmitted"], 0)
+        self.assertEqual(output["excluded"], [])
+
+    def test_delivered_event_is_kept_even_when_it_no_longer_qualifies(self) -> None:
+        """eventsは下限として保つ（外部データの更新で配信中の補正を消さない）。"""
+        delivered = self._event("delisted", "9999")
+        document = self._document([delivered], [])
+
+        output, _ = filter_extracted_stock_actions.filter_document(
+            document, self.FISCAL, self.TICKERS
+        )
+
+        self.assertEqual([event["eventId"] for event in output["events"]], ["delisted"])
+
+
 class StockActionIntegrationTest(unittest.TestCase):
     MANUAL = ROOT / "data" / "stock_actions_manual.json"
     EXTRACTED = ROOT / "data" / "stock_actions_extracted.json"

@@ -216,6 +216,14 @@ def add_exclusion_metadata(
     return excluded
 
 
+def strip_exclusion_metadata(event: dict[str, Any]) -> dict[str, Any]:
+    """excludedに付いていた除外理由を落として、配信イベントの形に戻す。"""
+    restored = dict(event)
+    for field in ("reasonCode", "reasonCodes", "reason"):
+        restored.pop(field, None)
+    return restored
+
+
 LEGACY_FIELD_RENAMES = {
     "epsAdjusted": "epsAdjustedByIssuer",
     "dpsAdjusted": "applyDividendAdjustment",
@@ -340,9 +348,12 @@ def filter_document(
     ]
     existing_excluded = preserve_existing_excluded(document.get("excluded"))
     # 月次ジョブは必ず台帳を入力にする。すでに選別済みの成果物を手入力で
-    # 再入力した場合は、現在のeventsをスナップショットとして保ち、excluded
-    # だけを再評価する。外部のfiscal_dividends.jsonが更新されても、配信側の
-    # 既存イベントが意図せず消えることを防ぐためである。
+    # 再入力した場合は、現在のeventsを下限として保ち（外部の
+    # fiscal_dividends.jsonが更新されても配信中のイベントが意図せず消えない
+    # ようにする）、excludedだけを再評価する。再評価で選別条件を満たすように
+    # なった旧除外イベントは、eventsにもexcludedにも残らず消えてしまわない
+    # よう、eventsへ復帰させる（配信を減らさない方向の追加なので、上の
+    # 「消えることを防ぐ」意図とは矛盾しない）。
     prior_excluded_events = [
         item
         for item in existing_excluded
@@ -353,12 +364,29 @@ def filter_document(
         isinstance(document.get("generatedFrom"), dict)
         and isinstance(document["generatedFrom"].get("selection"), dict)
     )
+    readmitted: list[dict[str, Any]] = []
     if generated_selection:
         unique_candidates = events + prior_excluded_events
-        selected = list(events)
-        _, newly_excluded = select_events(
+        present_event_ids = {
+            event["eventId"]
+            for event in events
+            if isinstance(event, dict) and isinstance(event.get("eventId"), str)
+        }
+        requalified, newly_excluded = select_events(
             prior_excluded_events, fiscal_by_code, ticker_codes
         )
+        readmitted = [
+            strip_exclusion_metadata(event)
+            for event in requalified
+            if event.get("eventId") not in present_event_ids
+        ]
+        selected = list(events) + readmitted
+        # 復帰分を末尾に足すと成果物のeventId順が崩れ、差分レビューが読みにくく
+        # なる。全件にeventIdがある場合だけ並べ直す（復帰がなければ従来どおり）。
+        if readmitted and all(
+            isinstance(event.get("eventId"), str) for event in selected
+        ):
+            selected.sort(key=lambda event: event["eventId"])
     else:
         candidates = events + prior_excluded_events
         seen_event_ids: set[str] = set()
@@ -391,6 +419,7 @@ def filter_document(
         "maxSplitRatioExclusive": MAX_SPLIT_RATIO,
         "selectedCount": len(selected),
         "newlyExcludedCount": len(newly_excluded),
+        "readmittedCount": len(readmitted),
     }
     output["generatedFrom"] = generated_from
     output["events"] = selected
@@ -398,6 +427,7 @@ def filter_document(
     counts = {
         "input": len(unique_candidates),
         "selected": len(selected),
+        "readmitted": len(readmitted),
         "newlyExcluded": len(newly_excluded),
         "preservedExcluded": len(preserved_summaries),
         "excluded": len(output["excluded"]),
@@ -415,6 +445,7 @@ def main() -> None:
     print(
         "株式分割イベントを選別: "
         f"入力 {counts['input']:,} / 採用 {counts['selected']:,} / "
+        f"除外から復帰 {counts['readmitted']:,} / "
         f"新規除外 {counts['newlyExcluded']:,} / "
         f"excluded合計 {counts['excluded']:,}"
     )

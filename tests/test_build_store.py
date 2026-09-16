@@ -537,8 +537,8 @@ class SplitAdjustmentTest(unittest.TestCase):
             ROOT / "data" / "stock_actions_manual.json",
             as_of=date(2026, 8, 3),
         )
-        self.assertEqual(len(loaded), 100)  # 生成台帳(export_yield_actions)の実数に追随
-        self.assertEqual(sum(map(len, loaded.values())), 101)
+        self.assertEqual(len(loaded), 91)  # 生成台帳(export_yield_actions)の実数に追随
+        self.assertEqual(sum(map(len, loaded.values())), 92)
         # 2220 は抽出台帳(EDINET由来)側に移ったため、手動台帳に残る provisional の 1414 で確認する
         self.assertIsNone(loaded["1414"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)
         self.assertTrue(

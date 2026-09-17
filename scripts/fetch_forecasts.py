@@ -94,6 +94,18 @@ EVENT_SEEN_LIMIT = 2000
 # 5回または14日試しても取れなければ、以後は自動再試行せずログに残す。
 EVENT_PENDING_MAX_ATTEMPTS = 5
 EVENT_PENDING_MAX_DAYS = 14
+# 更新確認は初回成功日を含む3暦日、最大3回（失敗も回数に含める）。
+EVENT_CONFIRM_MAX_ATTEMPTS = 3
+EVENT_CONFIRM_MAX_DAYS = 3
+FORECAST_CONFIRM_FIELDS = (
+    "forecastDividend", "forecastInterimDividend", "forecastFinalDividend",
+    "forecastDividendAdjusted", "forecastSplitFactor", "forecastSplitEffectiveDate",
+    "forecastShareBasis", "forecastFiscalYear", "forecastQuarter",
+    "forecastRevenue", "forecastOperatingIncome", "forecastOrdinaryIncome",
+    "forecastNetIncome", "forecastEps",
+    "forecastRevenueChange", "forecastOperatingIncomeChange",
+    "forecastOrdinaryIncomeChange", "forecastNetIncomeChange", "forecastEpsChange",
+)
 # metadata.dividend_direction がこれらのときは「配当に動きなし」とみなす。
 EVENT_NO_DIVIDEND_SIGNAL = frozenset({"", "none", "unchanged", "flat", "-"})
 SPLIT_EVENT_TYPES = frozenset({"stock_split", "reverse_split"})
@@ -203,6 +215,10 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=20,
         help="dry-runで表示する先頭件数（既定: 20）",
+    )
+    parser.add_argument(
+        "--list-unconfirmed", action="store_true",
+        help="stateだけを読み、未確認・旧比較履歴なしのコードをカンマ区切りで出力",
     )
     return parser.parse_args()
 
@@ -1001,6 +1017,66 @@ def parse_pending_event(event_id: str, raw: Any) -> PendingEvent | None:
     )
 
 
+def confirmation_expired(raw: dict[str, Any], today: date) -> bool:
+    started = iso_date_text(raw.get("confirmationStartedAt"))
+    if not started:
+        return False
+    return (
+        (today - date.fromisoformat(started)).days >= EVENT_CONFIRM_MAX_DAYS
+        or raw.get("confirmationAttempts", 0) >= EVENT_CONFIRM_MAX_ATTEMPTS
+    )
+
+
+def record_event_result(
+    state: dict[str, Any], code: str, parsed: dict[str, Any],
+    triggers: dict[str, str], today: date,
+) -> None:
+    """値の変化は更新の代理指標。開示内容との一致を保証するものではない。"""
+    previous = state["stocks"].get(code, {})
+    # 欠損への変化や、新フィールド追加だけでは更新確認としない。
+    changed = any(
+        key in previous and parsed.get(key) is not None
+        and previous[key] != parsed[key]
+        for key in FORECAST_CONFIRM_FIELDS
+    )
+    block = event_state(state)
+    statuses = {}
+    for event_id, day in triggers.items():
+        raw = block["pending"][event_id]
+        if not changed:
+            raw.setdefault("confirmationStartedAt", today.isoformat())
+            raw.setdefault("confirmationAttempts", 1)
+        status = "changed" if changed else (
+            "expired" if confirmation_expired(raw, today) else "pending"
+        )
+        statuses[event_id] = {"eventDate": day, "status": status}
+        if status != "pending":
+            block["seen"][event_id] = day
+            block["pending"].pop(event_id, None)
+    parsed["lastEventAt"] = max(triggers.values())
+    parsed["eventConfirmation"] = {"checkedAt": today.isoformat(), "events": statuses}
+
+
+def list_unconfirmed(state: dict[str, Any]) -> None:
+    codes = []
+    legacy = 0
+    for code, record in state.get("stocks", {}).items():
+        if not normalize_code(code) or not isinstance(record, dict):
+            continue
+        confirmation = record.get("eventConfirmation")
+        if isinstance(confirmation, dict):
+            if any(item.get("status") != "changed"
+                   for item in confirmation.get("events", {}).values()):
+                codes.append(code)
+        elif record.get("lastEventAt"):
+            codes.append(code)
+            legacy += 1
+    if legacy:
+        print(f"比較履歴のない旧イベント取得記録を{legacy}銘柄含みます。"
+              "旧stateから取得前後の値の一致は判定できません。", file=sys.stderr)
+    print(",".join(sorted(set(codes))))
+
+
 def load_pending_events(
     block: dict[str, Any], today: date
 ) -> dict[str, PendingEvent]:
@@ -1022,12 +1098,14 @@ def load_pending_events(
         if (
             parsed.attempts >= EVENT_PENDING_MAX_ATTEMPTS
             or age > EVENT_PENDING_MAX_DAYS
+            or confirmation_expired(raw, today)
         ):
             print(
                 "イベント持ち越しを諦めました: "
                 f"{parsed.event.sec_code or parsed.event.edinet_code} "
                 f"（試行{parsed.attempts}回・{max(age, 0)}日経過）"
             )
+            seen[event_id] = parsed.event.event_date.isoformat()
             del pending[event_id]
             continue
         result[event_id] = parsed
@@ -1080,6 +1158,8 @@ def mark_pending_attempts(
                 attempts = 0
             raw["attempts"] = max(attempts, 0) + 1
             raw["lastAttemptAt"] = today.isoformat()
+            if "confirmationStartedAt" in raw:
+                raw["confirmationAttempts"] = raw.get("confirmationAttempts", 0) + 1
 
 
 def pending_candidate_codes(
@@ -1093,11 +1173,7 @@ def pending_candidate_codes(
         candidate = match_candidate(item.event, by_code, by_edinet)
         if candidate is None:
             continue
-        if (
-            candidate.last_fetched is None
-            or candidate.last_fetched <= item.event.event_date
-        ):
-            codes.add(candidate.code)
+        codes.add(candidate.code)
     return codes
 
 
@@ -1160,11 +1236,12 @@ def plan_event_slots(
             stats["already_seen"] += 1
             continue
         if (
-            candidate.last_fetched is not None
+            event.event_id not in (pending_ids or set())
+            and candidate.last_fetched is not None
             and candidate.last_fetched > event.event_date
         ):
-            # 開示日より後に取得済み＝すでに新しい値を持っている。
-            # 同日は「開示前に取った」可能性があるので取り直す側に倒す。
+            # 未確認pendingは取得日が開示日より後でも再確認する。
+            # その他は従来の取得日による除外を維持する。
             stats["already_fetched"] += 1
             continue
         stats["matched"] += 1
@@ -1279,9 +1356,22 @@ def run_event_stage(
     combined_events.extend(
         event for event in events if event.event_id not in pending_event_ids
     )
+    # 同日再実行・同一銘柄の別イベントもまとめて抑止する。
+    by_code, by_edinet = index_candidates(candidates)
+    attempted_codes = {
+        candidate.code
+        for raw in block["pending"].values()
+        if raw.get("lastAttemptAt") == today.isoformat()
+        and (event := parse_pending_event("pending", raw)) is not None
+        and (candidate := match_candidate(event.event, by_code, by_edinet)) is not None
+    }
     picks, ids_by_code, stats = plan_event_slots(
         combined_events,
-        candidates,
+        [candidate for candidate in candidates
+         if candidate.code not in attempted_codes
+         and candidate.last_fetched != today
+         and state["stocks"].get(candidate.code, {}).get("lastEventAttemptAt")
+         != today.isoformat()],
         block["seen"],
         slots,
         pending_ids,
@@ -1766,6 +1856,10 @@ def dry_run_output(
 
 def main() -> None:
     args = parse_args()
+    if args.list_unconfirmed:
+        # 通常取得の準備より前に分岐。キー・株価・feedは不要、書き込みもない。
+        list_unconfirmed(load_json(args.state, dict))
+        return
     api_key = os.environ.get("EDINETDB_API_KEY", "").strip()
     if not args.dry_run and not api_key:
         raise SystemExit(
@@ -1815,6 +1909,8 @@ def main() -> None:
         for candidate in candidates
         if candidate.code not in picked_codes
         and candidate.code not in pending_codes
+        and state["stocks"].get(candidate.code, {}).get("lastEventAttemptAt")
+        != args.today.isoformat()
     ]
     tail, due_count, normal_position = ordered_queue(remaining, state)
     queue = event_picks + tail
@@ -1853,6 +1949,8 @@ def main() -> None:
         mark_pending_attempts(
             event_state(state), event_ids_by_code, {candidate.code}, args.today
         )
+        if candidate.code in event_ids_by_code:
+            state["stocks"].setdefault(candidate.code, {})["lastEventAttemptAt"] = fetched_at
         try:
             parsed, last_remaining = fetch_one(candidate, api_key)
         except FetchError as error:
@@ -1909,15 +2007,16 @@ def main() -> None:
             parsed["lastFetchedAt"] = fetched_at
             triggers = event_ids_by_code.get(candidate.code)
             if triggers:
-                # 何をきっかけに取り直したかを残す（後から追える形にする）。
-                parsed["lastEventAt"] = max(triggers.values())
-                # 取れた分だけ「見た」と記録する。失敗した銘柄は記録しないので
-                # 翌日また同じイベントで拾われる。
-                event_state(state)["seen"].update(
-                    {event_id: day for event_id, day in triggers.items()}
-                )
-                for event_id in triggers:
-                    event_state(state)["pending"].pop(event_id, None)
+                record_event_result(state, candidate.code, parsed, triggers, args.today)
+            else:
+                # 巡回取得で点検履歴を消さない。確認の解除はイベント取得時のみ。
+                previous = state["stocks"].get(candidate.code, {})
+                for key in ("lastEventAt", "eventConfirmation"):
+                    if key in previous:
+                        parsed[key] = previous[key]
+            last_event_attempt = state["stocks"].get(candidate.code, {}).get("lastEventAttemptAt")
+            if last_event_attempt:
+                parsed["lastEventAttemptAt"] = last_event_attempt
             state["stocks"][candidate.code] = parsed
             if parsed["forecastDividend"] is None:
                 no_forecast += 1

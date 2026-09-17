@@ -1353,7 +1353,8 @@ class EventDrivenQueueTest(unittest.TestCase):
                 "version": 1,
                 "queuePosition": 0,
                 "stocks": {
-                    code: {"lastFetchedAt": self.PRIMED} for code in self.CODES
+                    code: {"lastFetchedAt": self.PRIMED, "forecastDividend": 74.0}
+                    for code in self.CODES
                 },
             }
         )
@@ -1421,6 +1422,111 @@ class EventDrivenQueueTest(unittest.TestCase):
     @staticmethod
     def fetched_codes(fetch: mock.Mock) -> list[str]:
         return [call.args[0].code for call in fetch.call_args_list]
+
+    def test_unchanged_event_retries_next_day_then_records_change(self) -> None:
+        event = disclosure("9433", "dividend_revision", "2026-08-05")
+        unchanged = mock.Mock(side_effect=lambda *args: ({"forecastDividend": 74.0}, None))
+        self.run_main([event], daily_limit=5, fetch=unchanged)
+        self.assertNotIn(event.event_id, self.state()["events"]["seen"])
+        self.assertIn(event.event_id, self.state()["events"]["pending"])
+        self.run_main([event], daily_limit=9, fetch=unchanged)
+        self.assertEqual(self.fetched_codes(unchanged).count("9433"), 1)
+        updated = self.run_main([], daily_limit=5, today="2026-08-07")
+        self.assertEqual(self.fetched_codes(updated), ["9433"])
+        self.assertIn(event.event_id, self.state()["events"]["seen"])
+        self.assertNotIn(event.event_id, self.state()["events"]["pending"])
+
+    def test_unchanged_event_stops_after_three_attempts(self) -> None:
+        event = disclosure("9433", "dividend_revision", "2026-08-05")
+        for day in ("2026-08-06", "2026-08-07", "2026-08-08"):
+            fetch = mock.Mock(return_value=({"forecastDividend": 74.0}, None))
+            self.run_main([event], daily_limit=5, today=day, fetch=fetch)
+            self.assertEqual(self.fetched_codes(fetch), ["9433"])
+        state = self.state()
+        self.assertNotIn(event.event_id, state["events"]["pending"])
+        self.assertIn(event.event_id, state["events"]["seen"])
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            fetch_forecasts.list_unconfirmed(state)
+        self.assertEqual(output.getvalue(), "9433\n")
+
+    def test_confirmation_deadline_stops_even_when_runs_were_skipped(self) -> None:
+        event = disclosure("9433", "dividend_revision", "2026-08-05")
+        self.run_main([event], daily_limit=5,
+                      fetch=mock.Mock(return_value=({"forecastDividend": 74.0}, None)))
+        self.run_main([event], daily_limit=4, today="2026-08-09")
+        self.assertNotIn(event.event_id, self.state()["events"]["pending"])
+        self.assertIn(event.event_id, self.state()["events"]["seen"])
+
+    def test_same_day_rerun_after_confirmation_does_not_rotate_the_stock(self) -> None:
+        event = disclosure("9433", "dividend_revision", "2026-08-05")
+        self.run_main([event], daily_limit=5)
+        fetch = self.run_main([event], daily_limit=9)
+        self.assertNotIn("9433", self.fetched_codes(fetch))
+
+    def test_missing_baseline_is_unconfirmed(self) -> None:
+        state = self.state()
+        state["stocks"]["9433"].pop("forecastDividend")
+        self.write_state(state)
+        event = disclosure("9433", "dividend_revision", "2026-08-05")
+        self.run_main([event], daily_limit=5)
+        self.assertIn(event.event_id, self.state()["events"]["pending"])
+
+    def test_earnings_or_period_change_can_confirm_an_event(self) -> None:
+        for key, old, new in (("forecastRevenue", 100, 120),
+                              ("forecastQuarter", 1, 2),
+                              ("forecastFiscalYear", 2026, 2027)):
+            with self.subTest(key=key):
+                state = self.state()
+                state.pop("events", None)
+                state["stocks"]["9433"] = {"lastFetchedAt": self.PRIMED,
+                    "forecastDividend": 74.0, key: old}
+                self.write_state(state)
+                event = disclosure("9433", "earnings_summary", "2026-08-05")
+                self.run_main([event], daily_limit=5, fetch=mock.Mock(
+                    return_value=({"forecastDividend": 74.0, key: new}, None)))
+                self.assertIn(event.event_id, self.state()["events"]["seen"])
+
+    def test_regular_rotation_preserves_unconfirmed_audit(self) -> None:
+        event = disclosure("9433", "dividend_revision", "2026-08-05")
+        self.run_main([event], daily_limit=5,
+                      fetch=mock.Mock(return_value=({"forecastDividend": 74.0}, None)))
+        audit = self.state()["stocks"]["9433"]["eventConfirmation"]
+        self.run_main([], daily_limit=9, today="2026-08-09")
+        self.assertEqual(self.state()["stocks"]["9433"]["eventConfirmation"], audit)
+
+    def test_missing_response_values_are_not_confirmation(self) -> None:
+        event = disclosure("9433", "dividend_revision", "2026-08-05")
+        self.run_main([event], daily_limit=5,
+                      fetch=mock.Mock(return_value=({"forecastDividend": None}, None)))
+        self.assertIn(event.event_id, self.state()["events"]["pending"])
+
+    def test_a_failed_reconfirmation_does_not_reset_its_deadline(self) -> None:
+        event = disclosure("9433", "dividend_revision", "2026-08-05")
+        self.run_main([event], daily_limit=5,
+                      fetch=mock.Mock(return_value=({"forecastDividend": 74.0}, None)))
+        failing = mock.Mock(side_effect=fetch_forecasts.FetchError("unavailable", kind="network"))
+        for day in ("2026-08-07", "2026-08-08"):
+            self.run_main([event], daily_limit=5, today=day, fetch=failing)
+        self.assertNotIn(event.event_id, self.state()["events"]["pending"])
+        fetch = self.run_main([event], daily_limit=9, today="2026-08-08")
+        self.assertNotIn("9433", self.fetched_codes(fetch))
+
+    def test_list_unconfirmed_is_read_only_and_needs_no_other_inputs(self) -> None:
+        state = self.state()
+        state["stocks"]["9433"]["lastEventAt"] = "2026-08-05"
+        self.write_state(state)
+        before = self.state_path.read_bytes()
+        output, errors = io.StringIO(), io.StringIO()
+        with mock.patch.object(sys, "argv", ["fetch_forecasts.py", "--state",
+                str(self.state_path), "--list-unconfirmed"]), mock.patch.dict(
+                os.environ, {}, clear=True), mock.patch.object(
+                fetch_forecasts, "urlopen", side_effect=AssertionError("network")), \
+                contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            fetch_forecasts.main()
+        self.assertEqual(output.getvalue(), "9433\n")
+        self.assertIn("比較履歴", errors.getvalue())
+        self.assertEqual(self.state_path.read_bytes(), before)
 
     def test_the_toukei_case_is_picked_up_the_next_morning(self) -> None:
         """東計電算は8/3にQ2決算短信で増配と分割を公表。近似日は8/15。
@@ -1646,7 +1752,8 @@ class EventDrivenQueueTest(unittest.TestCase):
                 "version": 1,
                 "queuePosition": 0,
                 "stocks": {
-                    code: {"lastFetchedAt": self.PRIMED} for code in self.CODES
+                    code: {"lastFetchedAt": self.PRIMED, "forecastDividend": 74.0}
+                    for code in self.CODES
                 },
                 "events": "壊れている",
             }
@@ -1660,7 +1767,8 @@ class EventDrivenQueueTest(unittest.TestCase):
                 "version": 1,
                 "queuePosition": 0,
                 "stocks": {
-                    code: {"lastFetchedAt": self.PRIMED} for code in self.CODES
+                    code: {"lastFetchedAt": self.PRIMED, "forecastDividend": 74.0}
+                    for code in self.CODES
                 },
                 "events": {
                     "lastCheckedAt": "2026-08-05",

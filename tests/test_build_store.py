@@ -55,6 +55,144 @@ def event(
     }
 
 
+class ForecastOverrideTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.overrides = build_store.load_forecast_overrides(
+            ROOT / "data" / "forecast_overrides.json"
+        )
+        # 取得元が修正前の74円を返す状況を固定。外部APIにはアクセスしない。
+        self.record = {
+            "forecastFiscalYear": 2027,
+            "forecastPeriod": "2027年2月期(予)",
+            "forecastDividend": 74,
+            "forecastInterimDividend": 37,
+            "forecastFinalDividend": 37,
+            "forecastRevenue": 52_000_000,
+            "confirmedDividend": 71,
+            "confirmedFiscalYearEnd": "2026-02-28",
+            "forecastQuarter": 1,
+        }
+
+    def test_registered_override_is_used_in_store_and_graph(self) -> None:
+        original = dict(self.record)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "stocks.sqlite"
+            with (
+                mock.patch.object(build_store, "load_daily_prices", return_value=(
+                    {"7811": 2000, "9999": 2000}, {}, "2026-09-18",
+                )),
+                mock.patch.object(build_store, "load_price_session_meta", return_value=None),
+            ):
+                build_store.create_database(
+                    path,
+                    [{"code": code, "name": code} for code in ("7811", "9999")],
+                    {}, {}, {"7811": self.record, "9999": self.record},
+                    [Path(name) for name in ("f", "s", "t", "fc")],
+                    "fixture.csv", today=date(2026, 9, 18),
+                    forecast_overrides=self.overrides,
+                )
+            with sqlite3.connect(path) as connection:
+                rows = {code: (yield_, json.loads(payload)) for code, yield_, payload
+                        in connection.execute("SELECT code, forecast_yield, payload FROM stocks")}
+        yield_, payload = rows["7811"]
+        self.assertEqual(payload["forecastDividend"], 82)
+        self.assertEqual(yield_, 4.1)
+        self.assertEqual(payload["forecastYield"], 4.1)
+        self.assertEqual(payload["forecastSource"], "manual_override")
+        self.assertEqual(payload["forecastSourceUrl"], self.overrides["7811"]["sourceUrl"])
+        self.assertEqual(payload["forecastAsOf"], "2026-09-14")
+        self.assertEqual(payload["forecastReviewedAt"], "2026-09-18")
+        self.assertEqual(payload["forecastFiscalYear"], 2027)
+        self.assertEqual(payload["forecastPeriod"], "2027年2月期")
+        self.assertEqual(payload["forecastRevenue"], self.record["forecastRevenue"])
+        pending = payload["annualPending"]["2027"]
+        self.assertEqual(pending["value"], 82)
+        self.assertEqual(pending["source"], "manual_override")
+        self.assertEqual(pending["sourceUrl"], payload["forecastSourceUrl"])
+        self.assertEqual(rows["9999"][1]["forecastDividend"], 74)
+        self.assertNotIn("forecastSource", rows["9999"][1])
+        self.assertEqual(self.record, original)
+
+    def test_mismatched_or_missing_numeric_year_is_not_overridden(self) -> None:
+        for year in (2026, 2028, None, "2027", True):
+            with self.subTest(year=year):
+                record = dict(self.record, forecastFiscalYear=year)
+                self.assertIs(build_store.apply_forecast_override(
+                    "7811", record, self.overrides,
+                ), record)
+        record = dict(self.record)
+        del record["forecastFiscalYear"]
+        self.assertIs(build_store.apply_forecast_override("7811", record, self.overrides), record)
+        self.assertIsNone(build_store.apply_forecast_override("7811", None, self.overrides))
+
+    def test_caught_up_source_is_kept_and_entry_is_not_deleted(self) -> None:
+        record = dict(self.record, forecastDividend=82)
+        before = json.dumps(self.overrides, sort_keys=True)
+        output = io.StringIO()
+        with redirect_stdout(output):
+            result = build_store.apply_forecast_override("7811", record, self.overrides)
+        self.assertIs(result, record)
+        self.assertNotIn("forecastSource", result)
+        self.assertIn("上書き不要(取得元が追いついた)", output.getvalue())
+        self.assertEqual(json.dumps(self.overrides, sort_keys=True), before)
+
+    def test_without_override_original_record_is_used(self) -> None:
+        for code, overrides in (("7811", {}), ("9999", self.overrides)):
+            with self.subTest(code=code):
+                self.assertIs(build_store.apply_forecast_override(
+                    code, self.record, overrides,
+                ), self.record)
+
+    def test_old_adjusted_amount_is_not_reused(self) -> None:
+        record = dict(self.record, forecastDividendAdjusted=37)
+        result = build_store.apply_forecast_override("7811", record, self.overrides)
+        self.assertNotIn("forecastDividendAdjusted", result)
+        self.assertEqual(result["forecastInterimDividend"], 41)
+        self.assertEqual(result["forecastFinalDividend"], 41)
+        self.assertEqual(result["confirmedDividend"], 71)
+        self.assertEqual(record["forecastDividendAdjusted"], 37)
+
+    def test_missing_file_means_no_overrides(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertEqual(build_store.load_forecast_overrides(Path(directory) / "missing.json"), {})
+
+    def test_invalid_ledger_is_rejected(self) -> None:
+        for key, value in (("fiscalYear", "2027"), ("fiscalYear", True),
+                           ("forecastDividend", -1), ("forecastDividend", float("nan")),
+                           ("interimDividend", None), ("sourceUrl", None)):
+            with self.subTest(key=key, value=value), tempfile.TemporaryDirectory() as directory:
+                entry = dict(self.overrides["7811"])
+                entry[key] = value
+                path = Path(directory) / "overrides.json"
+                path.write_text(json.dumps({"schemaVersion": 1, "overrides": {"7811": entry}}))
+                with self.assertRaises(ValueError):
+                    build_store.load_forecast_overrides(path)
+
+    def test_empty_source_url_is_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            entry = dict(self.overrides["7811"], sourceUrl="")
+            path = Path(directory) / "overrides.json"
+            path.write_text(json.dumps({"schemaVersion": 1, "overrides": {"7811": entry}}))
+            self.assertEqual(build_store.load_forecast_overrides(path)["7811"]["sourceUrl"], "")
+
+    def test_main_loads_default_ledger_and_passes_it_to_store(self) -> None:
+        with (
+            mock.patch.object(sys, "argv", ["build_store.py"]),
+            mock.patch.object(build_store, "load_json", return_value={}),
+            mock.patch.object(build_store, "load_tickers", return_value={}),
+            mock.patch.object(build_store, "load_fiscal_dividends", return_value={}),
+            mock.patch.object(build_store, "load_calendar_dividends", return_value={}),
+            mock.patch.object(build_store, "load_stock_actions", return_value={}),
+            mock.patch.object(build_store, "load_forecasts", return_value={}),
+            mock.patch.object(build_store, "load_forecast_overrides", return_value=self.overrides) as loader,
+            mock.patch.object(build_store, "create_database", return_value=(0, 0, 0)) as create,
+            mock.patch.object(Path, "stat", return_value=mock.Mock(st_size=0)),
+        ):
+            build_store.main()
+        loader.assert_called_once_with(ROOT / "data" / "forecast_overrides.json")
+        self.assertEqual(create.call_args.kwargs["forecast_overrides"], self.overrides)
+
+
 class SplitAdjustmentTest(unittest.TestCase):
     def build(self, path: Path, actions: dict[str, list[dict]]) -> None:
         financials = [

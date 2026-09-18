@@ -32,6 +32,7 @@ DEFAULT_EXTRACTED_STOCK_ACTIONS = (
     REPOSITORY_ROOT / "data" / "stock_actions_extracted.json"
 )
 DEFAULT_FORECASTS = REPOSITORY_ROOT / "forecasts_state.json"
+DEFAULT_FORECAST_OVERRIDES = REPOSITORY_ROOT / "data" / "forecast_overrides.json"
 DEFAULT_OUTPUT = REPOSITORY_ROOT / "stocks.sqlite"
 DAILY_PRICE_CSV_URL = (
     "https://cdn.jsdelivr.net/gh/sayonnsann/"
@@ -78,6 +79,10 @@ def parse_args() -> argparse.Namespace:
         help="監査合格分の自動取り込み台帳（manual側を優先して統合）",
     )
     parser.add_argument("--forecasts", type=Path, default=DEFAULT_FORECASTS)
+    parser.add_argument(
+        "--forecast-overrides", type=Path, default=DEFAULT_FORECAST_OVERRIDES,
+        help="一次資料で確認した予想配当の手動上書き台帳",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument(
         "--prices-url",
@@ -119,6 +124,73 @@ def load_forecasts(path: Path) -> dict[str, Any]:
     if not isinstance(stocks, dict):
         raise ValueError(f"{path}: stocksがobjectではありません")
     return stocks
+
+
+def load_forecast_overrides(path: Path) -> dict[str, Any]:
+    """公開可能な一次資料に基づく手動台帳。不正な入力はビルド前に検出する。"""
+    if not path.exists():
+        print(f"予想配当の上書き台帳なし: {path}")
+        return {}
+    data = load_json(path, dict)
+    if type(data.get("schemaVersion")) is not int or data["schemaVersion"] != 1:
+        raise ValueError(f"{path}: 未対応のschemaVersionです")
+    overrides = data.get("overrides")
+    if not isinstance(overrides, dict):
+        raise ValueError(f"{path}: overridesがobjectではありません")
+    for code, entry in overrides.items():
+        if normalized_code(code) != code or not isinstance(entry, dict):
+            raise ValueError(f"{path}: 不正な上書きエントリ {code}")
+        year = entry.get("fiscalYear")
+        if type(year) is not int or not 1900 <= year <= 9999:
+            raise ValueError(f"{path}: {code} fiscalYearは整数の年度が必要です")
+        for key in ("forecastDividend", "interimDividend", "finalDividend"):
+            if bounded(entry.get(key), 0, 1_000_000) is None:
+                raise ValueError(f"{path}: {code} {key}は有効な配当額が必要です")
+        for key in ("periodLabel", "evidence", "sourceUrl", "asOf", "reviewedAt"):
+            value = entry.get(key)
+            if not isinstance(value, str) or (key != "sourceUrl" and not value.strip()):
+                raise ValueError(f"{path}: {code} {key}は文字列が必要です")
+        for key in ("asOf", "reviewedAt"):
+            date.fromisoformat(entry[key])
+    return overrides
+
+
+def apply_forecast_override(
+    code: str, record: Any, overrides: dict[str, Any],
+) -> Any:
+    """取得元を変更せず配当のみ差し替える。年度は表示文字列から推測しない。"""
+    entry = overrides.get(code)
+    if entry is None:
+        return record
+    source_year = record.get("forecastFiscalYear") if isinstance(record, dict) else None
+    override_year = entry.get("fiscalYear")
+    if (
+        type(source_year) is not int
+        or type(override_year) is not int
+        or source_year != override_year
+    ):
+        print(f"{code}: 予想配当の上書き見送り（年度不一致・未確認）")
+        return record
+    if finite_number(record.get("forecastDividend")) == entry["forecastDividend"]:
+        print(f"{code}: 上書き不要(取得元が追いついた)")
+        return record
+    result = dict(record)
+    result.update({
+        "forecastDividend": entry["forecastDividend"],
+        "forecastInterimDividend": entry["interimDividend"],
+        "forecastFinalDividend": entry["finalDividend"],
+        "forecastPeriod": entry["periodLabel"],
+        "forecastSource": "manual_override",
+        "forecastSourceUrl": entry["sourceUrl"],
+        "forecastEvidence": entry["evidence"],
+        "forecastAsOf": entry["asOf"],
+        "forecastReviewedAt": entry["reviewedAt"],
+    })
+    # 旧配当から算出された取得元の調整済み額は使わない。
+    # 分割係数・効力日は維持し、新しい内訳を既存処理で株価基準へ揃える。
+    result.pop("forecastDividendAdjusted", None)
+    print(f"{code}: 予想配当を手動上書き {record.get('forecastDividend')} → {entry['forecastDividend']}")
+    return result
 
 
 def normalized_code(value: Any) -> str:
@@ -1460,8 +1532,10 @@ def pending_dividends(
             "value": round(float(forecast) * forecast_factor, 4),
             "kind": "forecast",
             "label": "予想",
-            "source": "edinetdb",
+            "source": forecast_record.get("forecastSource", "edinetdb"),
         }
+        if forecast_record.get("forecastSource") == "manual_override":
+            entry["sourceUrl"] = forecast_record["forecastSourceUrl"]
         # どの経路で決めた値かを残す（分割がある銘柄だけ）。
         if resolved["basis"] != "raw":
             entry["basis"] = resolved["basis"]
@@ -1677,6 +1751,7 @@ def create_database(
     calendar_path: Path | None = None,
     today: date | None = None,
     stock_action_fallbacks: list[dict[str, Any]] | None = None,
+    forecast_overrides: dict[str, Any] | None = None,
 ) -> tuple[int, int, int]:
     financial_by_code, skipped_financials = index_by_code(
         financials, "all_financials"
@@ -1813,7 +1888,9 @@ def create_database(
                     )
                 if daily_price and numerator is not None and float(numerator) > 0:
                     daily_yield = round(float(numerator) / daily_price * 100, 2)
-                forecast_record = forecasts.get(code) or {}
+                forecast_record = apply_forecast_override(
+                    code, forecasts.get(code), forecast_overrides or {}
+                )
                 (
                     forecast_dividend,
                     forecast_yield,
@@ -1821,8 +1898,9 @@ def create_database(
                     forecast_fetched_at,
                     forecast_basis,
                 ) = forecast_values(
-                    forecasts.get(code), effective_price, today=today
+                    forecast_record, effective_price, today=today
                 )
+                forecast_record = forecast_record or {}
 
                 payload = dict(financial)
                 payload["roeYearEnd"] = roe_year_end(financial)
@@ -2064,6 +2142,12 @@ def create_database(
                 payload["forecastYield"] = forecast_yield
                 payload["forecastPeriod"] = forecast_period
                 payload["forecastFetchedAt"] = forecast_fetched_at
+                if forecast_record.get("forecastSource") == "manual_override":
+                    for key in (
+                        "forecastSource", "forecastSourceUrl", "forecastEvidence",
+                        "forecastAsOf", "forecastReviewedAt",
+                    ):
+                        payload[key] = forecast_record[key]
                 # forecastDividend をどう決めたかの根拠。分割日をまたぐ期は
                 # 生の値ではなく中間・期末から組み立てているので、後から
                 # 表示の裏を取れるようにしておく。
@@ -2224,6 +2308,7 @@ def main() -> None:
         stock_action_paths, fallback_events=stock_action_fallbacks
     )
     forecasts = load_forecasts(args.forecasts)
+    forecast_overrides = load_forecast_overrides(args.forecast_overrides)
     count, matched, frozen = create_database(
         args.output,
         financials,
@@ -2244,6 +2329,7 @@ def main() -> None:
         calendar_dividends,
         args.calendar_dividends,
         stock_action_fallbacks=stock_action_fallbacks,
+        forecast_overrides=forecast_overrides,
     )
     size = args.output.stat().st_size
     print(f"生成完了: {args.output}")

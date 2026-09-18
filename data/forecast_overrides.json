@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "note": "一次資料で確認した予想配当の手動上書き。fiscalYearが取得元のforecastFiscalYearと一致する場合だけ適用する。取得元の年間額が追いついた場合もエントリは自動削除しない。金額は会社公表の1株当たり円額。分割がある場合は中間・期末の内訳を既存の株価基準調整に通す。",
+  "overrides": {
+    "7811": {
+      "fiscalYear": 2027,
+      "periodLabel": "2027年2月期",
+      "forecastDividend": 82,
+      "interimDividend": 41,
+      "finalDividend": 41,
+      "sourceUrl": "https://ssl4.eir-parts.net/doc/7811/tdnet/2884792/00.pdf",
+      "evidence": "2026-09-14 剰余金の配当（中間配当・増配）及び期末配当予想の修正（増配）に関するお知らせ。2027年2月期の年間配当予想を74円から82円に修正（中間配当決定額41円・期末配当予想41円）。",
+      "asOf": "2026-09-14",
+      "reviewedAt": "2026-09-18"
+    }
+  }
+}

@@ -667,5 +667,119 @@
       },
       "fiscalYear": "2025-03"
     }
+  },
+  "1802": {
+    "2007": {
+      "base": 8.0,
+      "special": 4.0,
+      "kind": "特別",
+      "evidence": {
+        "url": "https://www.obayashi.co.jp/news/upload/file/ar08_J.pdf",
+        "page": 36,
+        "quote": "平成17、18年度の配当額12円には特別配当4円を含んでいる。",
+        "rawBase": 8.0,
+        "rawSpecial": 4.0,
+        "rawTotal": 12.0,
+        "adjustmentFactor": 1.0,
+        "adjustmentBasis": "fiscal_dividends.json connection.ratioDetail.adjustmentFactors[2007]（2026-09-21）と一致。実額と系列の基準は同じ。"
+      },
+      "fiscalYear": "2007-03",
+      "notes": "平成18年度は2006年4月～2007年3月。年間12円から特別4円を控除。"
+    }
+  },
+  "4410": {
+    "2008": {
+      "base": 12.0,
+      "special": 6.0,
+      "kind": "特別",
+      "evidence": {
+        "url": "https://www.harima.co.jp/ir/pdf/20080512.pdf",
+        "page": 1,
+        "quote": "20年３月期期末配当金の内訳 普通配当6円00銭 特別配当6円00銭",
+        "rawBase": 12.0,
+        "rawSpecial": 6.0,
+        "rawTotal": 18.0,
+        "adjustmentFactor": 1.0,
+        "adjustmentBasis": "fiscal_dividends.json connection.ratioDetail.adjustmentFactors[2008]（2026-09-21）と一致。実額と系列の基準は同じ。"
+      },
+      "fiscalYear": "2008-03",
+      "notes": "中間6円＋期末普通6円＝年間普通12円。年間総額18円。"
+    }
+  },
+  "4971": {
+    "2011": {
+      "base": 8.0,
+      "special": 10.0,
+      "kind": "記念",
+      "evidence": {
+        "url": "https://www.mec-co.com/ir/financial-data/pdf/20260331.pdf",
+        "page": 1,
+        "quote": "42期の配当には記念配当10円が含まれる。",
+        "rawBase": 8.0,
+        "rawSpecial": 10.0,
+        "rawTotal": 18.0,
+        "adjustmentFactor": 1.0,
+        "adjustmentBasis": "fiscal_dividends.json connection.ratioDetail.adjustmentFactors[2011]（2026-09-21）と一致。実額と系列の基準は同じ。"
+      },
+      "fiscalYear": "2011-03",
+      "notes": "第42期＝2011年3月期。年間18円から記念10円を控除。現在の12月決算は遡及しない。"
+    }
+  },
+  "6284": {
+    "2008": {
+      "base": 12.5,
+      "special": 2.5,
+      "kind": "記念",
+      "evidence": {
+        "url": "https://www.jpx.co.jp/files/tse/listing/new/2012/9NISSEIASB-1s.pdf",
+        "page": 11,
+        "quote": "第30期の１株当たり配当額には、設立30周年記念配当が２円50銭含まれております。",
+        "rawBase": 12.5,
+        "rawSpecial": 2.5,
+        "rawTotal": 15.0,
+        "adjustmentFactor": 1.0,
+        "adjustmentBasis": "fiscal_dividends.json connection.ratioDetail.adjustmentFactors[2008]（2026-09-21）と一致。実額と系列の基準は同じ。"
+      },
+      "fiscalYear": "2008-09",
+      "notes": "第30期＝平成20年9月期。年間15円から設立30周年記念2.5円を控除。"
+    }
+  },
+  "7951": {
+    "2010": {
+      "base": 2.5,
+      "special": 6.67,
+      "kind": "特別",
+      "evidence": {
+        "url": "https://www.yamaha.com/ja/ir/library/flash-report/pdf/2011q4_tanshin_yamaha.pdf",
+        "page": 1,
+        "quote": "22年３月期期末配当金の内訳 普通配当２円50銭 特別配当10円00銭",
+        "rawBase": 7.5,
+        "rawSpecial": 20.0,
+        "rawTotal": 27.5,
+        "adjustmentFactor": 0.3333333333333333,
+        "adjustmentBasis": "fiscal_dividends.json connection.ratioDetail.adjustmentFactors[2010]（2026-09-21）と一致。普通配当を小数2桁に丸め、specialは系列総額との差額。"
+      },
+      "fiscalYear": "2010-03",
+      "notes": "中間普通5円＋期末普通2.5円、特別は中間10円＋期末10円。2024年10月1日の1:3分割で1/3換算。"
+    }
+  },
+  "9697": {
+    "1997": {
+      "base": 2.5,
+      "special": 4.12,
+      "kind": "記念・特別",
+      "evidence": {
+        "url": "https://www.capcom.co.jp/ir/data/pdf/annual/2017/annual_2017_01.pdf",
+        "page": 29,
+        "quote": "上場以来の1株当たり配当金",
+        "rawBase": 20.0,
+        "rawSpecial": 33.0,
+        "rawTotal": 53.0,
+        "adjustmentFactor": 0.125,
+        "adjustmentBasis": "fiscal_dividends.json connection.ratioDetail.adjustmentFactors[1997]（2026-09-21）と一致。普通配当を小数2桁に丸め、specialは系列総額との差額。"
+      },
+      "fiscalYear": "1997-03",
+      "notes": "図表08の1997年3月期：合計53円、普通20円、記念・特別33円。2018/2021/2024年の各1:2分割で1/8換算。"
+    }
   }
 }

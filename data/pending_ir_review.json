@@ -2195,6 +2195,18 @@
       },
       "detectedAt": "2026-09-18",
       "status": "pending"
+    },
+    {
+      "code": "7426",
+      "name": "山大",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "aa355500961a3303546cc5504c0286e93feebcfe49776ffa7e1455f3a036871a",
+        "eventType": "reverse_split",
+        "eventDate": "2026-09-24"
+      },
+      "detectedAt": "2026-09-25",
+      "status": "pending"
     }
   ]
 }

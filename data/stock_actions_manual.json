@@ -1411,24 +1411,6 @@
       "checkedAt": "2026-08-17"
     },
     {
-      "eventId": "378A-2026-07-01-split-1-to-2",
-      "securityCode": "378A",
-      "name": "HIT",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-07-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20262.html",
-        "type": "issuer_ir"
-      },
-      "note": "edinet-direct側マスター(378A-2026-07-01-split-1-to-2)から自動生成",
-      "checkedAt": "2026-08-17"
-    },
-    {
       "eventId": "4099-2026-07-01-split-1-to-2",
       "securityCode": "4099",
       "name": "四国化成ホールディングス",

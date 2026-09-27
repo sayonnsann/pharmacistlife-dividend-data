@@ -1,15 +1,5 @@
 {
-  "pendingSplitEvents": {
-    "aa355500961a3303546cc5504c0286e93feebcfe49776ffa7e1455f3a036871a": {
-      "attempts": 2,
-      "code": "7426",
-      "edinetCode": "E02798",
-      "eventDate": "2026-09-24",
-      "eventType": "reverse_split",
-      "firstSeenAt": "2026-09-25",
-      "secCode": "7426"
-    }
-  },
+  "pendingSplitEvents": {},
   "suspectYears": {
     "2991": [
       "2021",
@@ -60,5 +50,5 @@
       "2026"
     ]
   },
-  "updatedAt": "2026-09-26"
+  "updatedAt": "2026-09-27"
 }

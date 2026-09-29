@@ -1285,6 +1285,25 @@
       "checkedAt": "2026-08-17"
     },
     {
+      "eventId": "9305-2026-06-01-split-1-to-2",
+      "securityCode": "9305",
+      "name": "株式会社ヤマタネ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-06-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YEYD.pdf",
+        "type": "edinet",
+        "docID": "S100YEYD"
+      },
+      "note": "edinet-direct側マスター(9305-2026-06-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-09-28"
+    },
+    {
       "eventId": "1663-2026-07-01-split-1-to-2",
       "securityCode": "1663",
       "name": "K&Oエナジーグループ",
@@ -1408,24 +1427,6 @@
         "type": "issuer_ir"
       },
       "note": "edinet-direct側マスター(3673-2026-07-01-split-1-to-2)から自動生成",
-      "checkedAt": "2026-08-17"
-    },
-    {
-      "eventId": "378A-2026-07-01-split-1-to-2",
-      "securityCode": "378A",
-      "name": "HIT",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-07-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www.rakuten-sec.co.jp/ITS/Companyfile/stock_split_20262.html",
-        "type": "issuer_ir"
-      },
-      "note": "edinet-direct側マスター(378A-2026-07-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-08-17"
     },
     {

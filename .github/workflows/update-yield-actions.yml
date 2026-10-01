@@ -48,6 +48,7 @@ jobs:
             /edinet-direct/data/stock_actions_manual.json
             /edinet-direct/data/fiscal_dividends.json
             /edinet-direct/data/code_map.json
+            /edinet-direct/data/fiscal_year_ends.json
             /edinet-direct/data/yield_action_overrides.json
 
       - name: Pythonを準備

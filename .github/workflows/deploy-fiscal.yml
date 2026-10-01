@@ -10,8 +10,8 @@ name: fiscal_dividends.json / checker本体 をConoHaへ反映
 # 冒頭の安全確認と同じ理由)。workspace→Actions→ConoHa非公開領域のみを通す
 # ことで、公開制約を満たしたまま自動反映する。
 #
-# 手動実行(workflow_dispatch)のみ。cronでの自動実行はしない
-# (workspace側での更新タイミングが不定期なため、統括からの指示で都度実行する)。
+# JST 03:30 / 06:30に夜間バッチの公開物だけを自動反映する。
+# 手動mode=autoでも同じ安全装置を通せる。checker本体はmode=manual専用。
 #
 # workspace_ref: fiscal_dividends.jsonを取得するworkspace側のブランチ/コミット。
 # 2026-08-25にworkspace側の作業ブランチをmainへ合流させ、以後はmainを正とする運用にした
@@ -19,8 +19,17 @@ name: fiscal_dividends.json / checker本体 をConoHaへ反映
 # 実行時にブランチ/タグ/SHAを指定する。
 
 on:
+  schedule:
+    - cron: "30 18,21 * * *"  # JST 03:30 / 06:30
   workflow_dispatch:
     inputs:
+      mode:
+        description: "manual: 指定どおり反映 / auto: 夜間バッチの配当JSONだけを安全確認して反映"
+        type: choice
+        options:
+          - manual
+          - auto
+        default: manual
       workspace_ref:
         description: "workspaceリポジトリの取得元ブランチ/タグ/SHA"
         required: true
@@ -52,20 +61,57 @@ jobs:
       - name: このリポジトリを取得
         uses: actions/checkout@v4
 
+      - name: 実行モードと対象を決定
+        id: plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_REF: ${{ inputs.workspace_ref }}
+          INPUT_FISCAL: ${{ inputs.deploy_fiscal }}
+          INPUT_CHECKER: ${{ inputs.deploy_checker_body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == schedule || "$INPUT_MODE" == auto ]]; then
+            echo "mode=auto" >> "$GITHUB_OUTPUT"
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+            echo "fiscal=true" >> "$GITHUB_OUTPUT"
+            echo "checker=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=manual" >> "$GITHUB_OUTPUT"
+            echo "ref=$INPUT_REF" >> "$GITHUB_OUTPUT"
+            echo "fiscal=$INPUT_FISCAL" >> "$GITHUB_OUTPUT"
+            echo "checker=$INPUT_CHECKER" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: workspace(Private)からfiscal_dividends.jsonだけをデプロイキーで取得
-        if: ${{ inputs.deploy_fiscal }}
+        if: ${{ steps.plan.outputs.fiscal == 'true' }}
         uses: actions/checkout@v4
         with:
           repository: sayonnsann/yuruyaku-workspace
-          ref: ${{ inputs.workspace_ref }}
+          ref: ${{ steps.plan.outputs.ref }}
+          # autoのみ全履歴を取得。文字列'0'を使い、式のfalse扱いを避ける。
+          fetch-depth: ${{ steps.plan.outputs.mode == 'auto' && '0' || '1' }}
           ssh-key: ${{ secrets.WORKSPACE_DEPLOY_KEY }}
           sparse-checkout: |
             edinet-direct/data/fiscal_dividends.json
           sparse-checkout-cone-mode: false
           path: workspace-src
 
+      - name: 夜間バッチの公開物か確認
+        id: origin
+        if: ${{ steps.plan.outputs.mode == 'auto' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fiscal_deploy_guard.py origin workspace-src > "$RUNNER_TEMP/fiscal-origin.txt"
+          cat "$RUNNER_TEMP/fiscal-origin.txt" >> "$GITHUB_OUTPUT"
+          if grep -qx 'allowed=false' "$RUNNER_TEMP/fiscal-origin.txt"; then
+            echo "::warning::対象ファイルの最終変更コミットが「夜間バッチ 」で始まらないため、自動反映を省略します。"
+          fi
+
       - name: 取得したファイルを検証
-        if: ${{ inputs.deploy_fiscal }}
+        if: ${{ steps.plan.outputs.fiscal == 'true' && (steps.plan.outputs.mode == 'manual' || steps.origin.outputs.allowed == 'true') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -90,9 +136,11 @@ jobs:
           PY
 
       - name: lftpをインストール
+        if: ${{ steps.plan.outputs.mode == 'manual' || steps.origin.outputs.allowed == 'true' }}
         run: sudo apt-get update -qq && sudo apt-get install -y -qq lftp
 
       - name: FTPS設定を検証
+        if: ${{ steps.plan.outputs.mode == 'manual' || steps.origin.outputs.allowed == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -111,8 +159,32 @@ jobs:
             exit 1
           fi
 
+      - name: 本番ファイルをFTPSで取得してハッシュ比較
+        id: compare
+        if: ${{ steps.plan.outputs.mode == 'auto' && steps.origin.outputs.allowed == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE="workspace-src/edinet-direct/data/fiscal_dividends.json"
+          CURRENT="$RUNNER_TEMP/fiscal-current.json"
+          remote_dir="${FTP_REMOTE_DIR%/}"
+          rm -f "$CURRENT"
+          # 取得失敗や途中までのダウンロードは比較に使わない。
+          # 接続先などの非公開情報をログへ流さず、成否のみを報告する。
+          if lftp -u "${FTP_USER},${FTP_PASS}" \
+            -e "set cmd:fail-exit true; set net:timeout 20; set net:max-retries 1; \
+                set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
+                get ${remote_dir}/fiscal_dividends.json -o \"$CURRENT\"; bye" \
+            "ftp://${FTP_HOST}" > /dev/null 2>&1; then
+            python3 scripts/fiscal_deploy_guard.py compare "$FILE" "$CURRENT" >> "$GITHUB_OUTPUT"
+          else
+            rm -f "$CURRENT"
+            echo "::warning::本番ファイルを取得できないため、従来どおり送信します。"
+            python3 scripts/fiscal_deploy_guard.py compare "$FILE" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: fiscal_dividends.jsonをFTPSへ原子的に反映
-        if: ${{ inputs.deploy_fiscal }}
+        if: ${{ steps.plan.outputs.fiscal == 'true' && (steps.plan.outputs.mode == 'manual' || (steps.origin.outputs.allowed == 'true' && steps.compare.outputs.send == 'true')) }}
         id: publish_fiscal
         shell: bash
         run: |
@@ -142,7 +214,8 @@ jobs:
           echo "fiscal_dividends.json を検証つきで差し替えました（$local_size bytes）"
 
       - name: checker.htmlをdata/checker-body.htmlへ原子的に反映
-        if: ${{ inputs.deploy_checker_body }}
+        id: publish_checker
+        if: ${{ steps.plan.outputs.mode == 'manual' && steps.plan.outputs.checker == 'true' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -187,17 +260,64 @@ jobs:
           echo "checker-body.html を検証つきで差し替えました（$local_size bytes、旧版は.bakに退避）"
 
       - name: price-only-store.ymlをトリガー
-        if: ${{ always() && inputs.deploy_fiscal && steps.publish_fiscal.outcome == 'success' }}
+        id: rebuild
+        if: ${{ always() && steps.publish_fiscal.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -uo pipefail
           if gh workflow run price-only-store.yml --repo sayonnsann/pharmacistlife-dividend-data; then
+            echo "result=起動を予約しました" >> "$GITHUB_OUTPUT"
             echo "price-only-store.yml の起動を予約しました（stocks.sqliteへ反映されます）。"
           else
+            echo "result=起動に失敗しました（手動で再実行が必要）" >> "$GITHUB_OUTPUT"
             echo "::warning::price-only-store.ymlの自動起動に失敗しました。Actionsタブから手動でworkflow_dispatch実行してください。"
           fi
 
-      - name: 完了
-        run: echo "ConoHaへの反映が完了しました（fiscal=${{ inputs.deploy_fiscal }} / checker_body=${{ inputs.deploy_checker_body }}）。"
+      - name: 実行結果のまとめ
+        if: ${{ always() }}
+        env:
+          MODE: ${{ steps.plan.outputs.mode }}
+          FISCAL_REQUESTED: ${{ steps.plan.outputs.fiscal }}
+          CHECKER_REQUESTED: ${{ steps.plan.outputs.checker }}
+          ORIGIN_ALLOWED: ${{ steps.origin.outputs.allowed }}
+          ORIGIN_REASON: ${{ steps.origin.outputs.reason }}
+          COMPARE_REASON: ${{ steps.compare.outputs.reason }}
+          SEND: ${{ steps.compare.outputs.send }}
+          FISCAL_OUTCOME: ${{ steps.publish_fiscal.outcome }}
+          CHECKER_OUTCOME: ${{ steps.publish_checker.outcome }}
+          REBUILD_RESULT: ${{ steps.rebuild.outputs.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$FISCAL_OUTCOME" == success ]]; then
+            fiscal="送信・差し替え完了。${COMPARE_REASON:-手動指定による反映（安全装置は適用しません）}"
+          elif [[ "$FISCAL_OUTCOME" == failure || "$FISCAL_OUTCOME" == cancelled ]]; then
+            fiscal="送信処理が失敗または中断。反映完了は未確認（ログを確認してください）"
+          elif [[ "$FISCAL_REQUESTED" == false ]]; then
+            fiscal="送信なし。手動入力で対象外"
+          elif [[ "$ORIGIN_ALLOWED" == false ]]; then
+            fiscal="送信なし。$ORIGIN_REASON"
+          elif [[ "$SEND" == false ]]; then
+            fiscal="送信なし。$COMPARE_REASON"
+          else
+            fiscal="送信なし。前段の失敗または中断（ログを確認してください）"
+          fi
+          if [[ "$CHECKER_OUTCOME" == success ]]; then
+            checker="送信・差し替え完了"
+          elif [[ "$CHECKER_OUTCOME" == failure || "$CHECKER_OUTCOME" == cancelled ]]; then
+            checker="送信処理が失敗または中断。反映完了は未確認"
+          elif [[ "$MODE" == auto ]]; then
+            checker="送信なし。自動モードでは常に対象外"
+          elif [[ "$CHECKER_REQUESTED" == false ]]; then
+            checker="送信なし。手動入力で対象外"
+          else
+            checker="送信なし。前段の失敗または中断"
+          fi
+          {
+            echo "### ConoHa反映結果（mode=${MODE:-未決定}）"
+            echo "- fiscal_dividends.json: $fiscal"
+            echo "- checker-body.html: $checker"
+            echo "- price-only-store.yml: ${REBUILD_RESULT:-起動なし（配当JSONの送信成功なし、または起動ステップ未完了）}"
+          } | tee -a "$GITHUB_STEP_SUMMARY"

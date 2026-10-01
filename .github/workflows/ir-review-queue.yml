@@ -16,7 +16,8 @@ name: 分割・併合の要確認リストを更新
 # ワークフローの実行には影響しない。FTPS取得の失敗も、初回実行(state無し)
 # や一時的な通信エラーでこのジョブ自体を失敗させたくないため、可能な限り
 # ::warning:: に留めて処理を続行する(要確認リストが1日更新されないだけで、
-# 翌日また試みる)。
+# 翌日また試みる)。daily-storeの成功ランやartifact受け渡しを確認できない場合は
+# 取りこぼしの検知が必要なため、このworkflowを失敗させる。
 
 on:
   schedule:
@@ -54,35 +55,54 @@ jobs:
         # build_ir_review_queue.py は標準ライブラリのみで動く(依存パッケージなし)ため、
         # scripts/requirements.txt のインストールは行わない。
 
-      - name: daily-storeの当日成功ランを特定
+      - name: daily-storeの直近成功ランを特定
         id: find_daily_store_run
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           set -euo pipefail
-          today="$(date -u '+%Y-%m-%d')"
-          if ! run_list="$(gh run list --workflow daily-store.yml --status success --limit 1 --json databaseId,createdAt 2>/dev/null)"; then
-            echo "::warning::daily-storeの成功ラン一覧を取得できませんでした。分割イベント記録の受け渡しをスキップします。"
-            exit 0
+          if ! run_list="$(gh run list --workflow daily-store.yml --status success --limit 100 --json databaseId,createdAt 2>/dev/null)"; then
+            echo "::error::daily-storeの成功ラン一覧を取得できませんでした。"
+            exit 1
           fi
-          if ! run_id="$(jq -r --arg today "$today" '
-            [.[] | select((.createdAt // "") | startswith($today)) | .databaseId]
-            | first // empty
-          ' <<<"$run_list")"; then
-            echo "::warning::daily-storeの成功ラン一覧を解析できませんでした。分割イベント記録の受け渡しをスキップします。"
-            exit 0
+          if ! run_id="$(python3 scripts/daily_store_artifact.py select-run <<<"$run_list")"; then
+            echo "::error::daily-storeの成功ラン一覧を解析できませんでした。"
+            exit 1
           fi
           if [[ -z "$run_id" ]]; then
-            echo "::warning::当日($today UTC)のdaily-store成功ランがありません。分割イベント記録の受け渡しをスキップします。"
-            exit 0
+            echo "::error::作成から36時間以内のdaily-store成功ランがありません。"
+            exit 1
           fi
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-          echo "当日のdaily-store成功ランを選択しました(run-id=$run_id)。"
+          echo "36時間以内で最も新しいdaily-store成功ランを選択しました(run-id=$run_id)。"
 
-      - name: 当日のdaily-storeから分割イベントartifactを取得
+      - name: daily-storeのartifact一覧を確認
+        id: check_split_event_artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.find_daily_store_run.outputs.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! artifact_list="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/artifacts?per_page=100" 2>/dev/null)"; then
+            echo "::error::daily-store成功ランのartifact一覧を取得できませんでした(run-id=${RUN_ID})。"
+            exit 1
+          fi
+          if ! artifact_present="$(python3 scripts/daily_store_artifact.py has-artifact <<<"$artifact_list")"; then
+            echo "::error::daily-store成功ランのartifact一覧を解析できませんでした(run-id=${RUN_ID})。"
+            exit 1
+          fi
+          echo "artifact_present=$artifact_present" >> "$GITHUB_OUTPUT"
+          if [[ "$artifact_present" == "true" ]]; then
+            echo "split-event-feed artifactを確認しました(run-id=${RUN_ID})。"
+          else
+            echo "split-event-feed artifactはありません。イベント0件の成功ランとして記録を更新せずに続行します(run-id=${RUN_ID})。"
+          fi
+
+      - name: daily-storeから分割イベントartifactを取得
         id: download_split_event_feed
-        if: ${{ steps.find_daily_store_run.outputs.run_id != '' }}
+        if: ${{ steps.check_split_event_artifact.outputs.artifact_present == 'true' }}
         continue-on-error: true
         uses: actions/download-artifact@v4
         with:
@@ -92,9 +112,12 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
 
-      - name: 分割イベントartifact未取得を警告
-        if: ${{ steps.find_daily_store_run.outputs.run_id != '' && steps.download_split_event_feed.outcome != 'success' }}
-        run: echo "::warning::split-event-feed artifactを取得できませんでした。前回コミットの data/split_event_feed.json を維持します。"
+      - name: 分割イベントartifactのダウンロード失敗を通知
+        if: ${{ steps.check_split_event_artifact.outputs.artifact_present == 'true' && steps.download_split_event_feed.outcome != 'success' }}
+        shell: bash
+        run: |
+          echo "::error::split-event-feed artifactは一覧にありますが、ダウンロードに失敗しました。"
+          exit 1
 
       - name: 分割イベント記録を作業ツリーへ配置
         if: ${{ steps.download_split_event_feed.outcome == 'success' }}

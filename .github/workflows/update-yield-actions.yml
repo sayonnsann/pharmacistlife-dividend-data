@@ -1,0 +1,83 @@
+name: 利回り用の分割・併合台帳を更新
+
+on:
+  schedule:
+    - cron: "45 18,21 * * *"  # JST 03:45 / 06:45
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "差分確認のみ（コミット・push・PR作成なし）"
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# 手動実行も同じグループで直列化し、反映途中の実行を取り消さない。
+concurrency:
+  group: update-yield-actions
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: pddのmainを取得（git push用の認証を保持）
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: pdd
+          token: ${{ github.token }}
+          persist-credentials: true
+
+      - name: workspaceの生成ツールと入力だけを取得
+        uses: actions/checkout@v4
+        with:
+          repository: sayonnsann/yuruyaku-workspace
+          ref: main
+          ssh-key: ${{ secrets.WORKSPACE_DEPLOY_KEY }}
+          persist-credentials: false
+          path: workspace-src
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /edinet-direct/tools/update_pdd_yield_actions.py
+            /edinet-direct/scripts/export_yield_actions.py
+            /edinet-direct/data/stock_actions_manual.json
+            /edinet-direct/data/fiscal_dividends.json
+            /edinet-direct/data/code_map.json
+            /edinet-direct/data/yield_action_overrides.json
+
+      - name: Pythonを準備
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: pddの全pytestに必要な依存をインストール
+        working-directory: pdd
+        run: python -m pip install -r scripts/requirements.txt pytest
+
+      - name: pddのコミット利用者を設定
+        working-directory: pdd
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: 台帳の差分確認・反映
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(
+            --pdd-root "$GITHUB_WORKSPACE/pdd"
+            --no-mirror-sync
+            --log-file "$RUNNER_TEMP/update-yield-actions.log"
+          )
+          if [[ "$DRY_RUN" == "true" ]]; then
+            args+=(--dry-run)
+          fi
+          python "$GITHUB_WORKSPACE/workspace-src/edinet-direct/tools/update_pdd_yield_actions.py" "${args[@]}"

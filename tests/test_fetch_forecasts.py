@@ -109,6 +109,24 @@ class ParseForecastResponseTest(unittest.TestCase):
         self.assertEqual(parsed["forecastDividendAdjusted"], 43.25)
         self.assertEqual(parsed["forecastShareBasis"], "pre_split")
 
+    def test_source_keeps_report_period_without_inferring_missing_values(self) -> None:
+        earning = {
+            "disclosureDate": "2027-05-10",
+            "fiscalYearEnd": "2027-03-31",
+            "fiscalYear": 2027,
+            "quarter": 4,
+        }
+        for body in ({"earnings": [earning]}, {"data": [earning]},
+                     {"data": {"earnings": [earning]}}):
+            with self.subTest(body=body):
+                parsed = fetch_forecasts.parse_forecast_response(body)
+                self.assertEqual(parsed["forecastSource"], earning)
+                self.assertEqual(parsed["forecastFiscalYear"], 2028)
+        self.assertEqual(self.parse({})["forecastSource"], {
+            "disclosureDate": None, "fiscalYearEnd": None,
+            "fiscalYear": None, "quarter": None,
+        })
+
     def test_confirmed_dividend_still_prefers_the_adjusted_annual(self) -> None:
         """既存の挙動（adjusted_annual_dividend_per_share を優先）は変えない。"""
         parsed = self.parse(TOUKEI_Q1_EARNING)
@@ -1335,6 +1353,11 @@ class EventDrivenQueueTest(unittest.TestCase):
         base = Path(self.directory.name)
         self.state_path = base / "forecasts_state.json"
         self.feed_path = base / "split_event_feed.json"
+        feed_patch = mock.patch.object(
+            fetch_forecasts, "DEFAULT_SPLIT_EVENT_FEED", self.feed_path
+        )
+        feed_patch.start()
+        self.addCleanup(feed_patch.stop)
         self.edinet_dir = base / "edinet"
         self.edinet_dir.mkdir()
         for index, code in enumerate(self.CODES):
@@ -1610,6 +1633,140 @@ class EventDrivenQueueTest(unittest.TestCase):
         self.assertEqual(document["events"][0]["eventType"], "stock_split")
         self.assertEqual(document["events"][0]["firstSeenAt"], "2026-08-06")
 
+    def split_event(self, event_id="split-1", **fields):
+        event = fetch_forecasts.parse_event_record(dict(
+            TOUKEI_EVENT_RECORD, event_id=event_id,
+            event_type="stock_split", **fields,
+        ))
+        assert event is not None
+        return event
+
+    def materials(self) -> dict:
+        document = json.loads(self.feed_path.read_text(encoding="utf-8"))
+        return {item["eventId"]: item["materialA"] for item in document["events"]}
+
+    def fetch_earning(self, earning=None):
+        return mock.Mock(side_effect=lambda *_: (
+            fetch_forecasts.parse_forecast_response({
+                "earnings": [TOUKEI_Q2_EARNING if earning is None else earning]
+            }), None,
+        ))
+
+    def prime_unchanged_split(self) -> None:
+        state = self.state()
+        state["stocks"]["4746"].update(fetch_forecasts.parse_forecast_response({
+            "earnings": [TOUKEI_Q2_EARNING],
+        }))
+        self.write_state(state)
+
+    def test_material_is_attached_after_fetch_to_each_event_for_a_company(self) -> None:
+        events = [self.split_event(), self.split_event("correction-1")]
+        attempted = SplitEventFeedTest.timestamp(7)
+        retrieved = SplitEventFeedTest.timestamp(8)
+        saved = SplitEventFeedTest.timestamp(9)
+        with mock.patch.object(fetch_forecasts, "jst_now", side_effect=[
+            attempted, attempted, retrieved, saved,
+        ]):
+            # parse_args also reads jst_today once.
+            fetch = self.run_main(events, daily_limit=5, fetch=self.fetch_earning())
+        self.assertEqual(fetch.call_count, 1)
+        self.assertEqual(self.collect.call_count, 1)
+        expected = {
+            "forecastSplitEffectiveDate": "2026-10-01",
+            "forecastSplitFactor": 4,
+            "forecastShareBasis": "indeterminate",
+            "fetchedAt": retrieved.isoformat(),
+            "source": {
+                "disclosureDate": "2026-08-03", "fiscalYearEnd": "2026-12-31",
+                "fiscalYear": None, "quarter": 2,
+            },
+            "lastAttemptAt": attempted.isoformat(),
+            "lastAttemptStatus": "fetched",
+        }
+        self.assertEqual(self.materials(), {event.event_id: expected for event in events})
+
+    def test_material_survives_failure_and_budget_overflow_then_empty_success(self) -> None:
+        event = self.split_event()
+        self.prime_unchanged_split()
+        self.run_main([event], daily_limit=5, fetch=self.fetch_earning())
+        original = self.materials()[event.event_id]
+        for day, status, limit in (("2026-08-07", "failed", 5),
+                                   ("2026-08-08", "not_attempted", 4)):
+            with self.subTest(status=status), mock.patch.object(
+                fetch_forecasts, "jst_now",
+                return_value=fetch_forecasts.datetime.fromisoformat(day + "T08:00:00+09:00"),
+            ):
+                fetch = self.run_main(
+                    [event], daily_limit=limit, today=day,
+                    fetch=mock.Mock(side_effect=fetch_forecasts.FetchError(
+                        "unavailable", kind="http", status=503,
+                    )),
+                )
+                material = self.materials()[event.event_id]
+                self.assertEqual(material, {
+                    **original, "lastAttemptAt": day + "T08:00:00+09:00",
+                    "lastAttemptStatus": status,
+                })
+                self.assertEqual(fetch.call_count, int(status == "failed"))
+        # 成功した空応答は古い分割情報を消す。検索窓外の持ち越しも更新する。
+        self.run_main([], daily_limit=5, today="2026-08-08", fetch=self.fetch_earning({}))
+        material = self.materials()[event.event_id]
+        self.assertEqual(material["lastAttemptStatus"], "fetched")
+        for key in ("forecastSplitEffectiveDate", "forecastSplitFactor", "forecastShareBasis"):
+            self.assertIsNone(material[key])
+        self.assertTrue(material["fetchedAt"])
+        self.assertTrue(all(value is None for value in material["source"].values()))
+
+    def test_event_slot_overflow_retains_previous_material(self) -> None:
+        event = self.split_event()
+        self.prime_unchanged_split()
+        self.run_main([event], daily_limit=5, fetch=self.fetch_earning())
+        original = self.materials()[event.event_id]
+        higher_priority = disclosure("9433", "dividend_revision", "2026-08-06")
+        fetch = self.run_main([event, higher_priority], daily_limit=9, slots="1",
+                              today="2026-08-07")
+        self.assertNotIn("4746", self.fetched_codes(fetch))
+        material = self.materials()[event.event_id]
+        self.assertEqual(material["lastAttemptStatus"], "not_attempted")
+        for key in ("forecastSplitEffectiveDate", "forecastSplitFactor", "forecastShareBasis",
+                    "fetchedAt", "source"):
+            self.assertEqual(material[key], original[key])
+
+    def test_initial_overflow_does_not_copy_stale_stock_state(self) -> None:
+        state = self.state()
+        state["stocks"]["4746"].update(fetch_forecasts.parse_forecast_response({
+            "earnings": [TOUKEI_Q2_EARNING],
+        }))
+        self.write_state(state)
+        self.run_main([self.split_event()], daily_limit=4)
+        material = self.materials()["split-1"]
+        self.assertEqual(material["lastAttemptStatus"], "not_attempted")
+        for key in ("forecastSplitEffectiveDate", "forecastSplitFactor", "forecastShareBasis",
+                    "fetchedAt", "source"):
+            self.assertIsNone(material[key])
+
+    def test_material_matches_five_digit_security_code_and_edinet_fallback(self) -> None:
+        events = [self.split_event("five-digit", sec_code="47460"),
+                  self.split_event("edinet-only", sec_code="", edinet_code="E00001")]
+        fetch = self.run_main(events, daily_limit=5, fetch=self.fetch_earning())
+        self.assertEqual(self.fetched_codes(fetch), ["4746"])
+        for material in self.materials().values():
+            self.assertEqual(material["forecastSplitFactor"], 4)
+            self.assertEqual(material["lastAttemptStatus"], "fetched")
+
+    def test_fatal_fetch_records_failed_and_unattempted_events(self) -> None:
+        events = [self.split_event(), self.split_event(
+            "split-2", sec_code="9433", edinet_code="E00004",
+        )]
+        with self.assertRaises(SystemExit):
+            self.run_main(events, daily_limit=9, fetch=mock.Mock(
+                side_effect=fetch_forecasts.FetchError("unauthorized", kind="http", status=401),
+            ))
+        self.assertCountEqual(
+            [item["lastAttemptStatus"] for item in self.materials().values()],
+            ["failed", "not_attempted"],
+        )
+
     def test_a_split_event_is_not_saved_when_no_event_page_succeeded(self) -> None:
         record = dict(
             TOUKEI_EVENT_RECORD,
@@ -1829,6 +1986,12 @@ class EndToEndEventTest(unittest.TestCase):
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
         base = Path(self.directory.name)
+        self.feed_path = base / "split_event_feed.json"
+        feed_patch = mock.patch.object(
+            fetch_forecasts, "DEFAULT_SPLIT_EVENT_FEED", self.feed_path
+        )
+        feed_patch.start()
+        self.addCleanup(feed_patch.stop)
         self.edinet_dir = base / "edinet"
         self.edinet_dir.mkdir()
         for code, edinet_code in (("4746", "E05066"), ("9433", "E04425")):
@@ -1968,6 +2131,28 @@ class EndToEndEventTest(unittest.TestCase):
         self.assertIn("eventPicks=0", second)
         # 2日目も同じイベントは応答に入っている（＝重複を弾いた結果である）
         self.assertIn("seen=1", second)
+
+    def test_split_material_reuses_the_single_earnings_request(self) -> None:
+        self.seen_urls = []
+        original_urlopen = self.urlopen
+
+        def split_urlopen(request, timeout=None):
+            if "event_type=stock_split" in request.full_url:
+                self.seen_urls.append(request.full_url)
+                return FakeResponse(events_payload([dict(
+                    TOUKEI_EVENT_RECORD, event_id="split-1", event_type="stock_split",
+                )], 1, None))
+            return original_urlopen(request, timeout)
+
+        with mock.patch.object(self, "urlopen", side_effect=split_urlopen):
+            self.run_day("2026-08-04")
+        self.assertEqual(len(self.seen_urls), 5)
+        self.assertEqual(sum("/earnings?" in url for url in self.seen_urls), 1)
+        material = json.loads(self.feed_path.read_text())["events"][0]["materialA"]
+        self.assertEqual(material["forecastSplitFactor"], 4)
+        self.assertEqual(material["forecastSplitEffectiveDate"], "2026-10-01")
+        self.assertEqual(material["source"]["disclosureDate"], "2026-08-03")
+        self.assertEqual(material["lastAttemptStatus"], "fetched")
 
 
 class EventSlotSizeTest(unittest.TestCase):

@@ -373,23 +373,22 @@ def save_split_event_feed(
     *,
     first_seen_at: date | None = None,
     updated_at: datetime | None = None,
+    material_a_by_event: dict[str, dict[str, Any]] | None = None,
 ) -> bool:
     """分割・併合イベントを公開フィードへ追記する。
 
     APIから受信したイベントだけを対象にし、同じeventIdが既にあれば
-    正規化フィールドとfirstSeenAtは維持したままrawだけを最新化する。
-    対象イベントが無いときはファイルを作らず、Falseを返す。
+    正規化フィールドとfirstSeenAtは維持し、rawと材料Aを更新する。
+    材料Aはこの実行の取得結果だけを受け取る。未取得・失敗では前回の
+    値とfetchedAt/sourceを維持する。rawの無い持ち越しは既存行のみ更新する。
+    lastAttemptAtはリクエスト開始日時。ただしnot_attemptedでは、取得を
+    行わなかった実行の保存日時を記録する。日時はJSTのISO 8601形式。
     """
     records: list[dict[str, Any]] = []
     current = _jst_datetime(updated_at)
     first_seen_text = (first_seen_at or current.date()).isoformat()
     for event in events:
         if event.event_type not in SPLIT_EVENT_TYPES:
-            continue
-        if not isinstance(event.raw, dict):
-            # stateから復元した持ち越しには受信時のrawが無い。次回API応答
-            # ではparse_event_recordがrawを持った新しいイベントを作るので、
-            # ここでは推測したレコードを公開しない。
             continue
         records.append(
             {
@@ -435,16 +434,40 @@ def save_split_event_feed(
         positions[event_id] = len(merged_events)
         merged_events.append(item)
 
+    changed = False
     for record in records:
         event_id = record["eventId"]
         position = positions.get(event_id)
         if position is None:
+            if not isinstance(record["raw"], dict):
+                # 受信時の生レコードが無いイベントを推測で新規作成しない。
+                continue
             positions[event_id] = len(merged_events)
             merged_events.append(record)
+            item = record
         else:
             # 初回保存時の正規化値とfirstSeenAtは、既存itemから一切
             # 取り直さない。生レコードだけは最新応答へ置き換える。
-            merged_events[position]["raw"] = record["raw"]
+            item = merged_events[position]
+            if isinstance(record["raw"], dict):
+                item["raw"] = record["raw"]
+        result = (material_a_by_event or {}).get(event_id, {
+            "lastAttemptAt": current.isoformat(timespec="seconds"),
+            "lastAttemptStatus": "not_attempted",
+        })
+        material = item.setdefault("materialA", {
+            "forecastSplitEffectiveDate": None,
+            "forecastSplitFactor": None,
+            "forecastShareBasis": None,
+            "fetchedAt": None,
+            "source": None,
+        })
+        # fetchedのときだけ値を更新する。nullも新しい取得結果なので上書きする。
+        material.update(result)
+        changed = True
+
+    if not changed:
+        return False
 
     document = {
         "schemaVersion": SPLIT_EVENT_FEED_SCHEMA_VERSION,
@@ -1288,6 +1311,8 @@ def run_event_stage(
     candidates: list[Candidate],
     today: date,
     api_key: str,
+    *,
+    feed_events: list[DisclosureEvent] | None = None,
 ) -> tuple[list[Candidate], dict[str, dict[str, str]], int]:
     """イベントを見て優先枠を組む。失敗しても従来の待ち行列は動かす。"""
     block = event_state(state)
@@ -1313,19 +1338,13 @@ def run_event_stage(
         block["lastError"] = str(error)[:200]
         block["lastErrorAt"] = today.isoformat()
 
-    # 取得に成功したページに含まれる生レコードだけを公開フィードへ残す。
-    # slots=0のときはここへ到達しないため、緊急停止中はファイルに触れない。
-    if ok_pages and any(
-        event.event_type in SPLIT_EVENT_TYPES for event in events
-    ):
-        try:
-            save_split_event_feed(events, first_seen_at=today)
-        except Exception as error:
-            # 公開フィードは補助記録であり、ここで予想取得まで止めない。
-            print(
-                f"分割・併合イベントフィード保存失敗（続行）: {error}",
-                file=sys.stderr,
-            )
+    # 保存はmainの予想取得後に行う。検索窓から消えた持ち越しも渡すが、
+    # 同じIDの生レコードが今回あればそちらを優先する。
+    if feed_events is not None:
+        received = {event.event_id: event for event in events} if ok_pages else {}
+        for event_id, item in pending.items():
+            received.setdefault(event_id, item.event)
+        feed_events.extend(received.values())
 
     if ok_pages:
         # 1ページでも応答があった日だけ「ここまで見た」を進める。全滅した日に
@@ -1685,6 +1704,17 @@ def parse_forecast_response(
     }
     return {
         "forecastDividend": annual,
+        # 同じearnings行の出典。予想対象期間の推定値と混同しないよう、
+        # APIにある値だけをcamelCaseへ写す（無い項目はnull）。
+        "forecastSource": {
+            "disclosureDate": first_present(latest, "disclosure_date", "disclosureDate"),
+            "fiscalYearEnd": first_present(latest, "fiscal_year_end", "fiscalYearEnd"),
+            "fiscalYear": first_present(latest, "fiscal_year", "fiscalYear"),
+            "quarter": first_present(
+                latest, "quarter", "fiscal_quarter", "fiscalQuarter",
+                "period_quarter", "periodQuarter",
+            ),
+        },
         "forecastInterimDividend": interim,
         "forecastFinalDividend": final,
         # 分割後の株数に揃えた年間予想（API側の計算値）。
@@ -1895,9 +1925,20 @@ def main() -> None:
     # イベント枠を先に決める。ここで選んだ銘柄は従来の待ち行列から抜いて
     # おく（同じ銘柄を1日に2回叩かないため、かつ巡回位置の数え方を
     # 壊さないため）。
+    feed_events: list[DisclosureEvent] = []
     event_picks, event_ids_by_code, event_requests = run_event_stage(
-        state, candidates, args.today, api_key
+        state, candidates, args.today, api_key, feed_events=feed_events
     )
+    # イベント枠で選ばれなかったイベントも含め、銘柄と結び付ける。
+    # 同じ銘柄の発表・訂正は同一応答をそれぞれのeventIdへ添える。
+    by_code, by_edinet = index_candidates(candidates)
+    feed_ids_by_code: dict[str, list[str]] = {}
+    for event in feed_events:
+        if event.event_type in SPLIT_EVENT_TYPES:
+            candidate = match_candidate(event, by_code, by_edinet)
+            if candidate is not None:
+                feed_ids_by_code.setdefault(candidate.code, []).append(event.event_id)
+    material_a_by_event: dict[str, dict[str, Any]] = {}
     picked_codes = {candidate.code for candidate in event_picks}
     pending_codes = (
         pending_candidate_codes(event_state(state), candidates, args.today)
@@ -1951,9 +1992,15 @@ def main() -> None:
         )
         if candidate.code in event_ids_by_code:
             state["stocks"].setdefault(candidate.code, {})["lastEventAttemptAt"] = fetched_at
+        attempted_at = jst_now().isoformat(timespec="seconds")
         try:
             parsed, last_remaining = fetch_one(candidate, api_key)
         except FetchError as error:
+            for event_id in feed_ids_by_code.get(candidate.code, []):
+                material_a_by_event[event_id] = {
+                    "lastAttemptAt": attempted_at,
+                    "lastAttemptStatus": "failed",
+                }
             # 1銘柄の失敗でその日の取得を全部捨てない。既存の保存値は
             # そのまま残し、失敗の記録だけ足して次の銘柄へ進む。
             failed += 1
@@ -2002,6 +2049,17 @@ def main() -> None:
                 )
                 break
         else:
+            retrieved_at = jst_now().isoformat(timespec="seconds")
+            for event_id in feed_ids_by_code.get(candidate.code, []):
+                material_a_by_event[event_id] = {
+                    "forecastSplitEffectiveDate": parsed.get("forecastSplitEffectiveDate"),
+                    "forecastSplitFactor": parsed.get("forecastSplitFactor"),
+                    "forecastShareBasis": parsed.get("forecastShareBasis"),
+                    "fetchedAt": retrieved_at,
+                    "source": parsed.get("forecastSource"),
+                    "lastAttemptAt": attempted_at,
+                    "lastAttemptStatus": "fetched",
+                }
             consecutive_failures = 0
             consecutive_rate_limit_failures = 0
             parsed["lastFetchedAt"] = fetched_at
@@ -2034,6 +2092,18 @@ def main() -> None:
         state, args.today, rate_limit_stopped
     )
     save_progress()
+    if feed_events:
+        try:
+            save_split_event_feed(
+                feed_events, first_seen_at=args.today,
+                material_a_by_event=material_a_by_event,
+            )
+        except Exception as error:
+            # 補助記録の失敗で、取得済み予想まで捨てない。
+            print(
+                f"分割・併合イベントフィード保存失敗（続行）: {error}",
+                file=sys.stderr,
+            )
     print(
         f"予想取得完了: {processed:,}件 "
         f"（予想なし {no_forecast:,}件、失敗 {failed:,}件、"

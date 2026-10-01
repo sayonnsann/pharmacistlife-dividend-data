@@ -62,7 +62,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! run_list="$(gh run list --workflow daily-store.yml --status success --limit 100 --json databaseId,createdAt 2>/dev/null)"; then
+          if ! run_list="$(gh run list --workflow daily-store.yml --limit 100 --json databaseId,createdAt,conclusion 2>/dev/null)"; then
             echo "::error::daily-storeの成功ラン一覧を取得できませんでした。"
             exit 1
           fi

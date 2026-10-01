@@ -27,6 +27,19 @@ class SelectRecentSuccessfulRunTest(unittest.TestCase):
             daily_store_artifact.select_recent_successful_run(runs, now=now), "101"
         )
 
+    def test_skips_runs_whose_conclusion_is_not_success(self) -> None:
+        # 一覧は --status で絞らずに取り、conclusion をここで見る(2026-10-01)
+        now = datetime(2026, 10, 1, 14, 0, tzinfo=timezone.utc)
+        runs = [
+            {"databaseId": 200, "createdAt": "2026-10-01T05:00:00Z", "conclusion": "failure"},
+            {"databaseId": 201, "createdAt": "2026-10-01T00:52:00Z", "conclusion": "success"},
+            {"databaseId": 202, "createdAt": "2026-10-01T06:00:00Z", "conclusion": ""},
+        ]
+
+        self.assertEqual(
+            daily_store_artifact.select_recent_successful_run(runs, now=now), "201"
+        )
+
     def test_rejects_run_older_than_36_hours(self) -> None:
         now = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
         runs = [{"databaseId": 99, "createdAt": "2026-09-22T23:59:59Z"}]

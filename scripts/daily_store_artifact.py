@@ -43,6 +43,10 @@ def select_recent_successful_run(
     for run in runs:
         if not isinstance(run, dict):
             raise ValueError("each run must be a JSON object")
+        # gh run list --status success は直近の実行を返さないことがある(2026-10-01に
+        # 9/10以前の28件しか返らなかった)。全件を取り、ここで conclusion を見て絞る。
+        if "conclusion" in run and run.get("conclusion") != "success":
+            continue
         run_id = run.get("databaseId")
         if isinstance(run_id, bool) or not isinstance(run_id, (int, str)):
             raise ValueError("run databaseId must be an integer or string")

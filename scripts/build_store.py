@@ -31,6 +31,7 @@ DEFAULT_STOCK_ACTIONS = REPOSITORY_ROOT / "data" / "stock_actions_manual.json"
 DEFAULT_EXTRACTED_STOCK_ACTIONS = (
     REPOSITORY_ROOT / "data" / "stock_actions_extracted.json"
 )
+DEFAULT_YIELD_NUMERATOR_OVERRIDES = REPOSITORY_ROOT / "data" / "yield_numerator_overrides.json"
 DEFAULT_FORECASTS = REPOSITORY_ROOT / "forecasts_state.json"
 DEFAULT_FORECAST_OVERRIDES = REPOSITORY_ROOT / "data" / "forecast_overrides.json"
 DEFAULT_OUTPUT = REPOSITORY_ROOT / "stocks.sqlite"
@@ -941,6 +942,126 @@ def split_adjustment(
     }
 
 
+def load_yield_split_adjustments(prices_url: str) -> list[dict[str, Any]] | None:
+    """CSVと同じ配信元のactive状態を読む。取得・形式不良時は旧計算へ戻す。"""
+    if not prices_url.endswith("database.csv"):
+        print("::warning::利回り分子: split_adjustmentsのURLを決定できず従来計算")
+        return None
+    url = prices_url[:-len("database.csv")] + "split_adjustments.json"
+    try:
+        completed = subprocess.run(
+            ["curl", "--fail", "--silent", "--show-error", "--location",
+             "--max-time", "30", url], capture_output=True, check=True,
+        )
+        document = json.loads(completed.stdout)
+        if not isinstance(document, dict) or not isinstance(document.get("adjustments"), list):
+            raise ValueError("adjustmentsがarrayではありません")
+        active = []
+        for item in document["adjustments"]:
+            if not isinstance(item, dict) or type(item.get("active")) is not bool:
+                raise ValueError("activeがtrue/falseではありません")
+            if not item["active"]:
+                continue
+            ratio = finite_number(item.get("ratio"))
+            if (normalized_code(item.get("code")) != item.get("code")
+                    or not item.get("code") or ratio is None or ratio <= 0):
+                raise ValueError("有効イベントの銘柄または比率が不正です")
+            date.fromisoformat(item["execution_date"])
+            active.append(item)
+        return active
+    except (OSError, subprocess.CalledProcessError, ValueError, TypeError, KeyError):
+        # curlのstderrや任意URLを出さず、認証情報をログへ漏らさない。
+        print("::warning::利回り分子: split_adjustments取得・検証失敗、従来計算")
+        return None
+
+
+def load_yield_numerator_overrides(path: Path) -> frozenset[str]:
+    """年度条件の例外を明示指定する。欠落・不正時は全件を無効にする。"""
+    try:
+        document = load_json(path, dict)
+        if type(document.get("schemaVersion")) is not int or document["schemaVersion"] != 1:
+            raise ValueError("未対応のschemaVersion")
+        events = document.get("events")
+        if not isinstance(events, list):
+            raise ValueError("eventsがarrayではありません")
+        ids: set[str] = set()
+        for entry in events:
+            if not isinstance(entry, dict):
+                raise ValueError("eventがobjectではありません")
+            event_id = entry.get("eventId")
+            if not isinstance(event_id, str) or not event_id.strip() or event_id in ids:
+                raise ValueError("eventIdが不正または重複")
+            if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
+                raise ValueError("reasonが空です")
+            date.fromisoformat(entry["checkedAt"])
+            ids.add(event_id)
+        return frozenset(ids)
+    except (OSError, ValueError, TypeError, KeyError):
+        print("::warning::利回り分子: 明示指定ファイルなし・検証失敗、指定なしで続行")
+        return frozenset()
+
+
+def load_yield_source_year(code: str, edinet_dir: Path) -> int | None:
+    """CSVの分子の元であるedinet/dpsの最新年度（系列の年度ではない）。"""
+    try:
+        record = load_json(edinet_dir / f"{code}.json", dict)
+        dps = record.get("dps")
+        if not isinstance(dps, dict) or not dps:
+            return None
+        years = [int(year) for year in dps]
+        return max(years) if all(1 <= year <= 9999 for year in years) else None
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def yield_numerator_factor(
+    code: str,
+    events: list[dict[str, Any]],
+    adjustment: dict[str, Any] | None,
+    *,
+    source_year: int | None,
+    fiscal_month: int | None,
+    active_adjustments: list[dict[str, Any]] | None,
+    today: date,
+    override_event_ids: frozenset[str] = frozenset(),
+) -> float:
+    """分子専用。系列・EPS/BPS用のadjustmentは変更しない。
+
+    年度末より後、または明示指定されたイベントだけを対象にする。
+    dpsRestatedは最新年度の株数基準を保証しないため使わない。
+    調整済みの照合は銘柄・比率と、効力日の7日前〜当日の権利落ち日で行う。
+    """
+    legacy = adjustment["dividendFactor"] if adjustment else 1.0
+    if adjustment is None:
+        return legacy
+    if (active_adjustments is None or type(source_year) is not int
+            or not 1 <= source_year <= 9999
+            or type(fiscal_month) is not int or not 1 <= fiscal_month <= 12):
+        print(f"::warning::利回り分子 {code}: 元年度・決算月・調整状態不足、従来計算")
+        return legacy
+    period_end = (date(source_year, 12, 31) if fiscal_month == 12 else
+                  date(source_year, fiscal_month + 1, 1) - timedelta(days=1))
+    factor = 1.0
+    for event in adjustment["events"]:
+        effective = date.fromisoformat(event["effectiveDate"])
+        if effective > today or event.get("applyDividendAdjustment") is not True:
+            continue
+        if effective <= period_end and event["eventId"] not in override_event_ids:
+            continue
+        event_factor = finite_number(event.get("adjustmentFactor"))
+        if event_factor is None or event_factor <= 0:
+            continue
+        if any(
+            item["code"] == code
+            and 0 <= (effective - date.fromisoformat(item["execution_date"])).days <= 7
+            and abs(float(item["ratio"]) / (1 / event_factor) - 1) <= 0.001 + 1e-12
+            for item in active_adjustments
+        ):
+            continue
+        factor *= event_factor
+    return factor
+
+
 def adjustment_factor_for_period(
     adjustment: dict[str, Any],
     period: Any,
@@ -1759,6 +1880,8 @@ def create_database(
     if skipped_financials:
         raise ValueError("all_financialsに4桁英数でないコードがあります")
     daily_prices, daily_dividends, prices_updated = load_daily_prices(prices_url)
+    yield_split_adjustments = load_yield_split_adjustments(prices_url)
+    yield_overrides = load_yield_numerator_overrides(DEFAULT_YIELD_NUMERATOR_OVERRIDES)
     # kouhaitou-dbが株価のみ更新ワークフロー（前場寄付/後場引けの1日2回）を
     # 導入している場合、隣にある price_update_meta.json からセッション名を読む。
     # 無い/取れない場合は「afternoon_close」（従来の1日1回更新=終値相当）に
@@ -1875,8 +1998,7 @@ def create_database(
                     applied_events += len(adjustment["events"])
                 effective_price = daily_price
                 daily_yield = None
-                # 分子はkouhaitou-dbの年間配当を最優先で使い、既知の分割は
-                # stock_actions_manual.jsonの係数でこの後に現在株価基準へ揃える。
+                # CSVの分子を、系列とは独立した規則で現在株価基準へ揃える。
                 numerator = daily_dividends.get(code)
                 # kouhaitou-dbが把握していて年間配当0＝現在無配。
                 # この場合は過去の配当履歴に遡らない（東電の2010年60円のような
@@ -1884,7 +2006,13 @@ def create_database(
                 currently_unpaid = numerator is not None and float(numerator) <= 0
                 if adjustment is not None and finite_number(numerator) is not None:
                     numerator = (
-                        float(numerator) * adjustment["dividendFactor"]
+                        float(numerator) * yield_numerator_factor(
+                            code, stock_actions_by_code.get(code, []), adjustment,
+                            source_year=load_yield_source_year(code, REPOSITORY_ROOT / "edinet"),
+                            fiscal_month=fiscal_record.get("fiscalMonth") if fiscal_record else None,
+                            active_adjustments=yield_split_adjustments,
+                            today=today, override_event_ids=yield_overrides,
+                        )
                     )
                 if daily_price and numerator is not None and float(numerator) > 0:
                     daily_yield = round(float(numerator) / daily_price * 100, 2)

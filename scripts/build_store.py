@@ -550,6 +550,86 @@ def fiscal_dividend_stats(
     }
 
 
+def adjust_dividend_breakdown(
+    breakdown: dict[str, Any],
+    series: dict[int, float],
+    adjustment: dict[str, Any] | None,
+    *,
+    fiscal_month: int | None,
+    applied_actions: list[dict[str, Any]] | None = None,
+    code: str = "",
+) -> tuple[dict[str, Any], list[str]]:
+    """内訳を配分比として使い、分割で説明できる金額だけannualへ揃える。
+
+    分割で説明できない年度は警告を残し、未補正の内訳を従来どおり使う。
+    元データと出典は変更しない。反映済みイベントも比率の根拠に使える。
+    """
+    events_by_date = {}
+    for event in (adjustment or {}).get("events", []) + (applied_actions or []):
+        factor = finite_number(event.get("adjustmentFactor"))
+        ratio = finite_number(event.get("ratio"))
+        if factor is None and ratio is not None and ratio > 0:
+            factor = 1 / ratio
+        if factor is not None and factor > 0:
+            # producerとconsumerでeventIdが異なっても同日を重複計上しない。
+            events_by_date.setdefault(event["effectiveDate"], {
+                "effectiveDate": event["effectiveDate"],
+                "adjustmentFactor": factor,
+                "applyDividendAdjustment": True,
+            })
+    split_evidence = {"events": list(events_by_date.values())}
+    result = dict(breakdown)
+    warnings = []
+    for year, detail in breakdown.items():
+        try:
+            annual = finite_number(series.get(int(year)))
+        except (TypeError, ValueError):
+            continue
+        if annual is None or not isinstance(detail, dict):
+            continue
+        amounts = {key: finite_number(detail[key]) for key in ("base", "special")
+                   if key in detail}
+        valid = bool(amounts) and all(value is not None and value >= 0
+                                      for value in amounts.values())
+        total = finite_number(sum(amounts.values())) if valid else None
+        ratio = finite_number(annual / total) if total is not None and total > 0 else None
+        if total == 0 and annual == 0:
+            continue
+
+        def close(candidate: float) -> bool:
+            return (ratio is not None and candidate > 0
+                    and abs(ratio / candidate - 1) <= 0.03 + 1e-12)
+
+        if close(1.0):
+            continue
+        factor = adjustment_factor_for_period(
+            split_evidence, year, fiscal_month=fiscal_month or 12, field="dividend"
+        )
+        split_like = False
+        if ratio is not None and ratio > 0:
+            for candidate in (ratio, 1 / ratio):
+                if finite_number(candidate) is None:
+                    continue
+                nearest = round(candidate)
+                if nearest >= 2 and close(nearest if candidate == ratio else 1 / nearest):
+                    split_like = True
+            if factor > 0 and finite_number(factor) is not None:
+                split_like = split_like or close(factor) or close(1 / factor)
+        if not split_like:
+            warnings.append(
+                f"配当内訳 {code}/{year}: annual={annual}, base+special={total}, "
+                f"比r={ratio} は分割比率で説明できないため内訳は未補正のまま使用"
+            )
+            continue
+        adjusted = dict(detail)
+        for key, value in amounts.items():
+            adjusted[key] = round(value * ratio, 4)
+        if "base" in amounts and "special" in amounts:
+            adjusted["base"] = round(annual - adjusted["special"], 4)
+        result[year] = adjusted
+    return result, warnings
+
+
 def base_dividend_series(
     series: dict[int, float], breakdown: dict[str, Any]
 ) -> dict[int, float]:
@@ -2125,6 +2205,7 @@ def create_database(
                 # 配当系列を事業年度ベースへ差し替える。
                 # 系列が取れなかった銘柄だけ、暦年の系列のまま残す。
                 fiscal = fiscal_record
+                series_fiscal_month = fiscal.get("fiscalMonth") if fiscal else 12
                 if fiscal is not None:
                     fiscal_based_stocks += 1
                     series = fiscal["series"]
@@ -2338,6 +2419,16 @@ def create_database(
                 payload["industry"] = financial.get("industry")
                 breakdown_entry = dividend_breakdown.get(code)
                 if breakdown_entry:
+                    breakdown_entry, breakdown_warnings = adjust_dividend_breakdown(
+                        breakdown_entry,
+                        series,
+                        adjustment,
+                        fiscal_month=series_fiscal_month,
+                        applied_actions=fiscal.get("appliedActions") if fiscal else None,
+                        code=code,
+                    )
+                    if breakdown_warnings:
+                        payload["warnings"] = list(payload.get("warnings") or []) + breakdown_warnings
                     payload["dividendBreakdown"] = breakdown_entry
                     payload["streakBase"] = streak_base_from_breakdown(
                         series, breakdown_entry

@@ -154,6 +154,11 @@ def main() -> None:
     if codes_were_supplied:
         print_code_table(codes, stocks)
     print_summary(stocks)
+    # 予想なし銘柄のコードだけを列挙する（値は出さない。コードは公開情報）。
+    missing = sorted(
+        code for code, record in stocks.items() if not has_forecast(record)
+    )
+    print("missing_codes " + ",".join(missing))
 
 
 if __name__ == "__main__":

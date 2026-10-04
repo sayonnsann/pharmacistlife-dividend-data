@@ -67,6 +67,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: 台帳の差分確認・反映
+        id: update_ledger
         env:
           GH_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
@@ -82,3 +83,24 @@ jobs:
             args+=(--dry-run)
           fi
           python "$GITHUB_WORKSPACE/workspace-src/edinet-direct/tools/update_pdd_yield_actions.py" "${args[@]}"
+
+      # GITHUB_TOKENで作ったPRの別CIの起動・承認に依存せず、
+      # このワークフロー内で比較する。既存のレビュー待ちにも再試行・更新する。
+      # PRのコードは実行せず、mainの計算プログラムにPRの台帳だけを渡す。
+      - name: 比較専用のmainを取得（台帳更新処理の作業状態から隔離）
+        if: ${{ always() && (steps.update_ledger.outcome == 'success' || steps.update_ledger.outcome == 'failure') && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: review-pdd
+          persist-credentials: false
+
+      - name: レビュー待ちPRへ画面データの全項目比較をコメント
+        if: ${{ always() && (steps.update_ledger.outcome == 'success' || steps.update_ledger.outcome == 'failure') && !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASS: ${{ secrets.FTP_PASS }}
+          FTP_REMOTE_DIR: ${{ secrets.FTP_REMOTE_DIR }}
+        run: python review-pdd/scripts/compare_yield_review_prs.py --repo "$GITHUB_WORKSPACE/review-pdd"

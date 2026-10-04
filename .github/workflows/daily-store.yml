@@ -15,6 +15,9 @@ concurrency:
 
 jobs:
   update-store:
+    permissions:
+      contents: read
+      issues: write
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -263,12 +266,14 @@ jobs:
           echo "forecasts_state.json を検証つきで差し替えました（$local_size bytes）"
 
       - name: SQLiteストアを構築
+        id: build_store
         run: >-
           python scripts/build_store.py
           --forecasts "$STATE_FILE"
           --fiscal-dividends "$FISCAL_FILE"
           --calendar-dividends "$CALENDAR_FILE"
           --output "$SQLITE_FILE"
+          --yield-guard-report "$RUNNER_TEMP/yield-guards.json"
 
       - name: SQLiteをFTPSへ原子的に反映
         id: publish_store
@@ -332,6 +337,14 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/check_split_fallback.py "$SQLITE_FILE"
+
+      # 通知の失敗で本番反映を妨げないよう配信後に実行する。
+      # 配信や他の警告が失敗した場合にも、構築成功なら点検する。
+      - name: 利回りの安全装置を点検・分割未反映をissueで通知
+        if: ${{ always() && steps.build_store.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/yield_review_notifications.py guards --report "$RUNNER_TEMP/yield-guards.json"
 
       # 分割・併合の「要確認リスト」(scripts/build_ir_review_queue.py)は、
       # このジョブが contents: read でコミットできないため、

@@ -1,0 +1,31 @@
+name: 利回り用台帳のレビュー放置を点検
+
+on:
+  schedule:
+    - cron: "15 23 * * *"  # JST 08:15、毎日1回（休日も72時間で判定）
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+concurrency:
+  group: yield-review-reminder
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 72時間以上のレビュー待ちをissueで通知・解消時に閉じる
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/yield_review_notifications.py stale

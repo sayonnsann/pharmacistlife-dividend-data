@@ -85,6 +85,8 @@ def parse_args() -> argparse.Namespace:
         help="一次資料で確認した予想配当の手動上書き台帳",
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--yield-guard-report", type=Path,
+                        help="日次点検用JSONを一時領域へ保存（公開ログへは出さない）")
     parser.add_argument(
         "--prices-url",
         default=DAILY_PRICE_CSV_URL,
@@ -2019,6 +2021,7 @@ def create_database(
     today: date | None = None,
     stock_action_fallbacks: list[dict[str, Any]] | None = None,
     forecast_overrides: dict[str, Any] | None = None,
+    yield_guard_report_path: Path | None = None,
 ) -> tuple[int, int, int]:
     financial_by_code, skipped_financials = index_by_code(
         financials, "all_financials"
@@ -2615,6 +2618,12 @@ def create_database(
         temporary_path.unlink(missing_ok=True)
         raise
 
+    if yield_guard_report_path is not None:
+        # ビルドで実際に使った記録を渡す。再取得で検出日・比率がずれないようにする。
+        from audit_yield_numerator import audit_fiscal_payloads
+        report = audit_fiscal_payloads(
+            {row[0]: json.loads(row[-1]) for row in rows}, guard_split_adjustments)
+        yield_guard_report_path.write_text(json.dumps(report, ensure_ascii=False) + "\n", encoding="utf-8")
     return len(rows), matched_tickers, frozen_calendar_stocks
 
 
@@ -2653,6 +2662,7 @@ def main() -> None:
         args.calendar_dividends,
         stock_action_fallbacks=stock_action_fallbacks,
         forecast_overrides=forecast_overrides,
+        yield_guard_report_path=args.yield_guard_report,
     )
     size = args.output.stat().st_size
     print(f"生成完了: {args.output}")

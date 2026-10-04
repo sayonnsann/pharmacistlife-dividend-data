@@ -942,7 +942,33 @@ def split_adjustment(
     }
 
 
-def load_yield_split_adjustments(prices_url: str) -> list[dict[str, Any]] | None:
+def parse_yield_split_adjustments(
+    document: Any, *, allow_missing_active: bool = False,
+) -> list[dict[str, Any]]:
+    """旧分子のactive規則を保ち、安全装置だけactive省略を有効と扱える。"""
+    if not isinstance(document, dict) or not isinstance(document.get("adjustments"), list):
+        raise ValueError("adjustmentsがarrayではありません")
+    active = []
+    for item in document["adjustments"]:
+        if not isinstance(item, dict):
+            raise ValueError("分割記録がobjectではありません")
+        enabled = item.get("active", True if allow_missing_active else None)
+        if type(enabled) is not bool:
+            raise ValueError("activeがtrue/falseではありません")
+        if not enabled:
+            continue
+        ratio = finite_number(item.get("ratio"))
+        if (normalized_code(item.get("code")) != item.get("code")
+                or not item.get("code") or ratio is None or ratio <= 0):
+            raise ValueError("有効イベントの銘柄または比率が不正です")
+        date.fromisoformat(item["execution_date"])
+        active.append(item)
+    return active
+
+
+def load_yield_split_adjustments(
+    prices_url: str, *, allow_missing_active: bool = False,
+) -> list[dict[str, Any]] | None:
     """CSVと同じ配信元のactive状態を読む。取得・形式不良時は旧計算へ戻す。"""
     if not prices_url.endswith("database.csv"):
         print("::warning::利回り分子: split_adjustmentsのURLを決定できず従来計算")
@@ -954,21 +980,7 @@ def load_yield_split_adjustments(prices_url: str) -> list[dict[str, Any]] | None
              "--max-time", "30", url], capture_output=True, check=True,
         )
         document = json.loads(completed.stdout)
-        if not isinstance(document, dict) or not isinstance(document.get("adjustments"), list):
-            raise ValueError("adjustmentsがarrayではありません")
-        active = []
-        for item in document["adjustments"]:
-            if not isinstance(item, dict) or type(item.get("active")) is not bool:
-                raise ValueError("activeがtrue/falseではありません")
-            if not item["active"]:
-                continue
-            ratio = finite_number(item.get("ratio"))
-            if (normalized_code(item.get("code")) != item.get("code")
-                    or not item.get("code") or ratio is None or ratio <= 0):
-                raise ValueError("有効イベントの銘柄または比率が不正です")
-            date.fromisoformat(item["execution_date"])
-            active.append(item)
-        return active
+        return parse_yield_split_adjustments(document, allow_missing_active=allow_missing_active)
     except (OSError, subprocess.CalledProcessError, ValueError, TypeError, KeyError):
         # curlのstderrや任意URLを出さず、認証情報をログへ漏らさない。
         print("::warning::利回り分子: split_adjustments取得・検証失敗、従来計算")
@@ -1060,6 +1072,60 @@ def yield_numerator_factor(
             continue
         factor *= event_factor
     return factor
+
+
+def daily_csv_yield_numerator(
+    code: str, raw: float | None, events: list[dict[str, Any]],
+    adjustment: dict[str, Any] | None, *, fiscal_month: int | None,
+    active_adjustments: list[dict[str, Any]] | None, today: date,
+    override_event_ids: frozenset[str],
+) -> float | None:
+    """af37c5ccのE列計算。安全装置の比較値とフォールバックで共用する。"""
+    if adjustment is not None and finite_number(raw) is not None:
+        return float(raw) * yield_numerator_factor(
+            code, events, adjustment,
+            source_year=load_yield_source_year(code, REPOSITORY_ROOT / "edinet"),
+            fiscal_month=fiscal_month, active_adjustments=active_adjustments,
+            today=today, override_event_ids=override_event_ids,
+        )
+    return raw
+
+
+def yield_split_guard_reason(
+    code: str, series_latest: float, previous: float | None,
+    events: list[dict[str, Any]], active_adjustments: list[dict[str, Any]] | None,
+) -> str | None:
+    """分割取り込み漏れの疑い。棒を修正せず旧分子の使用理由を返す。"""
+    old = finite_number(previous)
+    if old is None or old <= 0:
+        return None
+    for item in active_adjustments or []:
+        if item.get("code") != code or item.get("active", True) is not True:
+            continue
+        execution = date.fromisoformat(item["execution_date"])
+        ratio = float(item["ratio"])
+        reflected = any(
+            event.get("securityCode") == code
+            and event.get("action") == "split"
+            and finite_number(event.get("oldShares")) is not None
+            and event["oldShares"] > 0
+            and finite_number(event.get("newShares")) is not None
+            and abs((event["newShares"] / event["oldShares"]) / ratio - 1) <= 0.001 + 1e-12
+            and 0 <= (date.fromisoformat(event["effectiveDate"]) - execution).days <= 7
+            for event in events
+        )
+        if not reflected:
+            return "kouhaitou_split_unreflected"
+    relative = finite_number(series_latest / old)
+    if relative is None or relative <= 0:
+        return None
+    for candidate in (relative, 1 / relative):
+        if finite_number(candidate) is None or candidate < 1.8:
+            continue
+        nearest = round(candidate)
+        if nearest >= 2 and abs(candidate / nearest - 1) <= 0.03 + 1e-12:
+            return "split_like_ratio"
+    return None
 
 
 def adjustment_factor_for_period(
@@ -1881,6 +1947,10 @@ def create_database(
         raise ValueError("all_financialsに4桁英数でないコードがあります")
     daily_prices, daily_dividends, prices_updated = load_daily_prices(prices_url)
     yield_split_adjustments = load_yield_split_adjustments(prices_url)
+    guard_split_adjustments = (
+        yield_split_adjustments if yield_split_adjustments is not None else
+        load_yield_split_adjustments(prices_url, allow_missing_active=True)
+    )
     yield_overrides = load_yield_numerator_overrides(DEFAULT_YIELD_NUMERATOR_OVERRIDES)
     # kouhaitou-dbが株価のみ更新ワークフロー（前場寄付/後場引けの1日2回）を
     # 導入している場合、隣にある price_update_meta.json からセッション名を読む。
@@ -1997,25 +2067,6 @@ def create_database(
                     adjusted_stocks += 1
                     applied_events += len(adjustment["events"])
                 effective_price = daily_price
-                daily_yield = None
-                # CSVの分子を、系列とは独立した規則で現在株価基準へ揃える。
-                numerator = daily_dividends.get(code)
-                # kouhaitou-dbが把握していて年間配当0＝現在無配。
-                # この場合は過去の配当履歴に遡らない（東電の2010年60円のような
-                # 十数年前の金額で利回りを出してしまうため）。
-                currently_unpaid = numerator is not None and float(numerator) <= 0
-                if adjustment is not None and finite_number(numerator) is not None:
-                    numerator = (
-                        float(numerator) * yield_numerator_factor(
-                            code, stock_actions_by_code.get(code, []), adjustment,
-                            source_year=load_yield_source_year(code, REPOSITORY_ROOT / "edinet"),
-                            fiscal_month=fiscal_record.get("fiscalMonth") if fiscal_record else None,
-                            active_adjustments=yield_split_adjustments,
-                            today=today, override_event_ids=yield_overrides,
-                        )
-                    )
-                if daily_price and numerator is not None and float(numerator) > 0:
-                    daily_yield = round(float(numerator) / daily_price * 100, 2)
                 forecast_record = apply_forecast_override(
                     code, forecasts.get(code), forecast_overrides or {}
                 )
@@ -2196,6 +2247,59 @@ def create_database(
                         "externalYears": sorted(series),
                     }
 
+                # 利回りは完成したグラフのannualを直接読む。予想・短信の
+                # annualPending/annualPartialを足す前に選び、二重補正を防ぐ。
+                daily_yield = None
+                currently_unpaid = False
+                if fiscal is not None:
+                    annual = payload["annual"]
+                    numerator_year = max(annual, key=int)
+                    numerator = annual[numerator_year]
+                    # 旧分子だけをE列専用規則で計算する。棒には掛けない。
+                    previous = daily_csv_yield_numerator(
+                        code, daily_dividends.get(code), stock_actions_by_code.get(code, []),
+                        adjustment, fiscal_month=fiscal.get("fiscalMonth"),
+                        active_adjustments=yield_split_adjustments, today=today,
+                        override_event_ids=yield_overrides,
+                    )
+                    guard_reason = yield_split_guard_reason(
+                        code, numerator, previous, stock_actions_by_code.get(code, []),
+                        guard_split_adjustments,
+                    )
+                    payload["dividendYieldBasis"] = {
+                        "source": "fiscal_series",
+                        "fiscalYear": int(numerator_year),
+                        "annualDividend": numerator,
+                    }
+                    if guard_reason:
+                        payload["dividendYieldBasis"] = {
+                            "source": "daily_csv_split_guard",
+                            "fiscalYear": load_yield_source_year(code, REPOSITORY_ROOT / "edinet"),
+                            "annualDividend": previous,
+                            "seriesLatestDividend": numerator,
+                            "guardReason": guard_reason,
+                        }
+                        numerator = previous
+                    if daily_price:
+                        daily_yield = round(numerator / daily_price * 100, 2)
+                else:
+                    # 事業年度系列が無い場合だけ、E列＋従来の補正规則を使う。
+                    numerator = daily_dividends.get(code)
+                    currently_unpaid = numerator is not None and float(numerator) <= 0
+                    numerator_year = load_yield_source_year(code, REPOSITORY_ROOT / "edinet")
+                    numerator = daily_csv_yield_numerator(
+                        code, numerator, stock_actions_by_code.get(code, []), adjustment,
+                        fiscal_month=None, active_adjustments=yield_split_adjustments,
+                        today=today, override_event_ids=yield_overrides,
+                    )
+                    if daily_price and numerator is not None and float(numerator) > 0:
+                        daily_yield = round(float(numerator) / daily_price * 100, 2)
+                    payload["dividendYieldBasis"] = {
+                        "source": "daily_csv",
+                        "fiscalYear": numerator_year,
+                        "annualDividend": numerator,
+                    }
+
                 # まだ系列に載っていない事業年度を、会社発表の予想・確定額で足す。
                 # 以前ここに出していたYahooの「集計中」（権利落ちベースの暦年
                 # 途中累計）の置き換え。
@@ -2263,7 +2367,7 @@ def create_database(
                         payload["dailyPricesAsOf"] = price_session_as_of
                 if daily_yield is not None:
                     payload["dividendYield"] = daily_yield
-                elif currently_unpaid:
+                elif currently_unpaid or (fiscal is not None and "dividendYield" in payload):
                     # dividends.json由来の古い利回りが銘柄詳細に残らないようにする
                     payload["dividendYield"] = None
                 payload["forecastDividend"] = forecast_dividend

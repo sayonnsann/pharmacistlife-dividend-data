@@ -1,15 +1,85 @@
 #!/usr/bin/env python3
-"""利回り分子の旧/新計算を全CSV銘柄で比較する（生成データは変更しない）。"""
+"""利回り分子のCSV補正比較と、完成したストアの全事業年度系列を検査する。"""
 from __future__ import annotations
 
 import argparse
 import json
 import shutil
+import sqlite3
 import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
 import build_store as store
+
+
+def audit_fiscal_payloads(payloads, split_adjustments=None):
+    """計算経路を再現せず、画面へ渡すannualと分子の完全一致を検査する。"""
+    matches = []
+    mismatches = []
+    daily_csv = []
+    guarded = []
+    guard_mismatches = []
+    for code, payload in sorted(payloads.items()):
+        if (payload.get("dividendSeries") or {}).get("basis") != "fiscal":
+            daily_csv.append(code)
+            continue
+        annual = payload.get("annual") or {}
+        candidates = []
+        for year, value in annual.items():
+            try:
+                fiscal_year = int(year)
+            except (TypeError, ValueError):
+                continue
+            if store.finite_number(value) is not None:
+                candidates.append((fiscal_year, value))
+        expected_year, expected = max(candidates) if candidates else (None, None)
+        basis = payload.get("dividendYieldBasis") or {}
+        if basis.get("source") == "daily_csv_split_guard":
+            previous = store.finite_number(basis.get("annualDividend"))
+            records = [dict(execution_date=item["execution_date"], ratio=item["ratio"])
+                       for item in split_adjustments or [] if item["code"] == code]
+            guarded.append(dict(
+                code=code, name=payload.get("name"), old_numerator=previous,
+                series_latest_dividend=expected,
+                ratio=expected / previous if expected is not None and previous and previous > 0 else None,
+                guard_reason=basis.get("guardReason"), kouhaitou_splits=records,
+            ))
+            if (expected is None or previous is None or previous <= 0
+                    or basis.get("seriesLatestDividend") != expected
+                    or basis.get("guardReason") not in ("kouhaitou_split_unreflected", "split_like_ratio")):
+                guard_mismatches.append(dict(code=code, expected=expected, actual=basis))
+            continue
+        if (expected_year is not None and basis.get("source") == "fiscal_series"
+                and type(basis.get("fiscalYear")) is int
+                and basis["fiscalYear"] == expected_year
+                and basis.get("annualDividend") == expected):
+            matches.append(code)
+        else:
+            mismatches.append(dict(code=code, expected_fiscal_year=expected_year,
+                                   expected_annual_dividend=expected, actual=basis))
+    reason_counts = {reason: sum(row["guard_reason"] == reason for row in guarded)
+                     for reason in ("kouhaitou_split_unreflected", "split_like_ratio")}
+    return dict(total=len(payloads), fiscal_series_count=len(matches) + len(mismatches) + len(guarded),
+                matched_count=len(matches), mismatch_count=len(mismatches),
+                mismatches=mismatches, daily_csv_count=len(daily_csv),
+                excluded_guard_count=len(guarded), guarded=guarded,
+                guard_mismatch_count=len(guard_mismatches), guard_mismatches=guard_mismatches,
+                guard_reason_counts=reason_counts, split_records_available=split_adjustments is not None,
+                ratio_guard_without_kouhaitou_record_count=(
+                    sum(row["guard_reason"] == "split_like_ratio" and not row["kouhaitou_splits"]
+                        for row in guarded) if split_adjustments is not None else None),
+                )
+
+
+def audit_store(path, split_adjustments_path=None):
+    with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True) as conn:
+        payloads = {code: json.loads(raw) for code, raw in
+                    conn.execute("SELECT code,payload FROM stocks")}
+    active = (store.parse_yield_split_adjustments(store.load_json(split_adjustments_path, dict),
+                                                 allow_missing_active=True)
+              if split_adjustments_path is not None else None)
+    return audit_fiscal_payloads(payloads, active)
 
 
 def audit(prices_url, fiscal_path, action_paths, edinet_dir, *, today,
@@ -77,9 +147,10 @@ def audit(prices_url, fiscal_path, action_paths, edinet_dir, *, today,
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--prices", type=Path, required=True)
-    parser.add_argument("--split-adjustments", type=Path, required=True)
-    parser.add_argument("--fiscal-dividends", type=Path, required=True)
+    parser.add_argument("--store", type=Path, help="完成したSQLiteの全事業年度系列を検査")
+    parser.add_argument("--prices", type=Path)
+    parser.add_argument("--split-adjustments", type=Path)
+    parser.add_argument("--fiscal-dividends", type=Path)
     parser.add_argument("--edinet-dir", type=Path, default=store.REPOSITORY_ROOT / "edinet")
     parser.add_argument("--stock-actions", type=Path, default=store.DEFAULT_STOCK_ACTIONS)
     parser.add_argument("--stock-actions-extracted", type=Path,
@@ -91,6 +162,15 @@ def main():
     parser.add_argument("--as-of", type=date.fromisoformat, default=datetime.now(store.JST).date())
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if args.store:
+        result = audit_store(args.store, args.split_adjustments)
+        args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if result["mismatch_count"] or result["guard_mismatch_count"]:
+            raise SystemExit(1)
+        return
+    if any(value is None for value in (args.prices, args.split_adjustments, args.fiscal_dividends)):
+        parser.error("--store または --prices/--split-adjustments/--fiscal-dividends が必要です")
     # ローカルの任意ファイル名も本番と同じ取得・検証関数を通す。
     with tempfile.TemporaryDirectory() as directory:
         split_file = Path(directory) / "split_adjustments.json"

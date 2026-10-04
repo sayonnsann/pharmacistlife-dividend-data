@@ -1956,7 +1956,9 @@ class StreakBasisFlagTest(unittest.TestCase):
             code for code, record in loaded.items() if not record["streakReliable"]
         ]
         self.assertGreater(len(unreliable), 10)
-        self.assertIn("2436", unreliable)
+        # 基準を修正した銘柄はreliableへ戻るため、以前の2436を固定しない。
+        # 最新入力で判定不能と注記されている代表銘柄を検査する。
+        self.assertIn("8316", unreliable)
         self.assertNotIn("9433", unreliable)
 
 

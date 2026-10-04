@@ -75,6 +75,17 @@ def read_payloads(path):
         return {code: json.loads(raw) for code, raw in conn.execute('SELECT code,payload FROM stocks')}
 
 
+def compare_stock_columns(before_path, after_path):
+    """一覧の全列も検査する。payloadはcompare_payloadsで項目ごとに比較する。"""
+    snapshots = []
+    for path in (before_path, after_path):
+        with sqlite3.connect(f'{path.resolve().as_uri()}?mode=ro', uri=True) as conn:
+            conn.row_factory = sqlite3.Row
+            snapshots.append({row['code']: {key: row[key] for key in row.keys() if key != 'payload'}
+                              for row in conn.execute('SELECT * FROM stocks')})
+    return compare_payloads(*snapshots)
+
+
 def run(args):
     args.output_dir.mkdir(parents=True, exist_ok=False)
     root = args.repo.resolve()
@@ -83,7 +94,7 @@ def run(args):
         before_path = args.before_code
         head = None
         if before_path is None:
-            head = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip()
+            head = subprocess.check_output(['git', '-C', str(root), 'rev-parse', args.before_ref], text=True).strip()
             before_path = temp / 'build_store_head.py'
             before_path.write_bytes(subprocess.check_output(
                 ['git', '-C', str(root), 'show', f'{head}:scripts/build_store.py']))
@@ -117,6 +128,9 @@ def run(args):
             prices_url, args.fiscal_dividends, after_actions, root / 'edinet',
             today=args.as_of, baseline_action_paths=before_actions,
             overrides_path=root / 'data/yield_numerator_overrides.json')
+        payloads = {label: read_payloads((args.output_dir / f'{label}.sqlite').resolve())
+                    for label in ('before', 'after')}
+        numerator['rows'] = [row for row in numerator['rows'] if row['code'] in payloads['after']]
         # Evaluate each selected implementation, including a modern baseline in stage two.
         fiscal = after.load_fiscal_dividends(args.fiscal_dividends)
         for label, module, paths in [('before', before, before_actions), ('after', after, after_actions)]:
@@ -127,24 +141,39 @@ def run(args):
                          if hasattr(module, 'yield_numerator_factor') else frozenset())
             for row in numerator['rows']:
                 code = row['code']
-                adjustment = module.split_adjustment(events.get(code, []))
-                factor = adjustment['dividendFactor'] if adjustment else 1.0
-                if hasattr(module, 'yield_numerator_factor'):
-                    factor = module.yield_numerator_factor(
-                        code, events.get(code, []), adjustment,
-                        source_year=module.load_yield_source_year(code, root / 'edinet'),
-                        fiscal_month=fiscal.get(code, {}).get('fiscalMonth'),
-                        active_adjustments=active, today=args.as_of, override_event_ids=overrides)
-                row[label] = row['raw'] * factor
-                row[label + '_yield'] = round(row[label] / row['price'] * 100, 2)
+                payload = payloads[label][code]
+                basis = payload.get('dividendYieldBasis')
+                if basis is not None:
+                    row[label] = basis['annualDividend']
+                else:
+                    adjustment = module.split_adjustment(events.get(code, []))
+                    factor = adjustment['dividendFactor'] if adjustment else 1.0
+                    if hasattr(module, 'yield_numerator_factor'):
+                        factor = module.yield_numerator_factor(
+                            code, events.get(code, []), adjustment,
+                            source_year=module.load_yield_source_year(code, root / 'edinet'),
+                            fiscal_month=fiscal.get(code, {}).get('fiscalMonth'),
+                            active_adjustments=active, today=args.as_of, override_event_ids=overrides)
+                    row[label] = row['raw'] * factor
+                row[label + '_basis'] = basis
+                # 丸めや無配・欠損の扱いも、完成した画面payloadを報告する。
+                row[label + '_yield'] = payload.get('dividendYield')
                 reference = row['reference']
-                ratio = row[label] / reference if reference is not None and reference > 0 else None
+                ratio = row[label] / reference if (row[label] is not None
+                                                  and reference is not None and reference > 0) else None
                 row[label + '_ratio'] = ratio
                 row[label + '_bad'] = ratio is not None and not 0.6 <= ratio <= 1.6
             numerator[label + '_bad'] = [row['code'] for row in numerator['rows'] if row[label + '_bad']]
         numerator['newly_bad'] = sorted(set(numerator['after_bad']) - set(numerator['before_bad']))
-        comparison = compare_payloads(read_payloads((args.output_dir / 'before.sqlite').resolve()),
-                                      read_payloads((args.output_dir / 'after.sqlite').resolve()))
+        numerator['total'] = len(numerator['rows'])
+        numerator['compared'] = sum(row['reference'] is not None and row['reference'] > 0
+                                   for row in numerator['rows'])
+        numerator['fiscal_series_audit'] = audit_yield_numerator.audit_fiscal_payloads(
+            payloads['after'], after.parse_yield_split_adjustments(
+                after.load_json(args.split_adjustments, dict), allow_missing_active=True))
+        comparison = compare_payloads(payloads['before'], payloads['after'])
+        comparison['stock_columns'] = compare_stock_columns(args.output_dir / 'before.sqlite',
+                                                            args.output_dir / 'after.sqlite')
         comparison.update(as_of=args.as_of.isoformat(), baseline_head=head, coverage=coverage,
                           missing_inputs=[key for key, value in [('forecasts', args.forecasts),
                                                                ('price_session_meta', args.price_meta)] if value is None or not value.exists()],
@@ -161,6 +190,8 @@ def run(args):
         for name, document in [('payload_diff', comparison), ('numerator', numerator)]:
             (args.output_dir / f'{name}.json').write_text(json.dumps(document, ensure_ascii=False, indent=2) + '\n')
     print(json.dumps(dict(payload_counts=comparison['changed_counts'],
+                          stock_column_counts=comparison['stock_columns']['changed_counts'],
+                          fiscal_series_audit=numerator['fiscal_series_audit'],
                           before_bad=len(numerator['before_bad']), after_bad=len(numerator['after_bad']),
                           newly_bad=numerator['newly_bad']), ensure_ascii=False, indent=2))
 
@@ -168,6 +199,7 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repo', type=Path, default=ROOT)
+    parser.add_argument('--before-ref', default='HEAD', help='比較基準のGit ref（既定HEAD）')
     for option in ('before-code', 'after-code', 'forecasts', 'price-meta'):
         parser.add_argument('--' + option, type=Path)
     for option, default in [('financials', ROOT / 'data/all_financials.json'),

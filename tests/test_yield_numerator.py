@@ -142,10 +142,10 @@ class YieldNumeratorTest(unittest.TestCase):
         with mock.patch.object(store.subprocess, 'run', side_effect=OSError()):
             self.assertIsNone(store.load_yield_split_adjustments('file:///tmp/database.csv'))
 
-    def test_database_wires_factor_without_changing_series_or_eps(self):
+    def test_database_uses_adjusted_series_without_changing_eps(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'stocks.sqlite'
-            with (mock.patch.object(store, 'load_daily_prices', return_value=({'1234': 100}, {'1234': 10}, '')),
+            with (mock.patch.object(store, 'load_daily_prices', return_value=({'1234': 100}, {'1234': 12}, '')),
                   mock.patch.object(store, 'load_price_session_meta', return_value=None),
                   mock.patch.object(store, 'load_yield_split_adjustments', return_value=[dict(code='1234', execution_date='2026-04-01', ratio=2)]),
                   mock.patch.object(store, 'load_yield_source_year', return_value=2026)):
@@ -174,20 +174,25 @@ class YieldNumeratorOverrideIntegrationTest(unittest.TestCase):
     """明示指定ファイルが分子の計算へ接続されていることを確認する。"""
 
     def build(self, financial, events, *, fiscal=None, calendar=None, forecast=None,
-              code='1234', dividend=42):
+              code='1234', dividend=42, source_year=2026, price=1000, active_adjustments=None):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'stocks.sqlite'
-            with (mock.patch.object(store, 'load_daily_prices', return_value=({code: 1000}, {code: dividend}, 'fixture')),
+            with (mock.patch.object(store, 'load_daily_prices', return_value=(
+                    {code: price} if price else {}, {code: dividend}, 'fixture')),
                   mock.patch.object(store, 'load_price_session_meta', return_value=None),
-                  mock.patch.object(store, 'load_yield_split_adjustments', return_value=[]),
-                  mock.patch.object(store, 'load_yield_source_year', return_value=2026)):
+                  mock.patch.object(store, 'load_yield_split_adjustments', return_value=active_adjustments or []),
+                  mock.patch.object(store, 'load_yield_source_year', return_value=source_year)):
                 store.create_database(
                     path, [dict(code=code, name='Example', **financial)], {}, {},
                     {code: forecast} if forecast else {}, [Path('fixture')] * 4,
                     'fixture.csv', {code: events}, fiscal_by_code={code: fiscal} if fiscal else {},
                     calendar_by_code={code: calendar} if calendar else {}, today=date(2026, 10, 4))
             with sqlite3.connect(path) as conn:
-                return json.loads(conn.execute('SELECT payload FROM stocks').fetchone()[0])
+                list_yield, raw = conn.execute('SELECT yield,payload FROM stocks').fetchone()
+                payload = json.loads(raw)
+            if fiscal:
+                self.assertEqual(list_yield, store.bounded(payload['dividendYield'], 0, 30))
+            return payload
 
     @staticmethod
     def fiscal(series, applied=None):
@@ -196,7 +201,7 @@ class YieldNumeratorOverrideIntegrationTest(unittest.TestCase):
                     connectionReason='fixture')
 
 
-    def test_8227_override_is_loaded_by_database(self):
+    def test_8227_uses_series_despite_csv_override(self):
         e = event('2026-02-21', new=3)
         e.update(eventId='8227-2026-02-21-split-1-to-3', securityCode='8227',
                  epsAdjustedByIssuer=True)
@@ -205,3 +210,181 @@ class YieldNumeratorOverrideIntegrationTest(unittest.TestCase):
         payload = self.build({}, [e], code='8227', dividend=215, fiscal=fiscal)
         self.assertEqual(payload['dividendYield'], 7.17)  # fixture株価1000円
         self.assertEqual(payload['annual']['2026'], 71.67)
+
+    def test_split_series_bypasses_csv_factor_and_selects_max_year(self):
+        e = event(new=3)
+        fiscal = self.fiscal({2026: 90, 2024: 12, 2025: 60})
+        original = copy.deepcopy(fiscal)
+        with mock.patch.object(store, 'yield_numerator_factor', return_value=.75) as factor:
+            payload = self.build({}, [e], fiscal=fiscal, dividend=60)
+        factor.assert_called_once()  # 旧分子の45円だけを計算。棒の30円には掛けない。
+        self.assertEqual(fiscal, original)
+        self.assertEqual(payload['annual']['2026'], 30)
+        self.assertEqual(payload['dividendYield'], 3)
+        self.assertEqual(payload['dividendYieldBasis'], dict(
+            source='fiscal_series', fiscalYear=2026, annualDividend=30))
+
+    def test_latest_zero_does_not_use_previous_year_or_csv(self):
+        payload = self.build({'dividendYield': 88}, [], dividend=123,
+                             fiscal=self.fiscal({2026: 0, 2024: 100, 2025: 200}))
+        self.assertEqual(payload['dividendYield'], 0)
+        self.assertEqual(payload['dividendYieldBasis']['annualDividend'], 0)
+        self.assertEqual(payload['dividendYieldBasis']['fiscalYear'], 2026)
+
+    def test_csv_zero_does_not_hide_positive_fiscal_series(self):
+        payload = self.build({}, [], dividend=0, fiscal=self.fiscal({2026: 40}))
+        self.assertEqual(payload['dividendYield'], 4)
+
+    def test_pending_and_partial_are_not_yield_sources(self):
+        forecast = dict(confirmedDividend=80, confirmedFiscalYearEnd='2026-03-31',
+                        forecastDividend=90, forecastFiscalYear=2027,
+                        forecastPeriod='2027年3月期(予)')
+        payload = self.build({}, [], fiscal=self.fiscal({2025: 30}), forecast=forecast)
+        self.assertEqual(payload['annualPartial'], {'2026': 80, '2027': 90})
+        self.assertEqual(payload['dividendYield'], 3)
+        self.assertEqual(payload['dividendYieldBasis']['fiscalYear'], 2025)
+
+    def test_missing_series_keeps_csv_adjustment_even_with_calendar_bars(self):
+        with mock.patch.object(store, 'yield_numerator_factor', wraps=store.yield_numerator_factor) as factor:
+            payload = self.build({}, [event()], dividend=42,
+                                 calendar={'series': {2026: 900}})
+        factor.assert_called_once()
+        self.assertEqual(payload['dividendYield'], 2.1)
+        self.assertEqual(payload['dividendYieldBasis'], dict(
+            source='daily_csv', fiscalYear=2026, annualDividend=21))
+        self.assertEqual(payload['annual']['2026'], 900)
+
+    def test_missing_csv_year_is_null_and_unpaid_display_is_preserved(self):
+        payload = self.build({'dividendYield': 99}, [], dividend=0, source_year=None)
+        self.assertIsNone(payload['dividendYield'])
+        self.assertEqual(payload['dividendYieldBasis'], dict(
+            source='daily_csv', fiscalYear=None, annualDividend=0))
+
+    def test_missing_price_does_not_leave_an_unrelated_legacy_yield(self):
+        payload = self.build({'dividendYield': 99}, [], price=None,
+                             fiscal=self.fiscal({2026: 40}))
+        self.assertIsNone(payload['dividendYield'])
+        self.assertEqual(payload['dividendYieldBasis']['annualDividend'], 40)
+
+    def test_guard_uses_csv_for_unmatched_kouhaitou_split_even_without_integer_ratio(self):
+        active = [dict(code='1234', execution_date='2026-03-30', ratio=3)]
+        payload = self.build({}, [], dividend=30, source_year=2025,
+                             fiscal=self.fiscal({2026: 40}), active_adjustments=active)
+        self.assertEqual(payload['annual']['2026'], 40)
+        self.assertEqual(payload['dividendYield'], 3)
+        self.assertEqual(payload['dividendYieldBasis'], dict(
+            source='daily_csv_split_guard', fiscalYear=2025, annualDividend=30,
+            seriesLatestDividend=40, guardReason='kouhaitou_split_unreflected'))
+
+    def test_guard_ratio_and_reciprocal_use_actual_legacy_numerator(self):
+        for latest, raw, events, expected, guarded in [
+            (60, 30, [], 30, True), (30, 60, [], 60, True),
+            (120, 90, [event()], 60, False),
+        ]:
+            # 最後は棒120/2=60と旧分子90/2=45。整数比でないため発動しない。
+            payload = self.build({}, events, dividend=raw, fiscal=self.fiscal({2026: latest}))
+            self.assertEqual(payload['dividendYieldBasis']['source'],
+                             'daily_csv_split_guard' if guarded else 'fiscal_series')
+            self.assertEqual(payload['dividendYield'], expected / 10)
+            if guarded:
+                self.assertEqual(payload['dividendYieldBasis']['guardReason'], 'split_like_ratio')
+
+    def test_zero_or_missing_previous_does_not_guard_even_with_split_record(self):
+        active = [dict(code='1234', execution_date='2026-03-30', ratio=3)]
+        for previous in (0, None):
+            payload = self.build({}, [], dividend=previous,
+                                 fiscal=self.fiscal({2026: 60}), active_adjustments=active)
+            self.assertEqual(payload['dividendYield'], 6)
+            self.assertEqual(payload['dividendYieldBasis']['source'], 'fiscal_series')
+
+    def test_matched_ledger_event_and_equal_numerators_do_not_guard(self):
+        e = event()
+        active = [dict(code='1234', execution_date='2026-03-30', ratio=2, active=True)]
+        payload = self.build({}, [e], dividend=40, active_adjustments=active,
+                             fiscal=self.fiscal({2026: 40}, [{'effectiveDate': e['effectiveDate']}]))
+        self.assertEqual(payload['annual']['2026'], 40)
+        self.assertEqual(payload['dividendYield'], 4)
+        self.assertEqual(payload['dividendYieldBasis']['source'], 'fiscal_series')
+
+
+class SplitGuardRulesTest(unittest.TestCase):
+    def test_ratio_boundaries_and_non_integer_increases(self):
+        for ratio, expected in [(1.8, False), (1.9399, False), (1.94, True),
+                                (2, True), (2.06, True), (2.0601, False),
+                                (1.3, False), (1.5, False), (1.7, False), (15, True)]:
+            for value in (ratio, 1 / ratio):
+                with self.subTest(ratio=value):
+                    result = store.yield_split_guard_reason('1234', value * 100, 100, [], [])
+                    self.assertEqual(result, 'split_like_ratio' if expected else None)
+        self.assertIsNone(store.yield_split_guard_reason('1234', 0, 100, [], []))
+
+    def test_record_matches_code_ratio_and_zero_to_seven_day_window(self):
+        record = dict(code='1234', execution_date='2026-03-30', ratio=2)
+        for day, ratio, code, reflected in [
+            ('2026-03-29', 2, '1234', False), ('2026-03-30', 2, '1234', True),
+            ('2026-04-06', 2, '1234', True), ('2026-04-07', 2, '1234', False),
+            ('2026-04-01', 1.998, '1234', True), ('2026-04-01', 2.002, '1234', True),
+            ('2026-04-01', 1.9979, '1234', False), ('2026-04-01', 2.0021, '1234', False),
+            ('2026-04-01', 2, '5678', False),
+        ]:
+            e = event(day, new=ratio)
+            e['securityCode'] = code
+            result = store.yield_split_guard_reason('1234', 40, 30, [e], [record])
+            self.assertEqual(result, None if reflected else 'kouhaitou_split_unreflected')
+        self.assertIsNone(store.yield_split_guard_reason('1234', 40, 30, [], [{**record, 'active': False}]))
+        # 台帳一致は記録条件を解除する。整数比条件は独立したOR条件。
+        self.assertEqual(store.yield_split_guard_reason('1234', 60, 30, [event()], [record]),
+                         'split_like_ratio')
+
+    def test_active_omission_is_only_allowed_for_guard_view(self):
+        document = {'adjustments': [dict(code='1234', execution_date='2026-03-30', ratio=2)]}
+        with self.assertRaises(ValueError):
+            store.parse_yield_split_adjustments(document)
+        self.assertEqual(store.parse_yield_split_adjustments(document, allow_missing_active=True),
+                         document['adjustments'])
+        for value in (None, 1, 'true'):
+            with self.assertRaises(ValueError):
+                store.parse_yield_split_adjustments(
+                    {'adjustments': [{**document['adjustments'][0], 'active': value}]}, allow_missing_active=True)
+
+
+class FiscalNumeratorAuditTest(unittest.TestCase):
+    def test_guards_are_excluded_and_exported_with_split_records(self):
+        def payload(reason, value=60):
+            return dict(name='Example', dividendSeries={'basis': 'fiscal'}, annual={'2026': 60},
+                        dividendYieldBasis=dict(source='daily_csv_split_guard', fiscalYear=2025,
+                                                annualDividend=30, seriesLatestDividend=value, guardReason=reason))
+        report = audit_tool.audit_fiscal_payloads(
+            {'1234': payload('kouhaitou_split_unreflected'), '5678': payload('split_like_ratio'),
+             '9012': payload('split_like_ratio', 59)},
+            [dict(code='1234', execution_date='2026-03-30', ratio=2)])
+        self.assertEqual(report['fiscal_series_count'], 3)
+        self.assertEqual(report['excluded_guard_count'], 3)
+        self.assertEqual(report['matched_count'], 0)
+        self.assertEqual(report['mismatch_count'], 0)
+        self.assertEqual(report['guard_mismatch_count'], 1)
+        self.assertEqual(report['ratio_guard_without_kouhaitou_record_count'], 2)
+        self.assertEqual(report['guarded'][0]['kouhaitou_splits'],
+                         [dict(execution_date='2026-03-30', ratio=2)])
+        self.assertEqual(report['guarded'][1]['ratio'], 2)
+
+    def test_exact_match_including_zero_and_unsorted_years(self):
+        report = audit_tool.audit_fiscal_payloads({
+            '1234': dict(dividendSeries={'basis': 'fiscal'}, annual={'2026': 0, '2027': None, '2025': 90},
+                         dividendYieldBasis=dict(source='fiscal_series', fiscalYear=2026, annualDividend=0)),
+            '414A': dict(dividendSeries={'basis': 'calendar'}, annual={'2026': 100}),
+        })
+        self.assertEqual(report['matched_count'], 1)
+        self.assertEqual(report['mismatch_count'], 0)
+        self.assertEqual(report['daily_csv_count'], 1)
+
+    def test_reports_missing_basis_wrong_year_and_small_numeric_mismatch(self):
+        payload = dict(dividendSeries={'basis': 'fiscal'}, annual={'2025': 30, '2026': 40})
+        report = audit_tool.audit_fiscal_payloads({
+            '1234': payload,
+            '5678': dict(payload, dividendYieldBasis=dict(source='fiscal_series', fiscalYear=2025, annualDividend=40)),
+            '9012': dict(payload, dividendYieldBasis=dict(source='fiscal_series', fiscalYear=2026, annualDividend=40.0001)),
+        })
+        self.assertEqual(report['matched_count'], 0)
+        self.assertEqual(report['mismatch_count'], 3)
+        self.assertEqual([row['code'] for row in report['mismatches']], ['1234', '5678', '9012'])

@@ -96,6 +96,24 @@
       "checkedAt": "2026-08-19"
     },
     {
+      "eventId": "4577-2025-06-01-split-1-to-2",
+      "securityCode": "4577",
+      "name": "ダイト",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2025-06-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100WLMY.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(4577-2025-06-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-09-04"
+    },
+    {
       "eventId": "9305-2025-06-01-split-1-to-2",
       "securityCode": "9305",
       "name": "ヤマタネ",
@@ -112,6 +130,24 @@
       },
       "note": "edinet-direct側マスター(9305-2025-06-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-08-09"
+    },
+    {
+      "eventId": "2938-2025-07-01-split-1-to-3",
+      "securityCode": "2938",
+      "name": "株式会社オカムラ食品工業",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2025-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100WQVV.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(2938-2025-07-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-09-05"
     },
     {
       "eventId": "5137-2025-07-01-split-1-to-6",
@@ -132,6 +168,24 @@
       "checkedAt": "2026-08-17"
     },
     {
+      "eventId": "6874-2025-07-01-split-1-to-2",
+      "securityCode": "6874",
+      "name": "協立電機",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2025-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://moneyworld.jp/news/PIW6248_headline",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(6874-2025-07-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-21"
+    },
+    {
       "eventId": "6574-2025-08-02-split-1-to-10",
       "securityCode": "6574",
       "name": "株式会社コンヴァノ",
@@ -147,6 +201,24 @@
         "type": "edinet"
       },
       "note": "edinet-direct側マスター(6574-2025-08-02-split-1-to-10)から自動生成",
+      "checkedAt": "2026-09-05"
+    },
+    {
+      "eventId": "340A-2025-09-01-split-1-to-3",
+      "securityCode": "340A",
+      "name": "株式会社ジグザグ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2025-09-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100WLLK.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(340A-2025-09-01-split-1-to-3)から自動生成",
       "checkedAt": "2026-09-05"
     },
     {
@@ -277,6 +349,42 @@
       "checkedAt": "2026-09-04"
     },
     {
+      "eventId": "7532-2025-10-01-split-1-to-5",
+      "securityCode": "7532",
+      "name": "パン・パシフィック・インターナショナルホールディングス",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 5,
+      "effectiveDate": "2025-10-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.nikkei.com/nkd/disclosure/tdnr/20250814542634/",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(7532-2025-10-01-split-1-to-5)から自動生成",
+      "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "7803-2025-10-01-split-1-to-2",
+      "securityCode": "7803",
+      "name": "ブシロード",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2025-10-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XL2C.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(7803-2025-10-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-09-04"
+    },
+    {
       "eventId": "9823-2025-10-01-split-1-to-5",
       "securityCode": "9823",
       "name": "マミーマートホールディングス",
@@ -385,6 +493,42 @@
       "checkedAt": "2026-09-03"
     },
     {
+      "eventId": "3916-2026-01-01-split-1-to-2",
+      "securityCode": "3916",
+      "name": "デジタル・インフォメーション・テクノロジー",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-01-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://ssl4.eir-parts.net/doc/3916/tdnet/2719314/00.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(3916-2026-01-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-08-27"
+    },
+    {
+      "eventId": "3986-2026-01-01-split-1-to-3",
+      "securityCode": "3986",
+      "name": "ビーブレイクシステムズ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-01-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://ssl4.eir-parts.net/doc/3986/tdnet/2714700/00.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(3986-2026-01-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-27"
+    },
+    {
       "eventId": "4107-2026-01-01-split-1-to-10",
       "securityCode": "4107",
       "name": "伊勢化学工業",
@@ -400,6 +544,24 @@
         "type": "edinet"
       },
       "note": "edinet-direct側マスター(4107-2026-01-01-split-1-to-10)から自動生成",
+      "checkedAt": "2026-09-04"
+    },
+    {
+      "eventId": "4396-2026-01-01-split-1-to-2",
+      "securityCode": "4396",
+      "name": "システムサポートホールディングス",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-01-01",
+      "status": "confirmed",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": true,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XKRR.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(4396-2026-01-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-09-04"
     },
     {
@@ -457,6 +619,24 @@
       "checkedAt": "2026-09-04"
     },
     {
+      "eventId": "4976-2026-01-01-split-1-to-3",
+      "securityCode": "4976",
+      "name": "東洋ドライルーブ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-01-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/49760/140120260514532203.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(4976-2026-01-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-08-02"
+    },
+    {
       "eventId": "6328-2026-01-01-split-1-to-2",
       "securityCode": "6328",
       "name": "荏原実業",
@@ -473,6 +653,24 @@
       },
       "note": "edinet-direct側マスター(6328-2026-01-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-09-04"
+    },
+    {
+      "eventId": "7409-2026-01-01-split-1-to-3",
+      "securityCode": "7409",
+      "name": "ＡｅｒｏＥｄｇｅ株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-01-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XKVM.pdf",
+        "type": "edinet"
+      },
+      "note": "edinet-direct側マスター(7409-2026-01-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-09-05"
     },
     {
       "eventId": "8057-2026-01-21-split-1-to-5",
@@ -1085,25 +1283,6 @@
       },
       "note": "edinet-direct側マスター(6083-2026-06-01-split-1-to-3)から自動生成",
       "checkedAt": "2026-08-17"
-    },
-    {
-      "eventId": "9305-2026-06-01-split-1-to-2",
-      "securityCode": "9305",
-      "name": "株式会社ヤマタネ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-06-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YEYD.pdf",
-        "type": "edinet",
-        "docID": "S100YEYD"
-      },
-      "note": "edinet-direct側マスター(9305-2026-06-01-split-1-to-2)から自動生成",
-      "checkedAt": "2026-09-28"
     },
     {
       "eventId": "1663-2026-07-01-split-1-to-2",

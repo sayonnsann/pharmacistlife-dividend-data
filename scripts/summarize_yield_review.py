@@ -51,8 +51,8 @@ def summarize(report):
     guards = []
     for row in changes.get("dividendYieldBasis", []):
         left, right = row.get("before") or {}, row.get("after") or {}
-        before = isinstance(left, dict) and left.get("source") == "daily_csv_split_guard"
-        after = isinstance(right, dict) and right.get("source") == "daily_csv_split_guard"
+        before = isinstance(left, dict) and (left.get("source") == "daily_csv_split_guard" or bool(left.get("guardReason")))
+        after = isinstance(right, dict) and (right.get("source") == "daily_csv_split_guard" or bool(right.get("guardReason")))
         if before != after:
             guards.append([code(row.get("code")), "付く" if after else "外れる"])
     # 入力名を自由文として公開せず、既知の不足だけを説明する。

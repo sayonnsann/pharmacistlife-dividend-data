@@ -35,7 +35,7 @@ def audit_fiscal_payloads(payloads, split_adjustments=None):
                 candidates.append((fiscal_year, value))
         expected_year, expected = max(candidates) if candidates else (None, None)
         basis = payload.get("dividendYieldBasis") or {}
-        if basis.get("source") == "daily_csv_split_guard":
+        if basis.get("source") == "daily_csv_split_guard" or basis.get("guardReason"):
             previous = store.finite_number(basis.get("annualDividend"))
             records = [dict(execution_date=item["execution_date"], ratio=item["ratio"])
                        for item in split_adjustments or [] if item["code"] == code]
@@ -46,9 +46,12 @@ def audit_fiscal_payloads(payloads, split_adjustments=None):
                 guard_reason=basis.get("guardReason"), kouhaitou_splits=records,
             ))
             if (expected is None or previous is None or previous <= 0
-                    or basis.get("seriesLatestDividend") != expected
+                    or (basis.get("seriesLatestDividend", basis.get("annualDividend")) != expected)
                     or basis.get("guardReason") not in ("kouhaitou_split_unreflected", "split_like_ratio")):
                 guard_mismatches.append(dict(code=code, expected=expected, actual=basis))
+            continue
+        if expected_year is None and basis.get("source") == "no_display_dividend":
+            daily_csv.append(code)
             continue
         if (expected_year is not None and basis.get("source") == "fiscal_series"
                 and type(basis.get("fiscalYear")) is int
@@ -106,12 +109,12 @@ def audit(prices_url, fiscal_path, action_paths, edinet_dir, *, today,
             active_adjustments=active, today=today, override_event_ids=overrides,
         )
         raw = dividends[code]
-        series = record.get("series", {})
+        series = record.get("displaySeries", {})
         reference = None
         if series:
             if adjustment:
                 pending = store.adjustment_for_unadjusted_series(
-                    adjustment, series, fiscal_month=month,
+                    adjustment, record.get("streakSeries", record.get("series", series)), fiscal_month=month,
                     applied_actions=record.get("appliedActions"),
                 )
                 series = {

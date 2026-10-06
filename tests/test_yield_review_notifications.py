@@ -1,3 +1,4 @@
+from fiscal_fixtures import annual_report_fixture
 import json
 import io
 import sqlite3
@@ -188,7 +189,7 @@ def test_build_report_uses_exact_split_snapshot_and_finished_payload_without_log
           patch.object(store, "load_yield_source_year", return_value=2025),
           redirect_stdout(io.StringIO()) as log):
         store.create_database(database, [{"code": "1234", "name": "テスト社"}], {}, {}, {},
-                              [Path("fixture")] * 4, "fixture.csv", {}, fiscal_by_code=fiscal,
+                              [Path("fixture")] * 4, "fixture.csv", {}, fiscal_by_code=annual_report_fixture(fiscal),
                               today=NOW.date(), yield_guard_report_path=output)
     report = json.loads(output.read_text())
     with sqlite3.connect(database) as conn:

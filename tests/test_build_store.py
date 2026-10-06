@@ -1,3 +1,4 @@
+from fiscal_fixtures import annual_report_fixture
 import importlib.util
 import io
 import json
@@ -247,6 +248,11 @@ class SplitAdjustmentTest(unittest.TestCase):
                 "fixture.csv",
                 actions,
                 Path("stock_actions.json"),
+                fiscal_by_code=annual_report_fixture({r["code"]: {
+                    "series": {int(y): v for y, v in r["dividendPerShare"].items()},
+                    "fiscalMonth": 3, "externalSource": None, "externalYears": [],
+                    "connectionStatus": "edinet_only", "connectionReason": "fixture"}
+                    for r in financials}),
             )
 
     @staticmethod
@@ -985,7 +991,8 @@ class StockActionIntegrationTest(unittest.TestCase):
     def test_spk_2026_dividend_is_adjusted_from_73_to_36_5(self) -> None:
         if not self.FISCAL.exists():
             self.skipTest("外部由来のfiscal_dividends.jsonがありません")
-        fiscal = build_store.load_fiscal_dividends(self.FISCAL)["7466"]
+        raw = json.loads(self.FISCAL.read_text())["7466"]
+        fiscal = {**raw, "series": {int(y): v for y, v in raw["series"].items()}}
         loaded = build_store.load_stock_actions(
             self.EXTRACTED, as_of=date(2026, 8, 10)
         )
@@ -1259,7 +1266,7 @@ class DisplayDerivedMetricsTest(unittest.TestCase):
                     "fixture.csv",
                     {},
                     Path("actions.json"),
-                    fiscal,
+                    annual_report_fixture(fiscal),
                     Path("fiscal.json"),
                     {},
                     Path("calendar.json"),
@@ -1352,7 +1359,7 @@ class DisplayDerivedMetricsTest(unittest.TestCase):
                     "fixture.csv",
                     {},
                     Path("actions.json"),
-                    fiscal,
+                    annual_report_fixture(fiscal),
                     Path("fiscal.json"),
                     {},
                     Path("calendar.json"),
@@ -1388,7 +1395,7 @@ class FiscalDividendLoaderTest(unittest.TestCase):
     def load(self, document: dict) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "fiscal_dividends.json"
-            path.write_text(json.dumps(document), encoding="utf-8")
+            path.write_text(json.dumps(annual_report_fixture(document)), encoding="utf-8")
             return build_store.load_fiscal_dividends(path)
 
     def test_skips_stocks_without_a_series(self) -> None:
@@ -1404,7 +1411,8 @@ class FiscalDividendLoaderTest(unittest.TestCase):
                 },
             }
         )
-        self.assertEqual(set(loaded), {"9433"})
+        self.assertEqual(set(loaded), {"1301", "9433"})
+        self.assertEqual(loaded["1301"]["displaySeries"], {})
         self.assertEqual(loaded["9433"]["series"], {2025: 72.5, 2026: 80.0})
         self.assertEqual(loaded["9433"]["connectionStatus"], "scaled")
         self.assertEqual(loaded["9433"]["externalYears"], [2025])
@@ -1470,6 +1478,11 @@ class FiscalDividendLoaderTest(unittest.TestCase):
                 "data/fiscal_dividends.json は外部由来のためリポジトリに含めない。"
                 "ConoHaから取得するか edinet-direct からコピーして実行する。"
             )
+        raw = json.loads(path.read_text())
+        if any("displaySeries" not in r for r in raw.values()):
+            with self.assertRaisesRegex(ValueError, "表示方針"):
+                build_store.load_fiscal_dividends(path)
+            return
         loaded = build_store.load_fiscal_dividends(path)
         self.assertGreater(len(loaded), 3000)
         kddi = loaded["9433"]
@@ -1520,7 +1533,7 @@ class FiscalSeriesInStoreTest(unittest.TestCase):
                 "fixture.csv",
                 actions,
                 Path("stock_actions.json"),
-                fiscal,
+                annual_report_fixture(fiscal),
                 Path("fiscal_dividends.json"),
                 frozen or {},
                 Path("calendar_dividends_frozen.json"),
@@ -1553,7 +1566,7 @@ class FiscalSeriesInStoreTest(unittest.TestCase):
         kddi = json.loads(rows["9433"][6])
         self.assertEqual(
             kddi["annual"],
-            {"2023": 67.5, "2024": 70.0, "2025": 72.5, "2026": 80.0},
+            {"2024": 70.0, "2025": 72.5, "2026": 80.0},
         )
         self.assertEqual(kddi["streakIncrease"], 3)
         self.assertTrue(kddi["streakIncreaseCapped"])
@@ -1565,18 +1578,20 @@ class FiscalSeriesInStoreTest(unittest.TestCase):
         self.assertEqual(kddi["annualPending"], {})
         self.assertNotIn("annualPartialCalendar", kddi)
         self.assertEqual(kddi["dividendSeries"]["basis"], "fiscal")
-        self.assertEqual(kddi["dividendSeries"]["externalYears"], [2023])
+        self.assertTrue(kddi["dividendSeries"]["usesHiddenYears"])
+        self.assertEqual(kddi["dividendSeries"]["calculationStartYear"], 2023)
+        self.assertIsNone(kddi["cagr3"])
         # 銘柄マスタ（JPX由来）から市場・業種が入る
         self.assertEqual(kddi["market"], "プライム（内国株式）")
         self.assertEqual(kddi["sector"], "情報・通信業")
 
         # 系列が無く凍結スナップショットにも無い銘柄は、配当の年数がNULLになる
         other = json.loads(rows["9999"][6])
-        self.assertNotIn("annual", other)
+        self.assertEqual(other["annual"], {})
         self.assertIsNone(other["streakIncrease"])
         self.assertEqual(other["annualPartial"], {})
-        self.assertEqual(other["dividendSeries"]["basis"], "calendar")
-        self.assertFalse(other["dividendSeries"]["frozen"])
+        self.assertEqual(other["dividendSeries"]["basis"], "fiscal")
+        self.assertFalse(other["dividendSeries"]["usesHiddenYears"])
         self.assertEqual(rows["9999"][3], 0)
 
     def test_frozen_calendar_snapshot_fills_the_stocks_without_a_series(
@@ -1599,12 +1614,12 @@ class FiscalSeriesInStoreTest(unittest.TestCase):
                     )
                 }
         payload = json.loads(rows["9999"][2])
-        self.assertEqual(payload["annual"], {"2018": 5.0, "2019": 6.0, "2020": 7.0})
+        self.assertEqual(payload["annual"], {})
         # 年数は凍結系列から数え直す（Yahooが付けていた値は使わない）
         self.assertEqual(payload["streakIncrease"], 2)
         self.assertEqual(rows["9999"][1], 2)
-        self.assertTrue(payload["dividendSeries"]["frozen"])
-        self.assertEqual(payload["dividendSeries"]["basis"], "calendar")
+        self.assertTrue(payload["dividendSeries"]["usesHiddenYears"])
+        self.assertEqual(payload["dividendSeries"]["basis"], "fiscal")
 
     def test_pending_bar_comes_from_the_company_announcement(self) -> None:
         fiscal = {
@@ -1885,7 +1900,7 @@ class StreakBasisFlagTest(unittest.TestCase):
     def load(self, document: dict) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "fiscal_dividends.json"
-            path.write_text(json.dumps(document), encoding="utf-8")
+            path.write_text(json.dumps(annual_report_fixture(document)), encoding="utf-8")
             return build_store.load_fiscal_dividends(path)
 
     def test_reads_the_flag_written_by_edinet_direct(self) -> None:
@@ -2662,7 +2677,7 @@ class ForecastSplitBasisInStoreTest(unittest.TestCase):
                 "fixture.csv",
                 {},
                 Path("stock_actions.json"),
-                fiscal,
+                annual_report_fixture(fiscal),
                 Path("fiscal_dividends.json"),
                 {},
                 Path("calendar_dividends_frozen.json"),

@@ -1,3 +1,4 @@
+from fiscal_fixtures import annual_report_fixture
 import copy
 import io
 import json
@@ -151,7 +152,7 @@ class YieldNumeratorTest(unittest.TestCase):
                   mock.patch.object(store, 'load_yield_source_year', return_value=2026)):
                 store.create_database(path, [dict(code='1234', name='Example', eps={'2026': 20})], {}, {}, {},
                     [Path('fixture')] * 4, 'fixture.csv', {'1234': [event()]},
-                    fiscal_by_code={'1234': dict(fiscalMonth=3, series={2026: 20}, externalSource=None, externalYears=[], connectionStatus='connected', connectionReason='fixture')}, today=date(2026, 10, 4))
+                    fiscal_by_code=annual_report_fixture({'1234': dict(fiscalMonth=3, series={2026: 20}, externalSource=None, externalYears=[], connectionStatus='connected', connectionReason='fixture')}), today=date(2026, 10, 4))
             with sqlite3.connect(path) as conn:
                 payload = json.loads(conn.execute('SELECT payload FROM stocks').fetchone()[0])
             self.assertEqual(payload['dividendYield'], 10)
@@ -160,13 +161,26 @@ class YieldNumeratorTest(unittest.TestCase):
 
     def test_audit_reference_respects_applied_actions(self):
         with (mock.patch.object(store, 'load_daily_prices', return_value=({'1234': 100}, {'1234': 10}, 'fixture')),
-              mock.patch.object(store, 'load_fiscal_dividends', return_value={'1234': dict(fiscalMonth=3, series={2026: 10}, appliedActions=[{'effectiveDate': '2026-04-01'}])}),
+              mock.patch.object(store, 'load_fiscal_dividends', return_value={'1234': dict(fiscalMonth=3, series={2026: 10}, displaySeries={2026: 10}, appliedActions=[{'effectiveDate': '2026-04-01'}])}),
               mock.patch.object(store, 'load_stock_actions', return_value={'1234': [event()]}),
               mock.patch.object(store, 'load_yield_split_adjustments', return_value=[dict(code='1234', execution_date='2026-04-01', ratio=2)]),
               mock.patch.object(store, 'load_yield_source_year', return_value=2026)):
             report = audit_tool.audit('fixture', Path('fixture'), [], Path('fixture'), today=date(2026, 10, 4))
         self.assertEqual(report['before_bad'], ['1234'])
         self.assertEqual(report['after_bad'], [])
+        self.assertEqual(report['rows'][0]['reference'], 10)
+
+    def test_audit_uses_calculation_period_before_selecting_display_year(self):
+        record = dict(fiscalMonth=3, series={2026: 10, 2027: 12},
+                      streakSeries={2026: 10, 2027: 12}, displaySeries={2026: 10})
+        with (mock.patch.object(store, 'load_daily_prices', return_value=({'1234': 100}, {'1234': 10}, 'fixture')),
+              mock.patch.object(store, 'load_fiscal_dividends', return_value={'1234': record}),
+              mock.patch.object(store, 'load_stock_actions', return_value={'1234': [event()]}),
+              mock.patch.object(store, 'load_yield_split_adjustments', return_value=[]),
+              mock.patch.object(store, 'load_yield_source_year', return_value=2026)):
+            report = audit_tool.audit('fixture', Path('fixture'), [], Path('fixture'), today=date(2026, 10, 4))
+        # The full series already covers the split; its hidden latest year must
+        # not cause the displayed older year to be adjusted a second time.
         self.assertEqual(report['rows'][0]['reference'], 10)
 
 
@@ -185,7 +199,7 @@ class YieldNumeratorOverrideIntegrationTest(unittest.TestCase):
                 store.create_database(
                     path, [dict(code=code, name='Example', **financial)], {}, {},
                     {code: forecast} if forecast else {}, [Path('fixture')] * 4,
-                    'fixture.csv', {code: events}, fiscal_by_code={code: fiscal} if fiscal else {},
+                    'fixture.csv', {code: events}, fiscal_by_code=annual_report_fixture({code: fiscal} if fiscal else {}),
                     calendar_by_code={code: calendar} if calendar else {}, today=date(2026, 10, 4))
             with sqlite3.connect(path) as conn:
                 list_yield, raw = conn.execute('SELECT yield,payload FROM stocks').fetchone()
@@ -244,21 +258,21 @@ class YieldNumeratorOverrideIntegrationTest(unittest.TestCase):
         self.assertEqual(payload['dividendYield'], 3)
         self.assertEqual(payload['dividendYieldBasis']['fiscalYear'], 2025)
 
-    def test_missing_series_keeps_csv_adjustment_even_with_calendar_bars(self):
+    def test_missing_series_never_displays_csv_or_calendar_values(self):
         with mock.patch.object(store, 'yield_numerator_factor', wraps=store.yield_numerator_factor) as factor:
             payload = self.build({}, [event()], dividend=42,
                                  calendar={'series': {2026: 900}})
-        factor.assert_called_once()
-        self.assertEqual(payload['dividendYield'], 2.1)
+        factor.assert_not_called()
+        self.assertIsNone(payload['dividendYield'])
         self.assertEqual(payload['dividendYieldBasis'], dict(
-            source='daily_csv', fiscalYear=2026, annualDividend=21))
-        self.assertEqual(payload['annual']['2026'], 900)
+            source='no_display_dividend', fiscalYear=None, annualDividend=None))
+        self.assertEqual(payload['annual'], {})
 
     def test_missing_csv_year_is_null_and_unpaid_display_is_preserved(self):
         payload = self.build({'dividendYield': 99}, [], dividend=0, source_year=None)
         self.assertIsNone(payload['dividendYield'])
         self.assertEqual(payload['dividendYieldBasis'], dict(
-            source='daily_csv', fiscalYear=None, annualDividend=0))
+            source='no_display_dividend', fiscalYear=None, annualDividend=None))
 
     def test_missing_price_does_not_leave_an_unrelated_legacy_yield(self):
         payload = self.build({'dividendYield': 99}, [], price=None,
@@ -266,15 +280,15 @@ class YieldNumeratorOverrideIntegrationTest(unittest.TestCase):
         self.assertIsNone(payload['dividendYield'])
         self.assertEqual(payload['dividendYieldBasis']['annualDividend'], 40)
 
-    def test_guard_uses_csv_for_unmatched_kouhaitou_split_even_without_integer_ratio(self):
+    def test_guard_reports_unmatched_split_but_keeps_display_numerator(self):
         active = [dict(code='1234', execution_date='2026-03-30', ratio=3)]
         payload = self.build({}, [], dividend=30, source_year=2025,
                              fiscal=self.fiscal({2026: 40}), active_adjustments=active)
         self.assertEqual(payload['annual']['2026'], 40)
-        self.assertEqual(payload['dividendYield'], 3)
+        self.assertEqual(payload['dividendYield'], 4)
         self.assertEqual(payload['dividendYieldBasis'], dict(
-            source='daily_csv_split_guard', fiscalYear=2025, annualDividend=30,
-            seriesLatestDividend=40, guardReason='kouhaitou_split_unreflected'))
+            source='fiscal_series', fiscalYear=2026, annualDividend=40,
+            guardReason='kouhaitou_split_unreflected'))
 
     def test_guard_ratio_and_reciprocal_use_actual_legacy_numerator(self):
         for latest, raw, events, expected, guarded in [
@@ -284,8 +298,8 @@ class YieldNumeratorOverrideIntegrationTest(unittest.TestCase):
             # 最後は棒120/2=60と旧分子90/2=45。整数比でないため発動しない。
             payload = self.build({}, events, dividend=raw, fiscal=self.fiscal({2026: latest}))
             self.assertEqual(payload['dividendYieldBasis']['source'],
-                             'daily_csv_split_guard' if guarded else 'fiscal_series')
-            self.assertEqual(payload['dividendYield'], expected / 10)
+                             'fiscal_series')
+            self.assertEqual(payload['dividendYield'], payload['annual']['2026'] / 10)
             if guarded:
                 self.assertEqual(payload['dividendYieldBasis']['guardReason'], 'split_like_ratio')
 

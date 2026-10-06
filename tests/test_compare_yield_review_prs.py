@@ -1,3 +1,4 @@
+from fiscal_fixtures import annual_report_fixture
 import json
 import csv
 import shutil
@@ -158,7 +159,7 @@ def test_real_audit_builds_two_synthetic_stores_and_summary_is_safe(tmp_path, mo
     source = Path(__file__).resolve().parents[1]
     for folder in ("scripts", "data", "edinet"):
         (root / folder).mkdir(parents=True)
-    for script in ("build_store.py", "audit_store_diff.py", "audit_yield_numerator.py"):
+    for script in ("build_store.py", "audit_store_diff.py", "audit_yield_numerator.py", "public_dividend_policy.py"):
         shutil.copyfile(source / "scripts" / script, root / "scripts" / script)
     for filename, document in [("all_financials.json", [{"code": "1234", "name": "テスト社"}]),
                                ("tickers.json", []), ("sector_stats.json", {})]:
@@ -171,7 +172,7 @@ def test_real_audit_builds_two_synthetic_stores_and_summary_is_safe(tmp_path, mo
                                ("forecasts_state.json", {"stocks": {}}),
                                ("calendar_dividends_frozen.json", {"stocks": {}}),
                                ("split_adjustments.json", {"adjustments": [{"code": "1234", "execution_date": "2026-09-29", "ratio": 3, "active": True}]})]:
-        (fixtures / filename).write_text(json.dumps(document))
+        (fixtures / filename).write_text(json.dumps(annual_report_fixture(document) if filename == "fiscal_dividends.json" else document))
     with (fixtures / "database.csv").open("w") as output:
         writer = csv.writer(output)
         writer.writerow([""] * 18 + ["2026/10/05 07:00:00"])
@@ -191,6 +192,7 @@ def test_real_audit_builds_two_synthetic_stores_and_summary_is_safe(tmp_path, mo
     from datetime import date
     body = "\n".join(review.compare_one(FakeGitHub(), root, fixtures, pr(), SHA, date(2026, 10, 5), result))
     assert "| 画面 | 配当グラフ | annual | 1 |" in body
+    # The audit signal changes independently of selecting the graph numerator.
     assert "| 1234 | 外れる |" in body
     assert (result / "result" / "before.sqlite").exists() and (result / "result" / "after.sqlite").exists()
     assert "PRIVATE_SENTINEL" not in body + capsys.readouterr().out

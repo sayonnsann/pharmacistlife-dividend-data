@@ -14,7 +14,7 @@
       <div class="dvc-hero-badges" aria-label="サービス情報">
         <span class="dvc-hero-badge">日本株 約3,800銘柄</span>
         <span class="dvc-hero-badge">毎朝自動更新</span>
-        <span class="dvc-hero-badge">出典: EDINET（金融庁）</span>
+        <span class="dvc-hero-badge">出典: 会社の公式資料</span>
       </div>
     </div>
     <div class="dvc-search-area">
@@ -74,7 +74,7 @@
     <div id="dvc-table-wrap" class="dvc-table-wrap"></div>
     <div id="dvc-updated" class="dvc-updated"></div>
   </div>
-  <p class="dvc-page-note">配当実績・財務指標はEDINET（金融庁）の開示書類を中心とした公開情報、配当予想はEDINET DB、株価はYahoo!ファイナンスに由来します。数値は各出典の更新時点・定義に基づきます。<br>予想は会社発表に基づく参考値です。<br><strong>免責事項:</strong> 本ツールは情報提供を目的としたもので、特定銘柄の売買を推奨するものではありません。数値の正確性・完全性は保証されません。投資の判断はご自身の責任でお願いします。</p>
+  <p class="dvc-page-note">配当実績・財務指標はEDINET（金融庁）の有価証券報告書や発行体IRの決算短信など会社の公式資料、配当予想はEDINET DB、株価はYahoo!ファイナンスに由来します。数値は各出典の更新時点・定義に基づきます。<br>予想は会社発表に基づく参考値です。<br><strong>免責事項:</strong> 本ツールは情報提供を目的としたもので、特定銘柄の売買を推奨するものではありません。数値の正確性・完全性は保証されません。投資の判断はご自身の責任でお願いします。</p>
   <button id="dvc-back-to-top" class="dvc-back-to-top" type="button" aria-label="ページの先頭へ戻る" title="ページの先頭へ戻る">↑<span>トップへ</span></button>
 </div>
 
@@ -355,7 +355,17 @@
       payoutLine=polylines+dots;
     }
     legend='<div class="dvc-chart-legend"><span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>年間配当金(円、棒グラフ・'+esc(axisText)+')</span>'+(hasForecast?'<span><i class="dvc-legend-swatch" style="background:#cbd5e1"></i>グレー+「予想」=会社発表の配当予想(まだ確定していない年度)</span>':"")+(hasConfirmed?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>青+「確定」=会社発表の確定額(有価証券報告書はまだ出ていない年度)</span>':"")+(hasBreakdown?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>■通常配当　<i class="dvc-legend-swatch" style="background:#93c5fd"></i>■記念・特別配当</span>':"")+'<span><i class="dvc-legend-swatch dvc-legend-line" style="background:#f59e0b"></i>配当性向(%、上部帯)</span><span><i class="dvc-legend-text dvc-growth-pos">+12%</i>は前年比の増配率</span>'+(labelPlan.dense?'<span class="dvc-legend-text">バーが多い場合は主要年のみ表示。各バーにカーソルを合わせると詳細を確認できます。</span>':"")+'</div>';
-    return '<div class="dvc-chart-wrap"><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+" "+h+'">'+laneBackground+laneDivider+bars+payoutLine+"</svg></div>"+legend+'<p class="dvc-source"><strong>出典:</strong> '+(isFiscal?'配当実績: EDINET(有価証券報告書)':'配当実績: 外部データの凍結分(EDINETに配当の記載が無いため更新していません)')+' / 配当性向: EDINET(有価証券報告書) / 配当予想・確定額: EDINET DB</p>'+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
+    return '<div class="dvc-chart-wrap"><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+" "+h+'">'+laneBackground+laneDivider+bars+payoutLine+"</svg></div>"+legend+'<p class="dvc-source"><strong>出典:</strong> '+'配当実績: 有価証券報告書・決算短信など会社の公式資料'+' / 配当性向: 会社の公式資料 / 配当予想・確定額: EDINET DB</p>'+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
+  }
+  function dividendPeriodNote(r){
+    var s=r.dividendSeries||{},text;
+    if(!s.usesHiddenYears)return"";
+    if(s.hiddenYearsArePrefix&&s.startYear){
+      text="配当の表示は、有価証券報告書・決算短信など会社の公式資料に基づきます（"+s.startYear+"年以降）。それより前の外部の配当データは、連続増配・連続非減配の年数の計算にのみ使用しています。";
+    }else{
+      text="配当の表示は、有価証券報告書・決算短信など会社の公式資料に基づきます。表示していない外部の配当データも、連続増配・連続非減配の年数の計算に使用しています。";
+    }
+    return '<p class="dvc-chart-note">'+esc(text)+"</p>";
   }
   function confirmedInfo(r){
     var v=r.confirmedDividend,fy=r.confirmedFiscalYearEnd;
@@ -434,7 +444,7 @@
     var count=validYears(data).length,series=[{label:title,data:data||{},color:color}],med=sectorSeries(company,key,data||{}),content;
     if(type==="line"&&count>=2&&validYears(med).length>=2)series.push({label:"業種中央値（"+company.industry+"）",data:med,color:"#7c3aed",isSector:true});
     if(count>=2)content=chart(series,unit,type,title+"の推移");else if(count===1){var p=latest(data);content='<div class="dvc-single"><span class="dvc-single-label">'+esc(title)+'（1期のみ）</span><span class="dvc-single-value">'+esc(formatValue(p.value,unit))+' <small class="dvc-single-year">'+esc(p.year)+"年</small></span></div>"}else content='<div class="dvc-empty">'+esc(emptyMessage||title+"のデータはありません")+"</div>";
-    return '<div class="dvc-mini-panel"><div class="dvc-metric-head"><p class="dvc-mini-title">'+esc(title)+'<span class="dvc-metric-source">'+esc(sourceLabel||"出典: EDINET（金融庁）")+'</span></p>'+(count>=2?'<span class="dvc-trend-badge">'+esc(trendSummary(data,unit))+"</span>":"")+"</div>"+sectorPosition(company,key,data||{},unit)+'<p class="dvc-metric-description">'+esc(description)+"</p>"+content+"</div>"
+    return '<div class="dvc-mini-panel"><div class="dvc-metric-head"><p class="dvc-mini-title">'+esc(title)+'<span class="dvc-metric-source">'+esc(sourceLabel||"出典: 会社の公式資料")+'</span></p>'+(count>=2?'<span class="dvc-trend-badge">'+esc(trendSummary(data,unit))+"</span>":"")+"</div>"+sectorPosition(company,key,data||{},unit)+'<p class="dvc-metric-description">'+esc(description)+"</p>"+content+"</div>"
   }
   function dividendYieldMetric(company){
     var data=company.dividendYieldHistory||{},count=validYears(data).length;
@@ -466,7 +476,7 @@
     }
     var cash=c.cashAndEquivalents||c.cash||{},payout=validYears(c.payoutRatioTotalBased||{}).length?c.payoutRatioTotalBased:(c.payoutRatioConsolidated||{}),payoutKey=validYears(c.payoutRatioTotalBased||{}).length?"payoutRatioTotalBased":"payoutRatioConsolidated",warnings=warningMessages(c),html;
     if(btNote)warnings=warnings.concat([{split:false,text:btNote}]);
-    html='<section id="dvc-section-financials" class="dvc-financials"><div class="dvc-fin-head"><div><h3>財務指標の推移</h3><p>薄い破線は期間平均、紫の点線は業種中央値です。横軸は開示年です。</p></div><span class="dvc-fin-source">出典: EDINET（金融庁）</span></div>';
+    html='<section id="dvc-section-financials" class="dvc-financials"><div class="dvc-fin-head"><div><h3>財務指標の推移</h3><p>薄い破線は期間平均、紫の点線は業種中央値です。横軸は開示年です。</p></div><span class="dvc-fin-source">出典: 会社の公式資料</span></div>';
     if(warnings.length)html+='<ul class="dvc-warnings">'+warnings.map(function(w){return '<li class="'+(w.split?"dvc-warning-split":"dvc-warning-note")+'">'+esc(w.text)+"</li>"}).join("")+"</ul>";
     html+=earningsForecastCard(c);
     html+='<div class="dvc-fin-summary">'+finSummary("最新ROE",latest(c.roe||{}),"%")+finSummary("最新自己資本比率",latest(c.equityRatio||{}),"%")+finSummary("最新EPS",latest(c.eps||{}),"円")+finSummary("最新BPS",latest(c.bps||{}),"円")+"</div>"+roeMethodNote(c);
@@ -490,7 +500,7 @@
     var panel=document.getElementById("dvc-detail"),stats,financialHtml=buildFinancialSection(r.code),hasEarnings=financialHtml.indexOf('id="dvc-section-earnings"')>=0,hasFinancials=financialHtml.indexOf('id="dvc-section-financials"')>=0;
     state.currentCode=r.code;panel.style.display="block";
     stats=stat("株価(データ取得時点)",r.price?r.price.toLocaleString("ja-JP")+"円":"-",null,priceUpdateNote(r))+stat("現在の配当利回り",fmtPct(r.dividendYield),null,null,true,typeof r.dividendYield==="number"&&r.dividendYield>=HIGHLIGHT.yieldPct)+stat("予想利回り",fmtPct(typeof r.forecastYield==="number"&&isFinite(r.forecastYield)?r.forecastYield:null),null,null,true,typeof r.forecastYield==="number"&&r.forecastYield>=HIGHLIGHT.yieldPct)+stat("連続増配年数",fmtYears(r.streakIncrease),null,null,true,typeof r.streakIncrease==="number"&&r.streakIncrease>=HIGHLIGHT.streakYears)+baseStreakStat(r)+stat("連続非減配年数",fmtYears(r.streakNonDecrease))+stat("3年平均増配率",fmtPct(r.cagr3))+stat("5年平均増配率",fmtPct(r.cagr5))+stat("10年平均増配率",fmtPct(r.cagr10));
-    panel.innerHTML='<div class="dvc-detail-head"><div><div class="dvc-detail-title"><h2>'+esc(r.name)+'</h2><span class="dvc-detail-code">'+esc(r.code)+'</span></div><div class="dvc-detail-meta">'+esc((r.market||"")+" / "+(r.sector||""))+'</div></div><button id="dvc-close-detail" class="dvc-close-button" type="button" aria-label="銘柄詳細を閉じる"><span aria-hidden="true">×</span> 閉じる</button></div>'+detailNav(hasEarnings,hasFinancials)+'<div class="dvc-stat-grid">'+stats+"</div>"+streakNote(r)+forecastSummary(r)+'<section id="dvc-section-dividend" class="dvc-dividend-section"><h3>年別配当金推移(1株あたり・円)</h3>'+buildBarChart(r.annual||{},r.payoutRatio||{},r.dividendBreakdown||{},r.annualPartial||{},confirmedInfo(r),r.annualPending||{},r.dividendSeries||{})+dividendBreakdownNote(r.dividendBreakdown||{})+"</section>"+financialHtml+buildExternalLinks(r.code);
+    panel.innerHTML='<div class="dvc-detail-head"><div><div class="dvc-detail-title"><h2>'+esc(r.name)+'</h2><span class="dvc-detail-code">'+esc(r.code)+'</span></div><div class="dvc-detail-meta">'+esc((r.market||"")+" / "+(r.sector||""))+'</div></div><button id="dvc-close-detail" class="dvc-close-button" type="button" aria-label="銘柄詳細を閉じる"><span aria-hidden="true">×</span> 閉じる</button></div>'+detailNav(hasEarnings,hasFinancials)+'<div class="dvc-stat-grid">'+stats+"</div>"+streakNote(r)+forecastSummary(r)+'<section id="dvc-section-dividend" class="dvc-dividend-section"><h3>年別配当金推移(1株あたり・円)</h3>'+buildBarChart(r.annual||{},r.payoutRatio||{},r.dividendBreakdown||{},r.annualPartial||{},confirmedInfo(r),r.annualPending||{},r.dividendSeries||{})+dividendPeriodNote(r)+dividendBreakdownNote(r.dividendBreakdown||{})+"</section>"+financialHtml+buildExternalLinks(r.code);
     document.getElementById("dvc-close-detail").addEventListener("click",closeDetail);
     Array.prototype.forEach.call(panel.querySelectorAll(".dvc-section-nav a"),function(link){link.addEventListener("click",function(e){var target=document.querySelector(link.getAttribute("href"));e.preventDefault();if(target&&target.scrollIntoView)target.scrollIntoView({behavior:"smooth",block:"start"});updateDetailHash(r.code)})});
     Array.prototype.forEach.call(panel.querySelectorAll(".dvc-chart-wrap"),function(wrap){wrap.scrollLeft=wrap.scrollWidth});

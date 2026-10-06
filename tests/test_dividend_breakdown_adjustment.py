@@ -1,7 +1,9 @@
+from fiscal_fixtures import annual_report_fixture
 import copy
 import json
 import sqlite3
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from unittest import mock
 
@@ -59,7 +61,7 @@ def test_breakdown_uses_cumulative_factor_and_annual_rounding():
         {2025: 20.0},
         build_store.split_adjustment([split(), second]), fiscal_month=3,
     )
-    assert result["2025"] == {"base": 16.6667, "special": 3.3333}
+    assert result["2025"] == {"base": 17.0, "special": 3.0}
     assert warnings == []
 
 
@@ -186,18 +188,22 @@ def test_store_uses_same_breakdown_for_streaks_and_display(
             output, [{"code": "9999", "name": "テスト"}], {}, {}, {},
             [Path("f"), Path("s"), Path("t"), Path("fc")],
             "fixture.csv", {"9999": [split()]}, Path("actions.json"),
-            {"9999": fiscal} if basis == "fiscal" else {}, None,
+            annual_report_fixture({"9999": fiscal} if basis == "fiscal" else {}), None,
             {"9999": {"series": series}} if basis == "calendar" else {}, None,
             today=date(2026, 8, 5),
         )
     with sqlite3.connect(output) as connection:
         payload = json.loads(connection.execute("SELECT payload FROM stocks").fetchone()[0])
-    assert payload["annual"] == {"2023": 50.0, "2024": 60.0, "2025": 50.0}
+    assert payload["annual"] == ({"2023": 50.0, "2024": 60.0, "2025": 50.0} if basis == "fiscal" else {})
+    if basis == "calendar":
+        assert payload["dividendBreakdown"] == {}
+        assert payload["streakBase"] == 0
+        assert fiscal == original
+        return
     if unexplained:
         assert payload["dividendBreakdown"] == {"2024": detail}
         assert payload["streakNoDecreaseBase"] == 0
-        assert "9999/2024" in payload["warnings"][0]
-        assert "比r=0.6" in payload["warnings"][0]
+        assert payload["warnings"][0] == "配当内訳の分割基準に確認が必要です"
     else:
         assert payload["dividendBreakdown"]["2024"] == {
             "base": 50.0, "special": 10.0, "kind": "記念",
@@ -205,3 +211,69 @@ def test_store_uses_same_breakdown_for_streaks_and_display(
         assert payload["streakNoDecreaseBase"] == 2
     assert payload["streakBase"] == 0
     assert fiscal == original
+
+
+@pytest.mark.parametrize('annual',[27,26.7,26.67,26.667,26.6667])
+def test_exact_split_coefficient_uses_bar_precision(annual):
+    result,warnings=build_store.adjust_dividend_breakdown(
+        {'2019':{'base':50,'special':30}}, {2019:annual}, None,
+        fiscal_month=3,applied_actions=[{'effectiveDate':'2026-10-01','ratio':3}])
+    assert warnings==[]
+    assert result['2019']['special']==10
+    assert Decimal(str(result['2019']['base']))+Decimal(str(result['2019']['special']))==Decimal(str(annual))
+    assert build_store.adjust_dividend_breakdown(result,{2019:annual},None,fiscal_month=3)==(result,[])
+
+
+def test_recorded_noninteger_coefficient_precedes_nearby_integer():
+    result,warnings=build_store.adjust_dividend_breakdown(
+        {'2000':{'base':50,'special':30}}, {2000:39.2}, None, fiscal_month=3,
+        applied_actions=[{'effectiveDate':'2000-04-01','ratio':2.04}])
+    assert result['2000']=={'base':24.5,'special':14.7}
+    assert warnings==[]
+
+
+def test_cumulative_exact_coefficient_does_not_use_observed_rounding_ratio():
+    result,warnings=build_store.adjust_dividend_breakdown(
+        {'2000':{'base':100,'special':20}}, {2000:20.01}, None, fiscal_month=3,
+        applied_actions=[{'effectiveDate':'2000-04-01','ratio':2},
+                         {'effectiveDate':'2001-04-01','ratio':3}])
+    assert result['2000']=={'base':16.68,'special':3.33}
+    assert warnings==[]
+
+
+@pytest.mark.parametrize('code,years',[('2108',16),('7911',15)])
+def test_store_new_producer_format_preserves_ordinary_non_decrease(tmp_path,code,years):
+    # Invented official-report observations; no private/external yearly data is
+    # copied into this public repository. 2108's supplied rounded case is the
+    # regression trigger; 7911 exercises an already-applied consolidation.
+    start=2026-years
+    ordinary=16.67 if code=='2108' else 50.0
+    record={'series':{str(y):ordinary for y in range(start,2027)},'fiscalMonth':3,
+            'externalYears':[],'externalSource':None}
+    year=2019 if code=='2108' else 2017
+    record['series'][str(year)]=26.67 if code=='2108' else 60.0
+    action={'effectiveDate':'2026-10-01' if code=='2108' else '2018-10-01',
+            'ratio':3.0 if code=='2108' else 0.5}
+    record['appliedActions']=[action]
+    raw={'base':50,'special':30} if code=='2108' else {'base':25,'special':5}
+    root=tmp_path/'repo';(root/'data').mkdir(parents=True)
+    (root/'data/dividend_breakdown.json').write_text(json.dumps({code:{str(year):raw}}))
+    fiscal_path=tmp_path/'new_fiscal.json'
+    fiscal_path.write_text(json.dumps(annual_report_fixture({code:record})))
+    fiscal=build_store.load_fiscal_dividends(fiscal_path)
+    event={**split(action['effectiveDate']), 'securityCode':code,
+           'action':'split' if code=='2108' else 'consolidation',
+           'oldShares':1 if code=='2108' else 2,'newShares':3 if code=='2108' else 1}
+    output=tmp_path/'store.sqlite'
+    with (mock.patch.object(build_store,'REPOSITORY_ROOT',root),
+          mock.patch.object(build_store,'load_daily_prices',return_value=({code:1000},{code:1},'fixture')),
+          mock.patch.object(build_store,'load_yield_split_adjustments',return_value=[]),
+          mock.patch.object(build_store,'load_price_session_meta',return_value=None)):
+        build_store.create_database(output,[{'code':code,'name':'synthetic fixture'}],{},{},{},
+                                    [Path('fixture')]*4,'fixture.csv',{code:[event]},
+                                    fiscal_by_code=fiscal,today=date(2026,10,6))
+    with sqlite3.connect(output) as conn:
+        payload=json.loads(conn.execute('SELECT payload FROM stocks').fetchone()[0])
+    assert payload['streakNoDecreaseBase']==years
+    assert payload['dividendBreakdown'][str(year)]['base']==ordinary
+    assert payload['annual'][str(year)]==record['series'][str(year)]

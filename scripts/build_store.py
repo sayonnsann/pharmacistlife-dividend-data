@@ -14,10 +14,17 @@ import subprocess
 import tempfile
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+
+import sys
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+from public_dividend_policy import (POLICY_ID, issuer_eligible, period_metadata, validate_public_payload,
+                                   financial_dividend_projection, financial_dividend_years)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FINANCIALS = REPOSITORY_ROOT / "data" / "all_financials.json"
@@ -67,7 +74,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_CALENDAR_DIVIDENDS,
         help=(
             "事業年度の系列を作れなかった銘柄の、暦年ベースの凍結スナップショット。"
-            "無ければその銘柄の配当グラフだけが空になる（ビルドは通る）。"
+            "年数計算だけに使用し、配当グラフには表示しない。"
         ),
     )
     parser.add_argument(
@@ -295,7 +302,7 @@ def load_fiscal_dividends(path: Path) -> dict[str, dict[str, Any]]:
     同じ暦年に入るため、実在しない横ばいが生まれて連続増配が途切れる
     （例: KDDIが連続増配1年と表示されていた）。事業年度で区切った系列に置き換える。
 
-    値が空・壊れている銘柄は黙って落とし、その銘柄は暦年の系列のまま残す。
+    表示方針と来歴を検証し、空の表示系列も保持する。旧形式・壊れた値は公開前に止める。
 
     このファイルはリポジトリに入れない。半分近くの年が haitoukin-checker 由来で、
     利用の許可はもらっているが再配布の許可ではないため。このリポジトリは
@@ -311,8 +318,11 @@ def load_fiscal_dividends(path: Path) -> dict[str, dict[str, Any]]:
             "ConoHaの非公開dataディレクトリから取得するか、"
             "edinet-direct/data/fiscal_dividends.json をコピーしてください。"
         )
-    document = load_json(path, dict)
+    return normalize_fiscal_dividends(load_json(path, dict), path)
 
+
+def normalize_fiscal_dividends(document: dict, path: Path | str = "memory") -> dict:
+    """Validate a private producer document, also usable for read-only previews."""
     result: dict[str, dict[str, Any]] = {}
     for raw_code, record in document.items():
         if not isinstance(record, dict):
@@ -322,21 +332,31 @@ def load_fiscal_dividends(path: Path) -> dict[str, dict[str, Any]]:
         except ValueError:
             continue
 
-        raw_series = record.get("series")
-        if not isinstance(raw_series, dict) or not raw_series:
-            continue
-        series: dict[int, float] = {}
-        for raw_year, raw_value in raw_series.items():
-            try:
-                year = int(raw_year)
-            except (TypeError, ValueError):
-                continue
-            value = finite_number(raw_value)
-            if value is None or value < 0:
-                continue
-            series[year] = float(value)
-        if not series:
-            continue
+        if (record.get("displayPolicy") != POLICY_ID
+                or not isinstance(record.get("displaySeries"), dict)
+                or not isinstance(record.get("streakSeries"), dict)):
+            raise ValueError(f"{path}: {raw_code}: 表示方針に対応した配当ファイルを母艦で作成してください")
+        def numeric_series(raw):
+            result = {}
+            for raw_year, raw_value in raw.items():
+                if not str(raw_year).isdigit() or len(str(raw_year)) != 4:
+                    raise ValueError(f"{path}: {raw_code}: invalid fiscal year")
+                value = finite_number(raw_value)
+                if value is None or value < 0:
+                    raise ValueError(f"{path}: {raw_code}: invalid dividend")
+                result[int(raw_year)] = float(value)
+            return result
+        series = numeric_series(record["streakSeries"])
+        display = numeric_series(record["displaySeries"])
+        if record.get("series") != record["streakSeries"]:
+            raise ValueError(f"{path}: {raw_code}: series/streakSeries mismatch")
+        classes = record.get("yearProvenance") or {}
+        for y, v in display.items():
+            evidence = classes.get(str(y)) or {}
+            if (series.get(y) != v or evidence.get("displayEligible") is not True
+                    or not issuer_eligible(evidence)
+                    or y in {int(v) for v in record.get("externalYears", [])}):
+                raise ValueError(f"{path}: {raw_code}/{y}: unsafe display dividend")
 
         connection = record.get("connection")
         connection = connection if isinstance(connection, dict) else {}
@@ -384,6 +404,11 @@ def load_fiscal_dividends(path: Path) -> dict[str, dict[str, Any]]:
 
         result[code] = {
             "series": series,
+            "streakSeries": series,
+            "displaySeries": display,
+            "displayPolicy": POLICY_ID,
+            "displayBasis": record.get("displayBasis") or {},
+            "reportedYears": sorted(series),
             "fiscalMonth": finite_number(record.get("fiscalMonth")),
             "connectionStatus": connection.get("status"),
             "connectionReason": connection.get("reason"),
@@ -564,6 +589,8 @@ def adjust_dividend_breakdown(
     """内訳を配分比として使い、分割で説明できる金額だけannualへ揃える。
 
     分割で説明できない年度は警告を残し、未補正の内訳を従来どおり使う。
+    補正は観測比でなく、その比を説明する正確な分割係数で行う。
+    棒と同じ桁数へ丸め、普通配当を残額にして合計を合わせる。
     元データと出典は変更しない。反映済みイベントも比率の根拠に使える。
     """
     events_by_date = {}
@@ -607,27 +634,34 @@ def adjust_dividend_breakdown(
         factor = adjustment_factor_for_period(
             split_evidence, year, fiscal_month=fiscal_month or 12, field="dividend"
         )
-        split_like = False
+        candidates = []
         if ratio is not None and ratio > 0:
+            # Prefer recorded cumulative evidence over an approximate integer.
+            if factor > 0 and finite_number(factor) is not None:
+                candidates.extend((factor, 1 / factor))
             for candidate in (ratio, 1 / ratio):
                 if finite_number(candidate) is None:
                     continue
                 nearest = round(candidate)
-                if nearest >= 2 and close(nearest if candidate == ratio else 1 / nearest):
-                    split_like = True
-            if factor > 0 and finite_number(factor) is not None:
-                split_like = split_like or close(factor) or close(1 / factor)
-        if not split_like:
+                if nearest >= 2:
+                    candidates.append(nearest if candidate == ratio else 1 / nearest)
+        split_factor = next((v for v in candidates if close(v)), None)
+        if split_factor is None:
             warnings.append(
                 f"配当内訳 {code}/{year}: annual={annual}, base+special={total}, "
                 f"比r={ratio} は分割比率で説明できないため内訳は未補正のまま使用"
             )
             continue
         adjusted = dict(detail)
+        # JSON numbers do not preserve trailing zeroes. Use meaningful decimal
+        # places (including scientific notation), matching annual's precision.
+        places = min(4, max(0, -Decimal(str(annual)).normalize().as_tuple().exponent))
         for key, value in amounts.items():
-            adjusted[key] = round(value * ratio, 4)
-        if "base" in amounts and "special" in amounts:
-            adjusted["base"] = round(annual - adjusted["special"], 4)
+            adjusted[key] = round(value * split_factor, places)
+        if "base" in amounts:
+            adjusted["base"] = round(annual - sum(adjusted[k] for k in amounts if k != "base"), places)
+        elif "special" in amounts:
+            adjusted["special"] = round(annual, places)
         result[year] = adjusted
     return result, warnings
 
@@ -2136,6 +2170,8 @@ def create_database(
             pending_forecast = 0
             payout_line_stocks = 0
             for code, financial in financial_by_code.items():
+                financial = financial_dividend_projection(financial)
+                financial_years = financial_dividend_years(financial)
                 ticker = tickers.get(code, {})
                 if ticker:
                     matched_tickers += 1
@@ -2165,6 +2201,13 @@ def create_database(
                 forecast_record = forecast_record or {}
 
                 payload = dict(financial)
+                if isinstance(payload.get("basisTransitionMetrics"), dict):
+                    payload["basisTransitionMetrics"] = dict(payload["basisTransitionMetrics"])
+                payload.pop("confirmedDividend", None)
+                payload.pop("confirmedFiscalYearEnd", None)
+                for private_key in ("annual", "annualPartial", "annualPending", "series", "streakSeries",
+                                    "displaySeries", "yearProvenance", "dividendBreakdown"):
+                    payload.pop(private_key, None)
                 payload["roeYearEnd"] = roe_year_end(financial)
                 payload["streakBase"] = None
                 for key in ("name", "market", "sector", "sector17"):
@@ -2206,12 +2249,18 @@ def create_database(
                     payload["splitAdjustment"] = adjustment
 
                 # 配当系列を事業年度ベースへ差し替える。
-                # 系列が取れなかった銘柄だけ、暦年の系列のまま残す。
+                # 暦年の凍結系列は年数計算にだけ使用する。
                 fiscal = fiscal_record
                 series_fiscal_month = fiscal.get("fiscalMonth") if fiscal else 12
-                if fiscal is not None:
+                if fiscal is not None and fiscal["series"]:
                     fiscal_based_stocks += 1
-                    series = fiscal["series"]
+                    series = fiscal.get("streakSeries", fiscal["series"])
+                    if fiscal.get("displayPolicy") != POLICY_ID or "displaySeries" not in fiscal:
+                        raise ValueError(f"{code}: missing issuer-material display contract")
+                    display_years = set(fiscal["displaySeries"])
+                    if (display_years & set(fiscal.get("externalYears", []))
+                            or any(series.get(y) != v for y, v in fiscal["displaySeries"].items())):
+                        raise ValueError(f"{code}: unsafe display dividend")
                     if adjustment is not None:
                         series_adjustment = adjustment_for_unadjusted_series(
                             adjustment,
@@ -2241,9 +2290,12 @@ def create_database(
                     )
                     if not streak_reliable:
                         streak_unreliable_stocks += 1
-                    payload["annual"] = {
-                        str(year): series[year] for year in sorted(series)
-                    }
+                    display_series = {y: series[y] for y in sorted(display_years)}
+                    display_basis = fiscal.get("displayBasis") or {}
+                    display_stats = fiscal_dividend_stats(
+                        display_series, streak_reliable=display_basis.get("reliable", streak_reliable),
+                        break_years=display_basis.get("breakYears", fiscal.get("streakBreakYears", [])))
+                    payload["annual"] = {str(y): v for y, v in display_series.items()}
                     payload["streakIncrease"] = stats["streakIncrease"]
                     payload["streakNonDecrease"] = stats["streakNonDecrease"]
                     payload["streakIncreaseCapped"] = stats[
@@ -2252,20 +2304,11 @@ def create_database(
                     payload["streakNonDecreaseCapped"] = stats[
                         "streakNonDecreaseCapped"
                     ]
-                    payload["cagr3"] = stats["cagr3"]
-                    payload["cagr5"] = stats["cagr5"]
-                    payload["cagr10"] = stats["cagr10"]
-                    payload["dividendSeries"] = {
-                        "basis": "fiscal",
-                        "fiscalMonth": fiscal["fiscalMonth"],
-                        "startYear": min(series),
-                        "endYear": max(series),
-                        # 出典。externalYears に無い年はすべてEDINET由来。
-                        "externalSource": fiscal["externalSource"],
-                        "externalYears": fiscal["externalYears"],
-                        "connectionStatus": fiscal["connectionStatus"],
-                        "connectionReason": fiscal["connectionReason"],
-                    }
+                    payload["cagr3"] = display_stats["cagr3"]
+                    payload["cagr5"] = display_stats["cagr5"]
+                    payload["cagr10"] = display_stats["cagr10"]
+                    payload["dividendSeries"] = period_metadata(display_series, series)
+                    payload["dividendSeries"]["fiscalMonth"] = fiscal["fiscalMonth"]
                     # 画面で「株式分割の影響で判定できません」と出せるようにする印。
                     # 年数がNULLなのが「データが無い」からなのか
                     # 「基準がそろわず数えられない」からなのかを区別するため。
@@ -2279,6 +2322,8 @@ def create_database(
                         }
                     )
                 else:
+                    fiscal = None
+                    series_fiscal_month = 12
                     # 事業年度の系列を作れなかった銘柄。EDINETにも
                     # haitoukin-checkerにも配当の記載が無い会社で、実質的な
                     # 配当履歴があるのは14銘柄だけ（東京電力など、十数年前に
@@ -2304,17 +2349,16 @@ def create_database(
                             )
                             for year, value in series.items()
                         }
-                    stats = fiscal_dividend_stats(series) if series else {}
                     if series:
                         frozen_calendar_stocks += 1
-                        payload["annual"] = {
-                            str(year): series[year] for year in sorted(series)
-                        }
+                    stats = fiscal_dividend_stats(series) if series else {}
+                    display_years = set()
+                    payload["annual"] = {}
                     payload["streakIncrease"] = stats.get("streakIncrease")
                     payload["streakNonDecrease"] = stats.get("streakNonDecrease")
-                    payload["cagr3"] = stats.get("cagr3")
-                    payload["cagr5"] = stats.get("cagr5")
-                    payload["cagr10"] = stats.get("cagr10")
+                    payload["cagr3"] = None
+                    payload["cagr5"] = None
+                    payload["cagr10"] = None
                     payload["streakIncreaseCapped"] = bool(
                         stats.get("streakIncreaseCapped")
                     )
@@ -2322,20 +2366,12 @@ def create_database(
                         stats.get("streakNonDecreaseCapped")
                     )
                     payload["streakUnreliable"] = None
-                    payload["dividendSeries"] = {
-                        "basis": "calendar",
-                        "frozen": bool(series),
-                        "startYear": min(series) if series else None,
-                        "endYear": max(series) if series else None,
-                        "externalSource": "yfinance" if series else None,
-                        "externalYears": sorted(series),
-                    }
+                    payload["dividendSeries"] = period_metadata({}, series)
 
                 # 利回りは完成したグラフのannualを直接読む。予想・短信の
                 # annualPending/annualPartialを足す前に選び、二重補正を防ぐ。
                 daily_yield = None
-                currently_unpaid = False
-                if fiscal is not None:
+                if payload.get("annual"):
                     annual = payload["annual"]
                     numerator_year = max(annual, key=int)
                     numerator = annual[numerator_year]
@@ -2355,41 +2391,22 @@ def create_database(
                         "fiscalYear": int(numerator_year),
                         "annualDividend": numerator,
                     }
+                    # The historical split guard remains an audit signal; it cannot
+                    # replace the displayed bar with a different numerator.
                     if guard_reason:
-                        payload["dividendYieldBasis"] = {
-                            "source": "daily_csv_split_guard",
-                            "fiscalYear": load_yield_source_year(code, REPOSITORY_ROOT / "edinet"),
-                            "annualDividend": previous,
-                            "seriesLatestDividend": numerator,
-                            "guardReason": guard_reason,
-                        }
-                        numerator = previous
+                        payload["dividendYieldBasis"]["guardReason"] = guard_reason
                     if daily_price:
                         daily_yield = round(numerator / daily_price * 100, 2)
                 else:
-                    # 事業年度系列が無い場合だけ、E列＋従来の補正规則を使う。
-                    numerator = daily_dividends.get(code)
-                    currently_unpaid = numerator is not None and float(numerator) <= 0
-                    numerator_year = load_yield_source_year(code, REPOSITORY_ROOT / "edinet")
-                    numerator = daily_csv_yield_numerator(
-                        code, numerator, stock_actions_by_code.get(code, []), adjustment,
-                        fiscal_month=None, active_adjustments=yield_split_adjustments,
-                        today=today, override_event_ids=yield_overrides,
-                    )
-                    if daily_price and numerator is not None and float(numerator) > 0:
-                        daily_yield = round(float(numerator) / daily_price * 100, 2)
-                    payload["dividendYieldBasis"] = {
-                        "source": "daily_csv",
-                        "fiscalYear": numerator_year,
-                        "annualDividend": numerator,
-                    }
+                    payload["dividendYieldBasis"] = {"source": "no_display_dividend",
+                                                     "fiscalYear": None, "annualDividend": None}
 
                 # まだ系列に載っていない事業年度を、会社発表の予想・確定額で足す。
                 # 以前ここに出していたYahooの「集計中」（権利落ちベースの暦年
                 # 途中累計）の置き換え。
                 series_years = {
                     int(year)
-                    for year in (payload.get("annual") or {})
+                    for year in ((fiscal.get("reportedYears", series) if fiscal else series))
                     if str(year).isdigit()
                 }
                 pending = pending_dividends(
@@ -2431,8 +2448,12 @@ def create_database(
                         code=code,
                     )
                     if breakdown_warnings:
-                        payload["warnings"] = list(payload.get("warnings") or []) + breakdown_warnings
-                    payload["dividendBreakdown"] = breakdown_entry
+                        payload["warnings"] = list(payload.get("warnings") or []) + ["配当内訳の分割基準に確認が必要です"]
+                    payload["dividendBreakdown"] = {y: v for y, v in breakdown_entry.items()
+                                                   if str(y).isdigit() and int(y) in display_years}
+                    base_stats = fiscal_dividend_stats(base_dividend_series(series, breakdown_entry))
+                    payload["streakBaseCapped"] = base_stats["streakIncreaseCapped"]
+                    payload["streakNoDecreaseBaseCapped"] = base_stats["streakNonDecreaseCapped"]
                     payload["streakBase"] = streak_base_from_breakdown(
                         series, breakdown_entry
                     )
@@ -2446,10 +2467,13 @@ def create_database(
                     # （＝全額が普通配当）ので、実質値は全額ベースの
                     # streakIncrease/streakNonDecrease とそのまま同値になる。
                     # 全額ベース側がNULL（判定不能）ならフォールバックもNULLのまま。
+                    payload["streakBaseCapped"] = payload.get("streakIncreaseCapped", False)
+                    payload["streakNoDecreaseBaseCapped"] = payload.get("streakNonDecreaseCapped", False)
                     payload["streakBase"] = payload.get("streakIncrease")
                     payload["streakNoDecreaseBase"] = payload.get(
                         "streakNonDecrease"
                     )
+                validate_public_payload(payload, display_years, series_years, financial_years=financial_years)
                 if daily_price:
                     payload["price"] = daily_price
                     # 表示側が「2026年8月13日 前場寄付時点」のように出すための生データ。
@@ -2461,7 +2485,7 @@ def create_database(
                         payload["dailyPricesAsOf"] = price_session_as_of
                 if daily_yield is not None:
                     payload["dividendYield"] = daily_yield
-                elif currently_unpaid or (fiscal is not None and "dividendYield" in payload):
+                else:
                     # dividends.json由来の古い利回りが銘柄詳細に残らないようにする
                     payload["dividendYield"] = None
                 payload["forecastDividend"] = forecast_dividend
@@ -2504,10 +2528,12 @@ def create_database(
                 # annualPending の「確定」バーと同じ値で、旧い表示コードが
                 # こちらを読むので残してある。
                 confirmed = bounded(forecast_record.get("confirmedDividend"), 0, 1_000_000)
-                if confirmed is not None:
+                confirmed_year = str(forecast_record.get("confirmedFiscalYearEnd", ""))[:4]
+                if confirmed is not None and (pending.get(confirmed_year) or {}).get("kind") == "confirmed":
                     payload["confirmedDividend"] = confirmed
                     payload["confirmedFiscalYearEnd"] = forecast_record.get("confirmedFiscalYearEnd")
 
+                validate_public_payload(payload, display_years, series_years, financial_years=financial_years)
                 name = str(
                     ticker.get("name") or financial.get("name") or code
                 ).strip()

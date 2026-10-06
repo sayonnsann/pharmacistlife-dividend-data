@@ -367,6 +367,24 @@
       "checkedAt": "2026-09-05"
     },
     {
+      "eventId": "9237-2025-11-01-split-1-to-2",
+      "securityCode": "9237",
+      "name": "笑美面",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2025-11-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/92370/140120251010571766.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(9237-2025-11-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
       "eventId": "2501-2026-01-01-split-1-to-5",
       "securityCode": "2501",
       "name": "サッポロビール",
@@ -619,6 +637,24 @@
       "checkedAt": "2026-08-16"
     },
     {
+      "eventId": "338A-2026-04-01-split-1-to-2",
+      "securityCode": "338A",
+      "name": "ＺｅｎｍｕＴｅｃｈ",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-04-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://zenmutech.com/documents/PN_20260316.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(338A-2026-04-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
       "eventId": "3443-2026-04-01-split-1-to-3",
       "securityCode": "3443",
       "name": "川田テクノロジーズ",
@@ -691,6 +727,24 @@
       "checkedAt": "2026-09-04"
     },
     {
+      "eventId": "4923-2026-04-01-split-20-to-21",
+      "securityCode": "4923",
+      "name": "コタ株式会社",
+      "action": "split",
+      "oldShares": 20,
+      "newShares": 21,
+      "effectiveDate": "2026-04-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/49230/140120260128540595.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(4923-2026-04-01-split-20-to-21)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
       "eventId": "5331-2026-04-01-split-1-to-2",
       "securityCode": "5331",
       "name": "ノリタケ",
@@ -707,6 +761,24 @@
       },
       "note": "edinet-direct側マスター(5331-2026-04-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-09-04"
+    },
+    {
+      "eventId": "5821-2026-04-01-split-20-to-21",
+      "securityCode": "5821",
+      "name": "平河ヒューテック株式会社",
+      "action": "split",
+      "oldShares": 20,
+      "newShares": 21,
+      "effectiveDate": "2026-04-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/58210/140120260211555236.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(5821-2026-04-01-split-20-to-21)から自動生成",
+      "checkedAt": "2026-10-05"
     },
     {
       "eventId": "5834-2026-04-01-split-1-to-2",
@@ -1106,6 +1178,24 @@
       "checkedAt": "2026-09-28"
     },
     {
+      "eventId": "2164-2026-06-26-split-5-to-9",
+      "securityCode": "2164",
+      "name": "株式会社地域新聞社",
+      "action": "split",
+      "oldShares": 5,
+      "newShares": 9,
+      "effectiveDate": "2026-06-26",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/21640/140120260529555451.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(2164-2026-06-26-split-5-to-9)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
       "eventId": "1663-2026-07-01-split-1-to-2",
       "securityCode": "1663",
       "name": "K&Oエナジーグループ",
@@ -1212,6 +1302,24 @@
       },
       "note": "edinet-direct側マスター(3277-2026-07-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-08-02"
+    },
+    {
+      "eventId": "3482-2026-07-01-split-5-to-6",
+      "securityCode": "3482",
+      "name": "ロードスターキャピタル株式会社",
+      "action": "split",
+      "oldShares": 5,
+      "newShares": 6,
+      "effectiveDate": "2026-07-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.loadstarcapital.com/ja/ir/irnews/irnews20260612.html",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(3482-2026-07-01-split-5-to-6)から自動生成",
+      "checkedAt": "2026-10-05"
     },
     {
       "eventId": "3673-2026-07-01-split-1-to-2",
@@ -1574,6 +1682,24 @@
       "checkedAt": "2026-08-17"
     },
     {
+      "eventId": "2814-2026-09-16-split-1-to-2",
+      "securityCode": "2814",
+      "name": "佐藤食品工業株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-09-16",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/28140/140120260827527450.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(2814-2026-09-16-split-1-to-2)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
       "eventId": "1718-2026-10-01-split-1-to-3",
       "securityCode": "1718",
       "name": "美樹工業株式会社",
@@ -1679,6 +1805,24 @@
         "type": "issuer_ir"
       },
       "note": "edinet-direct側マスター(2108-2026-10-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
+      "eventId": "278A-2026-10-01-split-1-to-2",
+      "securityCode": "278A",
+      "name": "Terra Drone株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-10-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://contents.xj-storage.jp/xcontents/AS06144/3535ed68/920b/4ae4/8180/ec9e2fdb89fd/140120260826526462.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(278A-2026-10-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-10-05"
     },
     {
@@ -2274,6 +2418,96 @@
       },
       "note": "edinet-direct側マスター(9956-2026-10-01-split-1-to-2)から自動生成",
       "checkedAt": "2026-08-17"
+    },
+    {
+      "eventId": "6036-2026-11-01-split-1-to-2",
+      "securityCode": "6036",
+      "name": "KeePer技研株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-11-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://contents.xj-storage.jp/xcontents/AS02676/075a0e2a/e491/4a49/aff4/c3558def7327/140120260915536785.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(6036-2026-11-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
+      "eventId": "6787-2026-11-02-split-1-to-2",
+      "securityCode": "6787",
+      "name": "株式会社メイコー",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2026-11-02",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.meiko-elec.com/pdf/ir/news/2026/20260928.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(6787-2026-11-02-split-1-to-2)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
+      "eventId": "4616-2026-12-01-split-1-to-3",
+      "securityCode": "4616",
+      "name": "川上塗料株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 3,
+      "effectiveDate": "2026-12-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.kawakami-paint.co.jp/20260831-irosirase.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(4616-2026-12-01-split-1-to-3)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
+      "eventId": "2207-2027-01-01-split-1-to-2",
+      "securityCode": "2207",
+      "name": "株式会社meito",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2027-01-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www.meito-abc.co.jp/content/wp-content/uploads/ir/7036/20260924_release.pdf",
+        "type": "issuer_ir"
+      },
+      "note": "edinet-direct側マスター(2207-2027-01-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-10-05"
+    },
+    {
+      "eventId": "6465-2027-01-01-split-1-to-2",
+      "securityCode": "6465",
+      "name": "ホシザキ株式会社",
+      "action": "split",
+      "oldShares": 1,
+      "newShares": 2,
+      "effectiveDate": "2027-01-01",
+      "status": "provisional",
+      "applyDividendAdjustment": true,
+      "epsAdjustedByIssuer": null,
+      "source": {
+        "url": "https://www2.jpx.co.jp/disc/64650/140120260730503810.pdf",
+        "type": "jpx"
+      },
+      "note": "edinet-direct側マスター(6465-2027-01-01-split-1-to-2)から自動生成",
+      "checkedAt": "2026-10-05"
     }
   ]
 }

@@ -159,8 +159,9 @@ def test_real_audit_builds_two_synthetic_stores_and_summary_is_safe(tmp_path, mo
     source = Path(__file__).resolve().parents[1]
     for folder in ("scripts", "data", "edinet"):
         (root / folder).mkdir(parents=True)
-    for script in ("build_store.py", "audit_store_diff.py", "audit_yield_numerator.py", "public_dividend_policy.py"):
+    for script in ("build_store.py", "audit_store_diff.py", "audit_yield_numerator.py", "public_dividend_policy.py", "payout_estimate.py"):
         shutil.copyfile(source / "scripts" / script, root / "scripts" / script)
+    shutil.copyfile(source / "data" / "payout_estimate_holds.json", root / "data" / "payout_estimate_holds.json")
     for filename, document in [("all_financials.json", [{"code": "1234", "name": "テスト社"}]),
                                ("tickers.json", []), ("sector_stats.json", {})]:
         (root / "data" / filename).write_text(json.dumps(document))

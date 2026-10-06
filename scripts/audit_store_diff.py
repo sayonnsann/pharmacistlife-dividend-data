@@ -60,6 +60,8 @@ def load_module(path, name, root):
     module.REPOSITORY_ROOT = root
     if hasattr(module, 'DEFAULT_YIELD_NUMERATOR_OVERRIDES'):
         module.DEFAULT_YIELD_NUMERATOR_OVERRIDES = root / 'data/yield_numerator_overrides.json'
+    if hasattr(module, 'DEFAULT_PAYOUT_ESTIMATE_HOLDS'):
+        module.DEFAULT_PAYOUT_ESTIMATE_HOLDS = root / 'data/payout_estimate_holds.json'
     return module
 
 
@@ -101,6 +103,8 @@ def run(args):
         after_path = args.after_code or root / 'scripts/build_store.py'
         before = load_module(before_path, 'store_before', root)
         after = load_module(after_path, 'store_after', root)
+        if args.after_payout_estimates_off:
+            after.PAYOUT_ESTIMATE_ENABLED = False
         shutil.copyfile(args.prices, temp / 'database.csv')
         shutil.copyfile(args.split_adjustments, temp / 'split_adjustments.json')
         if args.price_meta:
@@ -172,6 +176,10 @@ def run(args):
             payloads['after'], after.parse_yield_split_adjustments(
                 after.load_json(args.split_adjustments, dict), allow_missing_active=True))
         comparison = compare_payloads(payloads['before'], payloads['after'])
+        estimated = {c: p['payoutRatioEstimated'] for c, p in payloads['after'].items()
+                     if p.get('payoutRatioEstimated')}
+        comparison['payout_estimates'] = dict(companies=len(estimated),
+                                             years=sum(len(v) for v in estimated.values()))
         comparison['stock_columns'] = compare_stock_columns(args.output_dir / 'before.sqlite',
                                                             args.output_dir / 'after.sqlite')
         comparison.update(as_of=args.as_of.isoformat(), baseline_head=head, coverage=coverage,
@@ -184,7 +192,9 @@ def run(args):
                           before_code_sha256=fingerprint(before_path)['sha256'],
                           after_code_sha256=fingerprint(after_path)['sha256'])
         comparison['inputs'].update({name: fingerprint(root / 'data' / name) for name in
-                                     ('yield_numerator_overrides.json', 'forecast_overrides.json', 'dividend_breakdown.json')})
+                                     ('yield_numerator_overrides.json', 'forecast_overrides.json', 'dividend_breakdown.json',
+                                      'payout_estimate_holds.json')})
+        comparison['after_payout_estimates_off'] = args.after_payout_estimates_off
         shutil.copyfile(before_path, args.output_dir / 'before_build_store.py')
         shutil.copyfile(after_path, args.output_dir / 'after_build_store.py')
         for name, document in [('payload_diff', comparison), ('numerator', numerator)]:
@@ -200,6 +210,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repo', type=Path, default=ROOT)
     parser.add_argument('--before-ref', default='HEAD', help='比較基準のGit ref（既定HEAD）')
+    parser.add_argument('--after-payout-estimates-off', action='store_true',
+                        help='候補コードの推計をオフにして完全復元を検証')
     for option in ('before-code', 'after-code', 'forecasts', 'price-meta'):
         parser.add_argument('--' + option, type=Path)
     for option, default in [('financials', ROOT / 'data/all_financials.json'),

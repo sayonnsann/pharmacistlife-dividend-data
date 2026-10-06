@@ -25,8 +25,12 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 from public_dividend_policy import (POLICY_ID, issuer_eligible, period_metadata, validate_public_payload,
                                    financial_dividend_projection, financial_dividend_years)
+from payout_estimate import estimate_fields
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+# Falseに戻して再ビルドすると、推計追加前と同じpayloadになる。
+PAYOUT_ESTIMATE_ENABLED = True
+DEFAULT_PAYOUT_ESTIMATE_HOLDS = REPOSITORY_ROOT / "data" / "payout_estimate_holds.json"
 DEFAULT_FINANCIALS = REPOSITORY_ROOT / "data" / "all_financials.json"
 DEFAULT_SECTORS = REPOSITORY_ROOT / "data" / "sector_stats.json"
 DEFAULT_TICKERS = REPOSITORY_ROOT / "data" / "tickers.json"
@@ -1384,6 +1388,29 @@ def latest_number(series: Any) -> float | int | None:
     return max(candidates, default=(0, None), key=lambda item: item[0])[1]
 
 
+def load_payout_estimate_holds(path: Path) -> dict[str, str]:
+    document = load_json(path, dict)
+    if any(normalized_code(code) != code or not isinstance(reason, str) or not reason.strip()
+           for code, reason in document.items()):
+        raise ValueError(f"{path}: 推計保留は銘柄コード:理由のobjectが必要です")
+    return document
+
+
+def payout_estimate_allowed(code: str, fiscal: dict | None, adjustment: dict | None,
+                            holds: dict[str, str]) -> bool:
+    if code in holds or not fiscal or fiscal.get("displayPolicy") != POLICY_ID:
+        return False
+    basis = fiscal.get("displayBasis") or {}
+    if basis.get("reliable", fiscal.get("streakReliable", True)) is False:
+        return False
+    if fiscal.get("fiscalMonth") is None:
+        return False
+    adjustment = adjustment or {}
+    return not (adjustment.get("hasProvisional") or adjustment.get("fallbacks")
+                or any(e.get("status") == "confirmed" and e.get("epsAdjustedByIssuer") is None
+                       for e in adjustment.get("events", [])))
+
+
 def payout_series(financial: dict[str, Any]) -> dict[str, Any]:
     """配当性向の系列（EDINET由来・事業年度キー）を返す。
 
@@ -2087,6 +2114,8 @@ def create_database(
     price_session_as_of = (price_session_meta or {}).get("as_of_date")
     stock_actions_by_code = stock_actions_by_code or {}
     fiscal_by_code = fiscal_by_code or {}
+    payout_holds = (load_payout_estimate_holds(DEFAULT_PAYOUT_ESTIMATE_HOLDS)
+                    if PAYOUT_ESTIMATE_ENABLED else {})
     calendar_by_code = calendar_by_code or {}
     stock_action_fallbacks = (
         stock_action_fallbacks if stock_action_fallbacks is not None else []
@@ -2368,6 +2397,11 @@ def create_database(
                     payload["streakUnreliable"] = None
                     payload["dividendSeries"] = period_metadata({}, series)
 
+                estimate_allowed = PAYOUT_ESTIMATE_ENABLED and payout_estimate_allowed(
+                    code, fiscal, adjustment, payout_holds)
+                if estimate_allowed:
+                    payload.update(estimate_fields(payload, display_years))
+
                 # 利回りは完成したグラフのannualを直接読む。予想・短信の
                 # annualPending/annualPartialを足す前に選び、二重補正を防ぐ。
                 daily_yield = None
@@ -2473,7 +2507,8 @@ def create_database(
                     payload["streakNoDecreaseBase"] = payload.get(
                         "streakNonDecrease"
                     )
-                validate_public_payload(payload, display_years, series_years, financial_years=financial_years)
+                validate_public_payload(payload, display_years, series_years, financial_years=financial_years,
+                                        payout_estimate_allowed=estimate_allowed)
                 if daily_price:
                     payload["price"] = daily_price
                     # 表示側が「2026年8月13日 前場寄付時点」のように出すための生データ。
@@ -2533,7 +2568,8 @@ def create_database(
                     payload["confirmedDividend"] = confirmed
                     payload["confirmedFiscalYearEnd"] = forecast_record.get("confirmedFiscalYearEnd")
 
-                validate_public_payload(payload, display_years, series_years, financial_years=financial_years)
+                validate_public_payload(payload, display_years, series_years, financial_years=financial_years,
+                                        payout_estimate_allowed=estimate_allowed)
                 name = str(
                     ticker.get("name") or financial.get("name") or code
                 ).strip()

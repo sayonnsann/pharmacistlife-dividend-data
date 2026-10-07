@@ -2400,7 +2400,13 @@ def create_database(
                 estimate_allowed = PAYOUT_ESTIMATE_ENABLED and payout_estimate_allowed(
                     code, fiscal, adjustment, payout_holds)
                 if estimate_allowed:
-                    payload.update(estimate_fields(payload, display_years))
+                    estimate_diagnostics = []
+                    payload.update(estimate_fields(payload, display_years,
+                                                  diagnostics=estimate_diagnostics))
+                    for issue in estimate_diagnostics:
+                        if issue["reason"] != "eps_step_explained_by_income":
+                            print(f"配当性向推計 {code}: "
+                                  + json.dumps(issue, ensure_ascii=False, sort_keys=True))
 
                 # 利回りは完成したグラフのannualを直接読む。予想・短信の
                 # annualPending/annualPartialを足す前に選び、二重補正を防ぐ。

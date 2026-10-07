@@ -43,6 +43,12 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > "${RUNNER_TEMP}/changed-files.txt"
+          # tests/** の変更でも起動するため、抽出台帳を変えていないPR(機能追加など)では
+          # 「抽出台帳だけの変更か」の検査を省き、上の pytest だけで判定する(2026-10-07)。
+          if ! grep -qx 'data/stock_actions_extracted.json' "${RUNNER_TEMP}/changed-files.txt"; then
+            echo "抽出台帳(data/stock_actions_extracted.json)の変更が無いため、変更ファイルの検査は省略します"
+            exit 0
+          fi
           git show "${BASE_SHA}:data/stock_actions_extracted.json" > "${RUNNER_TEMP}/stock_actions_base.json"
           python scripts/validate_stock_actions_pr.py \
             --base-file "${RUNNER_TEMP}/stock_actions_base.json" \

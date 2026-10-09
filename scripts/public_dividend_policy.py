@@ -1,5 +1,6 @@
 """Public dividend projections must never contain calculation-only yearly values."""
 from __future__ import annotations
+from payout_estimate import FIELDS, estimate_fields
 
 POLICY_ID = "issuer-material-display-exclude-haitoukin-2026-10-06"
 DISPLAY_CATEGORIES = frozenset({"a", "b", "c", "d", "f"})
@@ -44,7 +45,8 @@ def financial_dividend_years(financial: dict) -> dict[str, set[int]]:
 
 
 def validate_public_payload(payload: dict, display_years: set[int], reported_years: set[int],
-                            *, financial_years: dict[str, set[int]] | None = None) -> None:
+                            *, financial_years: dict[str, set[int]] | None = None,
+                            payout_estimate_allowed: bool = False) -> None:
     def walk(value):
         if isinstance(value, dict):
             if PRIVATE_KEYS & value.keys():
@@ -55,6 +57,10 @@ def validate_public_payload(payload: dict, display_years: set[int], reported_yea
             for child in value:
                 walk(child)
     walk(payload)
+    if any(key in payload for key in FIELDS):
+        expected = estimate_fields(payload, display_years) if payout_estimate_allowed else {}
+        if not expected or any(key not in payload or payload[key] != expected[key] for key in FIELDS):
+            raise ValueError("公開配当性向の推計に未採用・表示対象外の年度または不正な値があります")
     for key in ("annual", "dividendBreakdown"):
         if any(int(y) not in display_years for y in (payload.get(key) or {})):
             raise ValueError(f"公開{key}に表示対象外の年度があります")

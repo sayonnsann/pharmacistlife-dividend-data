@@ -5,7 +5,34 @@ POLICY_ID = "issuer-material-display-exclude-haitoukin-2026-10-06"
 DISPLAY_CATEGORIES = frozenset({"a", "b", "c", "d", "f"})
 PRIVATE_KEYS = frozenset({"series", "streakSeries", "displaySeries", "yearProvenance",
                           "externalRawValue", "researchAnnual", "seriesValue",
-                          "manualDividendAdjustment", "ratioDetail", "displayProvenance"})
+                          "manualDividendAdjustment", "ratioDetail", "displayProvenance",
+                          "displayAdoptions", "yuhoDisplayYears"})
+
+
+def valid_yuho_adoption(value, reference, evidence, adoption):
+    """Narrow exception for independent, converted owner-saved annual reports."""
+    import math
+    from datetime import date
+    if not isinstance(adoption, dict) or reference is None:
+        return False
+    if (adoption.get("status") != "adopt" or adoption.get("converted") != value
+            or evidence.get("sourceCategory") != "b"
+            or evidence.get("documentType") != "annualSecuritiesReport"
+            or evidence.get("acquisitionRoute") != "ownerSavedPdf"
+            or not adoption.get("sourceUrl")
+            or "有価証券報告書" not in adoption.get("docTitle", "")
+            or evidence.get("sourceUrl") != adoption["sourceUrl"]
+            or evidence.get("docTitle") != adoption["docTitle"]
+            or adoption.get("basis") not in {"実額", "調整済み", "不明"}):
+        return False
+    raw = adoption.get("raw")
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)) or not math.isfinite(raw) or raw < 0:
+        return False
+    try:
+        date.fromisoformat(adoption["asOf"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return value == 0 if reference == 0 else abs(value / reference - 1) <= .03 + 1e-12
 
 
 def issuer_eligible(evidence: dict) -> bool:

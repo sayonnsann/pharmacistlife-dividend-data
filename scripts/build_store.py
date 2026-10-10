@@ -24,7 +24,7 @@ import sys
 if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 from public_dividend_policy import (POLICY_ID, issuer_eligible, period_metadata, validate_public_payload,
-                                   financial_dividend_projection, financial_dividend_years)
+                                   financial_dividend_projection, financial_dividend_years, valid_yuho_adoption)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FINANCIALS = REPOSITORY_ROOT / "data" / "all_financials.json"
@@ -351,11 +351,18 @@ def normalize_fiscal_dividends(document: dict, path: Path | str = "memory") -> d
         if record.get("series") != record["streakSeries"]:
             raise ValueError(f"{path}: {raw_code}: series/streakSeries mismatch")
         classes = record.get("yearProvenance") or {}
+        yuho_years = {}
         for y, v in display.items():
             evidence = classes.get(str(y)) or {}
-            if (series.get(y) != v or evidence.get("displayEligible") is not True
+            adoption = (record.get("displayAdoptions") or {}).get(str(y))
+            independent = valid_yuho_adoption(v, series.get(y), evidence, adoption)
+            if independent:
+                yuho_years[y] = adoption["asOf"]
+            if ((not independent and (series.get(y) != v
+                    or y in {int(v) for v in record.get("externalYears", [])}))
+                    or evidence.get("displayEligible") is not True
                     or not issuer_eligible(evidence)
-                    or y in {int(v) for v in record.get("externalYears", [])}):
+                    or (adoption is not None and not independent)):
                 raise ValueError(f"{path}: {raw_code}/{y}: unsafe display dividend")
 
         connection = record.get("connection")
@@ -406,6 +413,7 @@ def normalize_fiscal_dividends(document: dict, path: Path | str = "memory") -> d
             "series": series,
             "streakSeries": series,
             "displaySeries": display,
+            "yuhoDisplayYears": yuho_years,
             "displayPolicy": POLICY_ID,
             "displayBasis": record.get("displayBasis") or {},
             "reportedYears": sorted(series),
@@ -2258,8 +2266,10 @@ def create_database(
                     if fiscal.get("displayPolicy") != POLICY_ID or "displaySeries" not in fiscal:
                         raise ValueError(f"{code}: missing issuer-material display contract")
                     display_years = set(fiscal["displaySeries"])
-                    if (display_years & set(fiscal.get("externalYears", []))
-                            or any(series.get(y) != v for y, v in fiscal["displaySeries"].items())):
+                    yuho_years = fiscal.get("yuhoDisplayYears") or {}
+                    if ((display_years - set(yuho_years)) & set(fiscal.get("externalYears", []))
+                            or any(series.get(y) != v for y, v in fiscal["displaySeries"].items()
+                                   if y not in yuho_years)):
                         raise ValueError(f"{code}: unsafe display dividend")
                     if adjustment is not None:
                         series_adjustment = adjustment_for_unadjusted_series(
@@ -2291,6 +2301,23 @@ def create_database(
                     if not streak_reliable:
                         streak_unreliable_stocks += 1
                     display_series = {y: series[y] for y in sorted(display_years)}
+                    for year, basis_day in yuho_years.items():
+                        # These observations already include every event through
+                        # the producer's asOf. Never apply FY-based factors twice.
+                        day = date.fromisoformat(basis_day)
+                        if day > today:
+                            raise ValueError(f"{code}: display adoption is from the future")
+                        factor = 1.0
+                        seen_events = set()
+                        for event in stock_actions_by_code.get(code, []):
+                            old, new = finite_number(event.get("oldShares")), finite_number(event.get("newShares"))
+                            if (event.get("status") == "confirmed" and old and new and old > 0 and new > 0
+                                    and day < date.fromisoformat(event["effectiveDate"]) <= today):
+                                identity = (event["effectiveDate"], old / new)
+                                if identity not in seen_events:
+                                    factor *= old / new
+                                    seen_events.add(identity)
+                        display_series[year] = fiscal["displaySeries"][year] * factor
                     display_basis = fiscal.get("displayBasis") or {}
                     display_stats = fiscal_dividend_stats(
                         display_series, streak_reliable=display_basis.get("reliable", streak_reliable),
@@ -2450,7 +2477,8 @@ def create_database(
                     if breakdown_warnings:
                         payload["warnings"] = list(payload.get("warnings") or []) + ["配当内訳の分割基準に確認が必要です"]
                     payload["dividendBreakdown"] = {y: v for y, v in breakdown_entry.items()
-                                                   if str(y).isdigit() and int(y) in display_years}
+                                                   if str(y).isdigit() and int(y) in display_years
+                                                   and int(y) not in (fiscal.get("yuhoDisplayYears", {}) if fiscal else {})}
                     base_stats = fiscal_dividend_stats(base_dividend_series(series, breakdown_entry))
                     payload["streakBaseCapped"] = base_stats["streakIncreaseCapped"]
                     payload["streakNoDecreaseBaseCapped"] = base_stats["streakNonDecreaseCapped"]

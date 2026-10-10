@@ -12,7 +12,7 @@ from public_dividend_policy import POLICY_ID, validate_public_payload, financial
 from fiscal_fixtures import annual_report_fixture
 
 
-def build(tmp_path, *, display=None, empty=False, forecast=None, unreliable=False):
+def build(tmp_path, *, display=None, empty=False, forecast=None, unreliable=False, yuho=None, actions=None):
     calculation = {} if empty else {2000: 10, 2001: 20, 2002: 30, 2003: 40}
     display = {2002: 30, 2003: 40} if display is None else display
     record = {'series': calculation, 'streakSeries': calculation,
@@ -20,6 +20,9 @@ def build(tmp_path, *, display=None, empty=False, forecast=None, unreliable=Fals
               'fiscalMonth': 3, 'externalYears': sorted(set(calculation)-set(display)), 'externalSource': 'external',
               'reportedYears': sorted(calculation), 'connectionStatus': 'scaled',
               'connectionReason': 'PRIVATE_DETAIL', 'streakReliable': not unreliable}
+    if yuho:
+        record['yuhoDisplayYears'] = yuho
+        record['externalYears'] = sorted(set(calculation)-set(display) | set(yuho))
     root = tmp_path/'repo';(root/'data').mkdir(parents=True)
     (root/'data/dividend_breakdown.json').write_text(json.dumps({'9999': {
         '2000': {'base': 5, 'special': 5}, '2002': {'base': 25, 'special': 5}}}))
@@ -37,6 +40,7 @@ def build(tmp_path, *, display=None, empty=False, forecast=None, unreliable=Fals
          patch.object(store,'load_yield_split_adjustments',return_value=[]):
         store.create_database(out,[financial],{},{},{'9999': forecast or {}},[Path('fixture')]*4,'fixture.csv',
                               fiscal_by_code={'9999':record},
+                              stock_actions_by_code=actions,
                               calendar_by_code={'9999':{'series':{2000:10,2001:20}}},today=date(2004,10,5))
     with sqlite3.connect(out) as conn:
         payload=json.loads(conn.execute('SELECT payload FROM stocks').fetchone()[0])
@@ -114,6 +118,67 @@ def test_loader_fails_closed_on_legacy_or_poisoned_display(tmp_path):
     migrated['9999']['yearProvenance']['2000']['sourceCategory']='e'
     path.write_text(json.dumps(migrated))
     with pytest.raises(ValueError,match='unsafe display'):store.load_fiscal_dividends(path)
+
+
+def yuho_document():
+    document = annual_report_fixture({'9999': {'series': {'2000': 10, '2001': 20}}})
+    r = document['9999']
+    r['displaySeries']['2000'] = 10.2
+    r['externalYears'] = [2000]
+    r['yearProvenance']['2000'].update(sourceCategory='b', acquisitionRoute='ownerSavedPdf',
+        sourceUrl='https://issuer/yuho.pdf', docTitle='有価証券報告書')
+    r['displayAdoptions'] = {'2000': {'raw': 102, 'converted': 10.2, 'basis': '実額',
+        'sourceUrl': 'https://issuer/yuho.pdf', 'docTitle': '有価証券報告書',
+        'asOf': '2004-10-05', 'status': 'adopt'}}
+    return document
+
+
+def test_loader_allows_independent_yuho_value_without_changing_calculation():
+    r = store.normalize_fiscal_dividends(yuho_document())['9999']
+    assert r['streakSeries'][2000] == 10
+    assert r['displaySeries'][2000] == 10.2
+    assert r['externalYears'] == [2000]
+    assert r['yuhoDisplayYears'] == {2000: '2004-10-05'}
+
+
+@pytest.mark.parametrize('mutation', ['external', 'wrong_value', 'mismatch', 'source', 'no_marker'])
+def test_yuho_exception_fails_closed(mutation):
+    d = yuho_document(); r = d['9999']
+    if mutation == 'external': r['yearProvenance']['2000']['sourceCategory'] = 'e'
+    if mutation == 'wrong_value': r['displayAdoptions']['2000']['converted'] = 10
+    if mutation == 'mismatch':
+        r['displaySeries']['2000'] = r['displayAdoptions']['2000']['converted'] = 10.31
+    if mutation == 'source': r['displayAdoptions']['2000']['sourceUrl'] = 'https://other/source'
+    if mutation == 'no_marker': r.pop('displayAdoptions')
+    with pytest.raises(ValueError, match='unsafe display'):
+        store.normalize_fiscal_dividends(d)
+
+
+def test_public_annual_uses_yuho_value_and_streaks_keep_external_value(tmp_path):
+    before, _ = build(tmp_path/'before')
+    after, _ = build(tmp_path/'after', display={2000:10.2,2002:30,2003:40}, yuho={2000:'2004-10-05'})
+    assert after['annual']['2000'] == 10.2
+    assert after['dividendSeries']['startYear'] == 2000
+    assert after['dividendSeries']['calculationStartYear'] == 2000
+    assert not after['dividendSeries']['hiddenYearsArePrefix']
+    for key in ('streakIncrease','streakNonDecrease','streakBase','streakNoDecreaseBase'):
+        assert before[key] == after[key]
+    assert '2000' not in after['dividendBreakdown']
+    assert 'displayAdoptions' not in json.dumps(after)
+    validate_public_payload(after, {2000,2002,2003}, {2000,2001,2002,2003},
+                            financial_years={'main':{2003},'basisTransitionMetrics':set()})
+
+
+def test_yuho_current_basis_only_applies_events_after_producer_asof(tmp_path):
+    def event(day, identity, old=1, new=2):
+        return {'securityCode':'9999','effectiveDate':day,'eventId':identity,'oldShares':old,
+                'newShares':new,'status':'confirmed','action':'split','epsAdjustedByIssuer':True,
+                'applyDividendAdjustment':True,'source':{'url':'https://issuer/split'}}
+    actions={'9999':[event('2004-01-01','past'),event('2004-06-01','today'),
+                     event('2004-09-01','later'),event('2004-09-01','duplicate')]}
+    p,_=build(tmp_path,display={2000:10.2,2002:30,2003:40},yuho={2000:'2004-06-01'},actions=actions)
+    assert p['annual']['2000'] == 5.1
+    assert 'yuhoDisplayYears' not in json.dumps(p)
 
 
 @pytest.mark.parametrize('payload',[{'streakSeries':{'2000':123456.789}},

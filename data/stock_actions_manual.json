@@ -493,24 +493,6 @@
       "checkedAt": "2026-09-04"
     },
     {
-      "eventId": "8057-2026-01-21-split-1-to-5",
-      "securityCode": "8057",
-      "name": "内田洋行",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 5,
-      "effectiveDate": "2026-01-21",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://www.uchida.co.jp/company/news/customer/251014a.html",
-        "type": "issuer_ir"
-      },
-      "note": "edinet-direct側マスター(8057-2026-01-21-split-1-to-5)から自動生成",
-      "checkedAt": "2026-08-02"
-    },
-    {
       "eventId": "2983-2026-02-01-split-1-to-2",
       "securityCode": "2983",
       "name": "アールプランナー",

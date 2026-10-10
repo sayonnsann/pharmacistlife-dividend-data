@@ -2223,6 +2223,18 @@
       },
       "detectedAt": "2026-10-07",
       "status": "pending"
+    },
+    {
+      "code": "4320",
+      "name": "CEホールディングス",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "d848f26eeb792f54ba5b486f68027979799bebc03c577f3c76ab057a6eef3252",
+        "eventType": "reverse_split",
+        "eventDate": "2026-10-09"
+      },
+      "detectedAt": "2026-10-10",
+      "status": "pending"
     }
   ]
 }

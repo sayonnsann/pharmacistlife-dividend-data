@@ -1,7 +1,7 @@
 {
   "pendingSplitEvents": {
     "d848f26eeb792f54ba5b486f68027979799bebc03c577f3c76ab057a6eef3252": {
-      "attempts": 1,
+      "attempts": 2,
       "code": "4320",
       "edinetCode": "E05233",
       "eventDate": "2026-10-09",
@@ -60,5 +60,5 @@
       "2026"
     ]
   },
-  "updatedAt": "2026-10-10"
+  "updatedAt": "2026-10-11"
 }

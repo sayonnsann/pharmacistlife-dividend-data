@@ -25,6 +25,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 from public_dividend_policy import (POLICY_ID, issuer_eligible, period_metadata, validate_public_payload,
                                    financial_dividend_projection, financial_dividend_years, valid_yuho_adoption)
+from financial_display import prepare_financial_display
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FINANCIALS = REPOSITORY_ROOT / "data" / "all_financials.json"
@@ -2208,7 +2209,7 @@ def create_database(
                 )
                 forecast_record = forecast_record or {}
 
-                payload = dict(financial)
+                payload = prepare_financial_display(financial)
                 if isinstance(payload.get("basisTransitionMetrics"), dict):
                     payload["basisTransitionMetrics"] = dict(payload["basisTransitionMetrics"])
                 payload.pop("confirmedDividend", None)
@@ -2216,13 +2217,13 @@ def create_database(
                 for private_key in ("annual", "annualPartial", "annualPending", "series", "streakSeries",
                                     "displaySeries", "yearProvenance", "dividendBreakdown"):
                     payload.pop(private_key, None)
-                payload["roeYearEnd"] = roe_year_end(financial)
+                payload["roeYearEnd"] = roe_year_end(payload)
                 payload["streakBase"] = None
                 for key in ("name", "market", "sector", "sector17"):
                     if ticker.get(key):
                         payload[key] = ticker[key]
                 # グラフの折れ線。EDINET由来・事業年度キーなので棒と軸が揃う。
-                payload["payoutRatio"] = payout_series(financial)
+                payload["payoutRatio"] = payout_series(payload)
                 if payload["payoutRatio"]:
                     payout_line_stocks += 1
                 if adjustment is not None:
@@ -2243,9 +2244,9 @@ def create_database(
                     # 現在価格との計算に使うEPS/BPSだけを現在基準へ揃える。
                     if eps_bps_factor != 1.0:
                         for key in ("eps", "bps"):
-                            if key in financial:
+                            if key in payload:
                                 payload[key] = adjust_per_share_series(
-                                    financial[key],
+                                    payload[key],
                                     adjustment,
                                     fiscal_month=(
                                         fiscal_record.get("fiscalMonth")
@@ -2254,6 +2255,15 @@ def create_database(
                                     ),
                                     field="epsBps",
                                 )
+                        # Reviewed values from integrated financials already
+                        # share the same base as the ordinary EPS/BPS series.
+                        switch = payload.get("basisSwitchMetrics") or {}
+                        for key in ("eps", "bps"):
+                            if key in switch:
+                                switch[key] = adjust_per_share_series(
+                                    switch[key], adjustment,
+                                    fiscal_month=fiscal_record.get("fiscalMonth") if fiscal_record else None,
+                                    field="epsBps")
                     payload["splitAdjustment"] = adjustment
 
                 # 配当系列を事業年度ベースへ差し替える。

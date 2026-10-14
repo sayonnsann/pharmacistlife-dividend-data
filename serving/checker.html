@@ -216,8 +216,41 @@
     return '<section id="dvc-section-earnings" class="'+classes+'"><div class="dvc-card-head"><h4>業績予想</h4><p class="dvc-earnings-subtitle">'+esc(periodLabel)+'（元データ: 百万円・表示: 億円換算）</p></div><div class="dvc-earnings-grid">'+definitions.map(function(item){var metric=metrics[item[1]]||{},changeClass=typeof metric.change==="number"&&isFinite(metric.change)?(metric.change<0?"dvc-growth-neg":"dvc-growth-pos"):"";return '<div class="dvc-earnings-metric"><span class="dvc-earnings-label">'+esc(item[0])+'</span><strong class="dvc-earnings-value">'+esc(earningsValue(metric))+'</strong><span class="dvc-earnings-change '+changeClass+'">前年比 '+esc(earningsChange(metric))+'</span></div>'}).join("")+"</div></section>"
   }
   function roeMethodNote(company){var value=company&&company.roeYearEnd,message="ROEは会社申告値（自己資本は期首期末平均）。";if(typeof value==="number"&&isFinite(value))message+="期末ベースでは "+formatNumber(value,2)+"%（IRbank等はこの方式）";return '<p class="dvc-chart-note dvc-roe-note">'+esc(message)+"</p>"}
-  function validYears(data){return data?Object.keys(data).sort().filter(function(y){return typeof data[y]==="number"&&isFinite(data[y])}):[]}
-  function latest(data){var ys=validYears(data);return ys.length?{year:ys[ys.length-1],value:data[ys[ys.length-1]]}:null}
+  function financialPeriodOrder(year,periods){
+    var meta=(periods||{})[year],m=String(year).match(/^(\d{4})(?:_(\d{2}))?$/);
+    if(meta&&/^\d{4}-\d{2}-\d{2}$/.test(meta.fiscalYearEnd||""))return meta.fiscalYearEnd;
+    return m?m[1]+"-"+(m[2]||"12")+"-31":String(year)
+  }
+  function compareFinancialPeriods(a,b,periods){var x=financialPeriodOrder(a,periods),y=financialPeriodOrder(b,periods);return x<y?-1:x>y?1:String(a).localeCompare(String(b))}
+  function financialPeriodLabel(year,periods){var meta=(periods||{})[year],m=String(year).match(/^(\d{4})_(\d{2})$/);return meta&&meta.label?meta.label:m?m[1]+"/"+Number(m[2]):String(year)+"年"}
+  function financialAxisYears(dataYears,periods){
+    var years=dataYears.slice(),present={};dataYears.forEach(function(y){present[String(y).slice(0,4)]=true});
+    var nums=dataYears.map(function(y){return Number(String(y).slice(0,4))}).filter(isFinite);
+    if(!nums.length)return [];
+    for(var y=Math.min.apply(null,nums);y<=Math.max.apply(null,nums);y+=1)if(!present[String(y)])years.push(String(y));
+    return years.sort(function(a,b){return compareFinancialPeriods(a,b,periods)})
+  }
+  function validYears(data,periods){return data?Object.keys(data).filter(function(y){return /^\d{4}(?:_\d{2})?$/.test(y)&&typeof data[y]==="number"&&isFinite(data[y])}).sort(function(a,b){return compareFinancialPeriods(a,b,periods)}):[]}
+  function latest(data,periods){var ys=validYears(data,periods);return ys.length?{year:ys[ys.length-1],value:data[ys[ys.length-1]]}:null}
+  function financialMark(company,key,year){
+    var mark=company&&(company.financialBasisByYear||{})[year];if(!mark)return null;
+    var fields=mark.fields||[];return fields.indexOf(key)>=0||(key==="freeCashFlow"&&fields.indexOf("operatingCashFlow")>=0&&fields.indexOf("investingCashFlow")>=0)?mark:null
+  }
+  function financialMetricNotes(company,key,data){
+    return validYears(data,company&&company.financialPeriods).map(function(y){var mark=financialMark(company,key,y);return mark&&mark.note?'<p class="dvc-chart-note">'+esc(financialPeriodLabel(y,company.financialPeriods)+": "+mark.note)+"</p>":""}).join("")
+  }
+  function financialDisplayCompany(company){
+    var c=Object.assign({},company),marks=company.financialBasisByYear||{},bt=company.basisTransitionMetrics,info=company.basisTransition;
+    var keys=["roe","roa","equityRatio","deRatio","revenue","netIncome","totalAssets","operatingCashFlow","investingCashFlow","financingCashFlow","cashAndEquivalents","doe","payoutRatioTotalBased","numberOfEmployees"];
+    if(bt&&info&&info.fiscalYear)keys.forEach(function(k){if(bt[k]&&validYears(bt[k]).length)c[k]=bt[k]});
+    // Reviewed years always supersede the legacy connection, including hide/review.
+    keys.concat(["eps","bps","per","interestBearingDebt"]).forEach(function(k){
+      var data=Object.assign({},c[k]||{});Object.keys(marks).forEach(function(y){delete data[y]});
+      var overlay=(company.basisSwitchMetrics||{})[k]||{};
+      Object.keys(overlay).forEach(function(y){var mark=financialMark(company,k,y);if(mark&&mark.note&&(mark.decision==="connect"||mark.decision==="separate"))data[y]=overlay[y]});c[k]=data
+    });
+    return c
+  }
   function formatNumber(v,d){return Number(v).toLocaleString("ja-JP",{minimumFractionDigits:d,maximumFractionDigits:d})}
   function digits(v){var a=Math.abs(v);return a>=100?0:a>=10?1:2}
   function formatValue(v,u){if(u==="%")return formatNumber(v,digits(v))+"%";if(u==="円")return formatNumber(v,digits(v))+"円";if(u==="億円")return formatNumber(v,Math.abs(v)<100?1:0)+"億円";return formatNumber(v,digits(v))}
@@ -377,7 +410,7 @@
 
   function trendSummary(data,unit){
     var ys=validYears(data),fy,ly,first,last,change,vals,min,max,range,avg,flat,swing,span;
-    if(ys.length<2)return"";fy=ys[0];ly=ys[ys.length-1];first=data[fy];last=data[ly];change=last-first;vals=ys.map(function(y){return data[y]});min=Math.min.apply(null,vals);max=Math.max.apply(null,vals);range=max-min;avg=average(data);flat=first===0?last===0:Math.abs(change/first)<.1;swing=avg!==0&&Math.abs(range/avg)>.3&&range>Math.abs(change)*2.5;span=Number(ly)-Number(fy)+1;
+    if(ys.length<2)return"";fy=ys[0];ly=ys[ys.length-1];first=data[fy];last=data[ly];change=last-first;vals=ys.map(function(y){return data[y]});min=Math.min.apply(null,vals);max=Math.max.apply(null,vals);range=max-min;avg=average(data);flat=first===0?last===0:Math.abs(change/first)<.1;swing=avg!==0&&Math.abs(range/avg)>.3&&range>Math.abs(change)*2.5;span=Number(ly.slice(0,4))-Number(fy.slice(0,4))+1;
     if(flat)return swing?"上下の振れが大きい（"+compactValue(min,unit)+" 〜 "+compactValue(max,unit)+"）":"ほぼ横ばい（"+compactValue(avg,unit)+"前後）";
     return span+"年で"+(swing?"上下しつつ":"")+(change>0?"上昇":"低下")+"（"+compactValue(first,unit)+" → "+compactValue(last,unit)+"）"
   }
@@ -389,7 +422,7 @@
   function domainFor(series,br){var vals=[];series.forEach(function(s){validYears(s.data).forEach(function(y){vals.push(s.data[y])})});if(!vals.length)return{min:0,max:1};if(!br)return padded(vals);var lo=padded(br.lower),umin=Math.min.apply(null,br.upper),umax=Math.max.apply(null,br.upper),span=umax-umin,p=span>0?span*.18:Math.max(Math.abs(umax)*.08,1);return{min:lo.min,max:umax+p,lowerMax:lo.max,upperMin:Math.max(lo.max,umin-p),broken:true}}
   function scalesFor(years,d){var pw=SVG_W-PAD.left-PAD.right,ph=SVG_H-PAD.top-PAD.bottom,g=d.broken?18:0,uh=d.broken?Math.round(ph*.24):0,lh=d.broken?ph-uh-g:ph,bt=PAD.top+uh,bb=bt+g;return{x:function(i){return years.length===1?PAD.left+pw/2:PAD.left+(i/(years.length-1))*pw},y:function(v){if(d.broken){if(v>=d.upperMin)return PAD.top+((d.max-v)/(d.max-d.upperMin))*uh;if(v>d.lowerMax)return bt+g/2;return bb+((d.lowerMax-v)/(d.lowerMax-d.min))*lh}return PAD.top+((d.max-v)/(d.max-d.min))*ph},plotW:pw,breakTop:bt,breakBottom:bb,breakY:bt+g/2}}
   function axisValue(v,u){if(u==="億円")return Math.abs(v)>=10000?formatNumber(v/10000,1)+"兆":formatNumber(v,0);if(u==="%")return formatNumber(v,Math.abs(v)<10?1:0);return formatNumber(v,0)}
-  function axes(years,d,s,u){
+  function axes(years,d,s,u,periods){
     var out=[],i,value,y,lineClass;
     if(d.broken){
       for(i=0;i<=1;i+=1){
@@ -418,33 +451,49 @@
       }
     }
     years.forEach(function(year,index){
-      out.push('<text class="dvc-axis-label" x="'+s.x(index)+'" y="'+(SVG_H-15)+'" text-anchor="middle">'+esc(year.slice(2))+'</text>');
+      var x=s.x(index),y=periods?SVG_H-31:SVG_H-15,periodLabel=((periods&&periods[year])||year.indexOf("_")>=0)?financialPeriodLabel(year,periods):year.slice(2);
+      out.push('<text class="dvc-axis-label" x="'+x+'" y="'+y+'" text-anchor="'+(periods?'end':'middle')+'"'+(periods?' transform="rotate(-40 '+x+' '+y+')"':'')+'>'+esc(periodLabel)+'</text>');
     });
     out.push('<text class="dvc-axis-label" x="'+PAD.left+'" y="14">'+esc(u)+'</text>');
     return out.join("");
   }
   function wave(x1,x2,y,a){var d="M "+x1+" "+y,x=x1,dir=-1;while(x+8<=x2){d+=" q 4 "+(a*dir)+" 8 0";x+=8;dir*=-1}return d}
   function breakMarks(s){var l=PAD.left,r=SVG_W-PAD.right,y=s.breakY;return '<rect x="'+(l-12)+'" y="'+s.breakTop+'" width="'+(r-l+14)+'" height="'+(s.breakBottom-s.breakTop)+'" fill="#fff" fill-opacity=".94"></rect><path class="dvc-axis-break-grid" d="'+wave(l+11,r,y-3,2.5)+'"></path><path class="dvc-axis-break-grid" d="'+wave(l+11,r,y+3,2.5)+'"></path><path class="dvc-axis-break" d="'+wave(l-10,l+11,y-3,3)+'"></path><path class="dvc-axis-break" d="'+wave(l-10,l+11,y+3,3)+'"></path>'}
-  function averageLines(series,s,d){return series.map(function(item,i){if(item.isSector)return"";var a=average(item.data);if(a===null||(d.broken&&a>d.lowerMax&&a<d.upperMin))return"";return '<line x1="'+PAD.left+'" y1="'+s.y(a)+'" x2="'+(SVG_W-PAD.right)+'" y2="'+s.y(a)+'" stroke="'+(item.color||COLORS[i])+'" stroke-width="1.5" stroke-dasharray="6 5" stroke-opacity=".45"></line>'}).join("")}
-  function legend(series,type,unit){var labels=[];series.forEach(function(item,i){if(item.isSector){labels.push('<span><i class="dvc-legend-sector"></i>'+esc(item.label)+"</span>");return}var color=item.color||COLORS[i],a=average(item.data);labels.push('<span><i class="dvc-legend-swatch'+(type==="line"?" dvc-legend-line":"")+'" style="background:'+color+'"></i>'+esc(item.label)+"</span>");if(a!==null)labels.push('<span><i class="dvc-legend-average" style="color:'+color+'"></i>'+esc("期間平均 "+compactValue(a,unit))+"</span>")});return '<div class="dvc-fin-legend">'+labels.join("")+"</div>"}
-  function chart(series,unit,type,label){
-    var graph=series.filter(function(s){return validYears(s.data).length>=2});if(!graph.length)return"";
-    // データのある年だけを詰めて並べると、間の欠測年が無いかのように見えて
-    // しまうため、最初〜最後の年まで1年刻みの連続軸にする。欠測年はバー・点を
-    // 描かず(折れ線は繋がず切る)、軸の位置だけ確保する。
-    var dataYears=unionYears(graph),minYear=Math.min.apply(null,dataYears.map(Number)),maxYear=Math.max.apply(null,dataYears.map(Number)),years=[];
-    for(var yr=minYear;yr<=maxYear;yr+=1)years.push(String(yr));
-    var hasGap=years.length>dataYears.length;
-    var br=detectBreak(graph,unit),d=domainFor(graph,br),s=scalesFor(years,d),body=axes(years,d,s,unit)+averageLines(graph,s,d),zero=s.y(0);
-    if(type==="bar"){var groupW=s.plotW/years.length,barW=Math.min(38,Math.max(10,groupW-18));s.x=function(i){return PAD.left+groupW*i+groupW/2};body=axes(years,d,s,unit)+averageLines(graph,s,d);years.forEach(function(y,yi){graph.forEach(function(item,si){var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;var vy=s.y(v),top=Math.min(vy,zero),height=Math.max(1.5,Math.abs(zero-vy)),x=s.x(yi)-barW/2,isOut=br&&br.isOutlier(v),ly=v>=0?Math.max(PAD.top+9,top-6):Math.min(SVG_H-PAD.bottom-2,top+height+13);body+='<rect x="'+x+'" y="'+top+'" width="'+barW+'" height="'+height+'" rx="3" fill="'+(item.color||COLORS[si])+'"><title>'+esc(item.label+" "+y+"年: "+formatValue(v,unit))+'</title></rect><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):axisValue(v,unit))+"</text>"})})}else{graph.forEach(function(item,si){var color=item.color||COLORS[si],segments=[],seg=[],last=null;years.forEach(function(y,yi){var v=item.data[y];if(typeof v==="number"&&isFinite(v)){if(last!==null&&Number(y)-Number(last)>1&&seg.length){segments.push(seg);seg=[]}seg.push(s.x(yi)+","+s.y(v));last=y}else if(seg.length){segments.push(seg);seg=[];last=null}});if(seg.length)segments.push(seg);segments.forEach(function(points){if(points.length>=2)body+='<polyline points="'+points.join(" ")+'" fill="none" stroke="'+color+'" stroke-width="'+(item.isSector?2:3)+'"'+(item.isSector?' stroke-dasharray="2 5"':'')+' stroke-linecap="round" stroke-linejoin="round"></polyline>'});if(item.isSector)return;years.forEach(function(y,yi){var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;var cy=s.y(v),isOut=br&&br.isOutlier(v),ly=cy<PAD.top+18?cy+20:cy-10;body+='<circle cx="'+s.x(yi)+'" cy="'+cy+'" r="5" fill="#fff" stroke="'+color+'" stroke-width="3"><title>'+esc(item.label+" "+y+"年: "+formatValue(v,unit))+'</title></circle><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):formatValue(v,unit).replace(unit,""))+"</text>"})})}
+  function averageLines(series,s,d){return series.map(function(item,i){if(item.isSector||item.isSeparate)return"";var a=average(item.data);if(a===null||(d.broken&&a>d.lowerMax&&a<d.upperMin))return"";return '<line x1="'+PAD.left+'" y1="'+s.y(a)+'" x2="'+(SVG_W-PAD.right)+'" y2="'+s.y(a)+'" stroke="'+(item.color||COLORS[i])+'" stroke-width="1.5" stroke-dasharray="6 5" stroke-opacity=".45"></line>'}).join("")}
+  function legend(series,type,unit){var labels=[];series.forEach(function(item,i){if(item.isSector){labels.push('<span><i class="dvc-legend-sector"></i>'+esc(item.label)+"</span>");return}var color=item.color||COLORS[i],a=average(item.data);labels.push('<span><i class="dvc-legend-swatch'+(type==="line"?" dvc-legend-line":"")+'" style="background:'+color+'"></i>'+esc(item.label)+"</span>");if(a!==null&&!item.isSeparate)labels.push('<span><i class="dvc-legend-average" style="color:'+color+'"></i>'+esc("期間平均 "+compactValue(a,unit))+"</span>")});return '<div class="dvc-fin-legend">'+labels.join("")+"</div>"}
+  function chart(series,unit,type,label,periods){
+    var graph=series.filter(function(s){return validYears(s.data).length>=1});if(!graph.length)return"";
+    var dataYears=unionYears(graph),years=financialAxisYears(dataYears,periods),hasGap=years.length>dataYears.length;
+    var br=detectBreak(graph,unit),d=domainFor(graph,br),s=scalesFor(years,d),body=axes(years,d,s,unit,periods)+averageLines(graph,s,d),zero=s.y(0);
+    function pointTitle(item,y,v){var meta=(periods||{})[y];return item.label+" "+financialPeriodLabel(y,periods)+(meta&&meta.periodLabel?"（"+meta.periodLabel+"）":"")+": "+formatValue(v,unit)+(item.notes&&item.notes[y]?"。"+item.notes[y]:"")}
+    if(type==="bar"){
+      var groupW=s.plotW/years.length,barW=Math.min(38,Math.max(10,groupW-18));s.x=function(i){return PAD.left+groupW*i+groupW/2};body=axes(years,d,s,unit,periods)+averageLines(graph,s,d);
+      years.forEach(function(y,yi){graph.forEach(function(item,si){
+        var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;
+        var vy=s.y(v),top=Math.min(vy,zero),height=Math.max(1.5,Math.abs(zero-vy)),x=s.x(yi)-barW/2,isOut=br&&br.isOutlier(v),ly=v>=0?Math.max(PAD.top+9,top-6):Math.min(SVG_H-PAD.bottom-2,top+height+13);
+        body+='<rect x="'+x+'" y="'+top+'" width="'+barW+'" height="'+height+'" rx="3" fill="'+(item.color||COLORS[si])+'"'+(item.isSeparate?' stroke="#92400e" stroke-dasharray="4 3"':'')+'><title>'+esc(pointTitle(item,y,v))+'</title></rect><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):axisValue(v,unit))+"</text>"
+      })})
+    }else{
+      graph.forEach(function(item,si){
+        var color=item.color||COLORS[si],segments=[],seg=[];
+        years.forEach(function(y,yi){var v=item.data[y];if(typeof v==="number"&&isFinite(v)){seg.push(s.x(yi)+","+s.y(v))}else if(seg.length){segments.push(seg);seg=[]}});
+        if(seg.length)segments.push(seg);
+        segments.forEach(function(points){if(points.length>=2)body+='<polyline points="'+points.join(" ")+'" fill="none" stroke="'+color+'" stroke-width="'+(item.isSector?2:3)+'"'+(item.isSector?' stroke-dasharray="2 5"':item.isSeparate?' stroke-dasharray="6 4"':'')+' stroke-linecap="round" stroke-linejoin="round"></polyline>'});
+        if(item.isSector)return;
+        years.forEach(function(y,yi){var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;var cy=s.y(v),isOut=br&&br.isOutlier(v),ly=cy<PAD.top+18?cy+20:cy-10;body+='<circle cx="'+s.x(yi)+'" cy="'+cy+'" r="5" fill="#fff" stroke="'+color+'" stroke-width="3"><title>'+esc(pointTitle(item,y,v))+'</title></circle><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):formatValue(v,unit).replace(unit,""))+"</text>"})
+      })
+    }
     if(br)body+=breakMarks(s);
     return '<div class="dvc-fin-chart"><svg viewBox="0 0 '+SVG_W+" "+SVG_H+'" role="img" aria-label="'+esc(label)+'">'+body+"</svg></div>"+legend(graph,type,unit)+(br?'<p class="dvc-chart-note">※縦軸の一部を二重波線の位置で省略しています。上側の点には実際の数値を表示しています。</p>':"")+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
   }
   function miniMetric(title,data,unit,type,color,description,emptyMessage,company,key,sourceLabel){
-    var count=validYears(data).length,series=[{label:title,data:data||{},color:color}],med=sectorSeries(company,key,data||{}),content;
-    if(type==="line"&&count>=2&&validYears(med).length>=2)series.push({label:"業種中央値（"+company.industry+"）",data:med,color:"#7c3aed",isSector:true});
-    if(count>=2)content=chart(series,unit,type,title+"の推移");else if(count===1){var p=latest(data);content='<div class="dvc-single"><span class="dvc-single-label">'+esc(title)+'（1期のみ）</span><span class="dvc-single-value">'+esc(formatValue(p.value,unit))+' <small class="dvc-single-year">'+esc(p.year)+"年</small></span></div>"}else content='<div class="dvc-empty">'+esc(emptyMessage||title+"のデータはありません")+"</div>";
-    return '<div class="dvc-mini-panel"><div class="dvc-metric-head"><p class="dvc-mini-title">'+esc(title)+'<span class="dvc-metric-source">'+esc(sourceLabel||"出典: 会社の公式資料")+'</span></p>'+(count>=2?'<span class="dvc-trend-badge">'+esc(trendSummary(data,unit))+"</span>":"")+"</div>"+sectorPosition(company,key,data||{},unit)+'<p class="dvc-metric-description">'+esc(description)+"</p>"+content+"</div>"
+    var periods=company&&company.financialPeriods,count=validYears(data,periods).length,normal={},separate={},notes={},content;
+    validYears(data,periods).forEach(function(y){var mark=financialMark(company,key,y);if(mark&&(mark.decision==="hide"||mark.decision==="review"))return;if(mark&&mark.note)notes[y]=mark.note;if(mark&&mark.decision==="separate")separate[y]=data[y];else normal[y]=data[y]});
+    var series=[{label:title,data:normal,color:color,notes:notes}],med=sectorSeries(company,key,normal);
+    if(validYears(separate).length)series.push({label:title+"（決算の範囲が異なる区間）",data:separate,color:"#d97706",isSeparate:true,notes:notes});
+    if(type==="line"&&validYears(normal).length>=2&&validYears(med).length>=2)series.push({label:"業種中央値（"+company.industry+"）",data:med,color:"#7c3aed",isSector:true});
+    if(count>=2)content=chart(series,unit,type,title+"の推移",periods);else if(count===1){var p=latest(data,periods);content='<div class="dvc-single"><span class="dvc-single-label">'+esc(title)+'（1期のみ）</span><span class="dvc-single-value">'+esc(formatValue(p.value,unit))+' <small class="dvc-single-year">'+esc(financialPeriodLabel(p.year,periods))+"</small></span></div>"}else content='<div class="dvc-empty">'+esc(emptyMessage||title+"のデータはありません")+"</div>";
+    return '<div class="dvc-mini-panel"><div class="dvc-metric-head"><p class="dvc-mini-title">'+esc(title)+'<span class="dvc-metric-source">'+esc(sourceLabel||"出典: 会社の公式資料")+'</span></p>'+(validYears(normal).length>=2?'<span class="dvc-trend-badge">'+esc(trendSummary(normal,unit))+"</span>":"")+"</div>"+sectorPosition(company,key,normal,unit)+'<p class="dvc-metric-description">'+esc(description)+"</p>"+content+financialMetricNotes(company,key,data)+"</div>"
   }
   function dividendYieldMetric(company){
     var data=company.dividendYieldHistory||{},count=validYears(data).length;
@@ -459,27 +508,20 @@
   }
   function card(title,subtitle,content,wide){return '<section class="dvc-card'+(wide?" dvc-card-wide":"")+'"><div class="dvc-card-head"><h4>'+esc(title)+'</h4><p class="dvc-card-subtitle">'+esc(subtitle)+"</p></div>"+content+"</section>"}
   function warningMessages(company){var messages={},split={};(company.splitSuspectYears||[]).forEach(function(y){split[String(y)]=true});(company.warnings||[]).forEach(function(w){var text=String(w),m;if(/dividendPerShare|株式分割|株式併合/.test(text)){(text.match(/(?:19|20)\d{2}/g)||[]).forEach(function(y){split[y]=true});return}m=text.match(/^([A-Za-z][A-Za-z0-9]*):/);if(m&&m[1]==="revenue")messages.revenue="売上高は、この会社の開示形式では取得できませんでした";else if(m&&m[1]==="netIncome")messages.netIncome="純利益は、この会社の開示形式では取得できませんでした";else messages.partial="一部の財務項目は、この会社の開示形式では取得できませんでした"});var years=Object.keys(split).sort(),out=Object.keys(messages).map(function(k){return{text:messages[k],split:false}});if(years.length)out.push({text:years.map(function(y){return y+"年"}).join("・")+"に株式分割・併合があった可能性があります。1株あたりの数値は、この年をまたいで単純に比較できない場合があります",split:true});return out}
-  function finSummary(label,point,unit){return '<div class="dvc-fin-summary-item"><span class="dvc-fin-summary-label">'+esc(label)+'</span><span class="dvc-fin-summary-value">'+esc(point?formatValue(point.value,unit):"—")+"</span></div>"}
+  function finSummary(label,point,unit,company,key){return '<div class="dvc-fin-summary-item"><span class="dvc-fin-summary-label">'+esc(label)+'</span><span class="dvc-fin-summary-value">'+esc(point?formatValue(point.value,unit):"—")+"</span>"+(point?financialMetricNotes(company,key,(function(){var d={};d[point.year]=point.value;return d}())):"")+"</div>"}
   function buildFinancialSection(code){
     if(state.financialStatus==="loading")return '<section class="dvc-financials"><div class="dvc-empty">財務データを読み込んでいます…</div></section>';
     if(state.financialStatus==="failed")return '<section class="dvc-financials"><div class="dvc-empty">財務データを読み込めませんでした。配当情報はそのままご利用いただけます。</div></section>';
     var c=state.financialByCode[code];if(!c)return"";
-    // 連結決算を始めた会社(basisTransition)は、切替前の単体値をつないだ表示用系列で
-    // 財務グラフを埋める。1株あたり指標(EPS/BPS)は株式分割の基準合わせと干渉するため
-    // 対象外とし、素の系列(連結開始後のみ)のまま表示する。
-    var bt=c.basisTransitionMetrics,btInfo=c.basisTransition,btNote="";
-    if(bt&&btInfo&&btInfo.fiscalYear){
-      var btKeys=["roe","roa","equityRatio","deRatio","revenue","netIncome","totalAssets","operatingCashFlow","investingCashFlow","financingCashFlow","cashAndEquivalents","doe","payoutRatioTotalBased","numberOfEmployees"];
-      var merged=Object.assign({},c);var used=false;
-      btKeys.forEach(function(k){if(bt[k]&&validYears(bt[k]).length){merged[k]=bt[k];used=true}});
-      if(used){c=merged;btNote="この会社は"+String(btInfo.fiscalYear)+"年から連結決算(子会社を含めたグループ全体の数値)を開始しました。それより前の年は単体(親会社のみ)の数値です。EPS・BPSは基準をまたがないよう連結開始後の年のみ表示しています。"}
-    }
+    var btInfo=c.basisTransition,btNote="";
+    c=financialDisplayCompany(c);
+    if(btInfo&&btInfo.fiscalYear)btNote="この会社は"+String(btInfo.fiscalYear)+"年から連結決算を開始しました。それより前の年は単体決算です。精査した年は各項目の注記に従って表示しています。";
     var cash=c.cashAndEquivalents||c.cash||{},payout=validYears(c.payoutRatioTotalBased||{}).length?c.payoutRatioTotalBased:(c.payoutRatioConsolidated||{}),payoutKey=validYears(c.payoutRatioTotalBased||{}).length?"payoutRatioTotalBased":"payoutRatioConsolidated",warnings=warningMessages(c),html;
     if(btNote)warnings=warnings.concat([{split:false,text:btNote}]);
-    html='<section id="dvc-section-financials" class="dvc-financials"><div class="dvc-fin-head"><div><h3>財務指標の推移</h3><p>薄い破線は期間平均、紫の点線は業種中央値です。横軸は開示年です。</p></div><span class="dvc-fin-source">出典: 会社の公式資料</span></div>';
+    html='<section id="dvc-section-financials" class="dvc-financials"><div class="dvc-fin-head"><div><h3>財務指標の推移</h3><p>薄い破線は期間平均、紫の点線は業種中央値です。横軸は決算期末の年（変則決算は年月）です。</p></div><span class="dvc-fin-source">出典: 会社の公式資料</span></div>';
     if(warnings.length)html+='<ul class="dvc-warnings">'+warnings.map(function(w){return '<li class="'+(w.split?"dvc-warning-split":"dvc-warning-note")+'">'+esc(w.text)+"</li>"}).join("")+"</ul>";
     html+=earningsForecastCard(c);
-    html+='<div class="dvc-fin-summary">'+finSummary("最新ROE",latest(c.roe||{}),"%")+finSummary("最新自己資本比率",latest(c.equityRatio||{}),"%")+finSummary("最新EPS",latest(c.eps||{}),"円")+finSummary("最新BPS",latest(c.bps||{}),"円")+"</div>"+roeMethodNote(c);
+    html+='<div class="dvc-fin-summary">'+finSummary("最新ROE",latest(c.roe||{},c.financialPeriods),"%",c,"roe")+finSummary("最新自己資本比率",latest(c.equityRatio||{},c.financialPeriods),"%",c,"equityRatio")+finSummary("最新EPS",latest(c.eps||{},c.financialPeriods),"円",c,"eps")+finSummary("最新BPS",latest(c.bps||{},c.financialPeriods),"円",c,"bps")+"</div>"+roeMethodNote(c);
     html+='<div class="dvc-chart-grid">'+
       card("収益性","ROEとROAは別々の軸で表示",'<div class="dvc-mini-grid">'+miniMetric("ROE",c.roe||{},"%","line","#2563eb","株主のお金を使って、どれだけ利益を生んだかの割合",null,c,"roe")+miniMetric("ROA",c.roa||{},"%","line","#f59e0b","会社が持つ資産全体を使って、どれだけ利益を生んだかの割合",null,c,"roa")+"</div>",true)+
       card("安全性","自己資本比率（%）",miniMetric("自己資本比率",c.equityRatio||{},"%","line","#0891b2","総資産のうち返済不要な自己資本が占める割合",null,c,"equityRatio"),false)+

@@ -1024,11 +1024,33 @@ class StockActionIntegrationTest(unittest.TestCase):
             self.assertEqual(after[code][0]["effectiveDate"], "2026-10-01")
 
     def test_manual_event_wins_when_event_id_is_duplicated(self) -> None:
-        loaded = build_store.load_stock_actions(
-            [self.MANUAL, self.EXTRACTED], as_of=date(2026, 8, 3)
-        )
-        # 3350 は抽出台帳側が provisional(監査「要確認」)のため手動台帳にも残る唯一の重複。
-        # 手動側(confirmed・監査情報なし)が勝つことを確認する
+        # 抽出台帳側が provisional(監査「要確認」)で、手動台帳にも同じ eventId がある場合、
+        # 手動側(confirmed・監査情報なし)が勝つことを確認する。実データの重複は台帳の更新で
+        # 消えることがある(2026-10-14、3350 が生成台帳から外れた)ので、固定の入力で確かめる。
+        base = {
+            "eventId": "3350-2025-04-01-split-1-to-10", "securityCode": "3350",
+            "action": "split", "oldShares": 1, "newShares": 10,
+            "effectiveDate": "2025-04-01", "applyDividendAdjustment": True,
+        }
+        manual = {"schemaVersion": 1, "events": [{
+            **base, "status": "confirmed", "epsAdjustedByIssuer": True,
+            "source": {"url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XTWY.pdf",
+                       "type": "edinet"},
+        }]}
+        extracted = {"schemaVersion": 1, "events": [{
+            **base, "status": "provisional", "epsAdjustedByIssuer": None,
+            "source": {"url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100XTWY.pdf",
+                       "type": "edinet", "docID": "S100XTWY",
+                       "audit": {"decision": "要確認", "reasons": ["multiple_events_in_document"]}},
+        }]}
+        with tempfile.TemporaryDirectory() as tmp:
+            manual_path = Path(tmp) / "manual.json"
+            extracted_path = Path(tmp) / "extracted.json"
+            manual_path.write_text(json.dumps(manual, ensure_ascii=False), encoding="utf-8")
+            extracted_path.write_text(json.dumps(extracted, ensure_ascii=False), encoding="utf-8")
+            loaded = build_store.load_stock_actions(
+                [manual_path, extracted_path], as_of=date(2026, 8, 3)
+            )
         event = loaded["3350"][0]
         self.assertEqual(
             event["source"]["url"],

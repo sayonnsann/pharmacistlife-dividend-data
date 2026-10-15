@@ -131,3 +131,105 @@ def test_sqlite_preserves_periods_notes_and_adjusts_integrated_eps(tmp_path, mon
     assert payload["financialBasisByYear"] == financial["financialBasisByYear"]
     assert payload["financialPeriods"] == financial["financialPeriods"]
     assert financial == original
+
+
+def dated_eps():
+    financial = marked(field="eps")
+    financial["basisSwitchPerShareBasis"] = {"docID": "S100BASE", "source": "base.csv",
+        "fiscalYearEnd": "2026-03-31", "filingDate": "2026-06-01"}
+    financial["financialBasisByYear"]["2016"]["perShare"] = {"eps": {
+        "status": "shown", "sourceDocID": "S100PAST", "source": "past.csv",
+        "sourceFilingDate": "2017-06-01", "sourceValue": 20, "factor": 0.5,
+        "targetFilingDate": "2026-06-01", "events": [
+            {"eventId": "prior", "effectiveDate": "2025-04-01", "factor": 0.5}]}}
+    return financial
+
+
+@pytest.mark.parametrize("mutation", ["future_source", "wrong_target", "wrong_value", "withheld", "no_proof",
+                                       "no_basis", "no_events", "bad_factor", "duplicate", "outside_window"])
+def test_store_rejects_mixed_basis_or_unproven_per_share_values(mutation):
+    financial = dated_eps()
+    proof = financial["financialBasisByYear"]["2016"]["perShare"]["eps"]
+    if mutation == "future_source":
+        proof["sourceFilingDate"] = "2027-06-01"
+    elif mutation == "wrong_target":
+        proof["targetFilingDate"] = "2025-06-01"
+    elif mutation == "wrong_value":
+        financial["basisSwitchMetrics"]["eps"]["2016"] = 5
+    elif mutation == "withheld":
+        proof["status"] = "withheld"
+    elif mutation == "no_basis":
+        financial.pop("basisSwitchPerShareBasis")
+    elif mutation == "no_events":
+        proof.pop("events")
+    elif mutation == "bad_factor":
+        proof["events"][0]["factor"] = 0.25
+    elif mutation == "duplicate":
+        proof["events"].append(dict(proof["events"][0]))
+    elif mutation == "outside_window":
+        proof["events"][0]["effectiveDate"] = "2017-06-01"
+    else:
+        financial["financialBasisByYear"]["2016"].pop("perShare")
+    with pytest.raises(ValueError, match="証跡"):
+        prepare_financial_display(financial)
+
+
+@pytest.mark.parametrize("late_old,late_new,include_at_filing", [(1, 2, True), (2, 1, True), (2, 1, False)])
+def test_sqlite_applies_only_events_after_shared_filing_basis(tmp_path, monkeypatch, late_old, late_new, include_at_filing):
+    import json
+    import sqlite3
+    import build_store as store
+    from datetime import date
+    from fiscal_fixtures import annual_report_fixture
+    root = tmp_path / "repo"
+    (root / "data").mkdir(parents=True)
+    monkeypatch.setattr(store, "REPOSITORY_ROOT", root)
+    monkeypatch.setattr(store, "load_daily_prices", lambda *a: ({"9999": 1000}, {}, "fixture"))
+    monkeypatch.setattr(store, "load_price_session_meta", lambda *a: None)
+    monkeypatch.setattr(store, "load_yield_split_adjustments", lambda *a: [])
+    financial = dated_eps()
+    financial.update(code="9999", name="fixture", eps={"2016": 999, "2017": 20, "2006_03": 8},
+                     dividendPerShare={"2017": 100})
+    original = copy.deepcopy(financial)
+    def action(event_id, effective, old, new):
+        return {"eventId": event_id, "securityCode": "9999", "action": "split" if new > old else "consolidation",
+            "effectiveDate": effective, "oldShares": old, "newShares": new, "status": "confirmed",
+            "applyDividendAdjustment": True, "epsAdjustedByIssuer": False,
+            "source": {"url": "https://issuer.example/split.pdf"}}
+    actions = [action("prior", "2025-04-01", 1, 2), action("later", "2026-07-01", late_old, late_new)]
+    if include_at_filing:
+        actions.append(action("at-filing", "2026-06-01", 1, 2))
+    fiscal = annual_report_fixture({"9999": {"fiscalMonth": 3, "series": {2025: 10, 2026: 12}}})
+    path = tmp_path / "fixture.sqlite"
+    store.create_database(path, [financial], {}, {}, {}, [Path("fixture")] * 4, "fixture.csv",
+                          fiscal_by_code=fiscal, stock_actions_by_code={"9999": actions}, today=date(2026, 10, 15))
+    with sqlite3.connect(path) as conn:
+        payload = json.loads(conn.execute("SELECT payload FROM stocks").fetchone()[0])
+    factor = late_old / late_new
+    assert payload["basisSwitchMetrics"]["eps"] == {"2016": 10 * factor}
+    assert payload["eps"] == {"2017": 20 * factor, "2006_03": 8 * factor}
+    assert payload["financialBasisByYear"] == financial["financialBasisByYear"]
+    assert financial == original
+
+
+def test_eps_events_with_unit_total_factor_still_use_the_filing_window():
+    import build_store as store
+    adjustment = {"epsBpsFactor": 1, "events": [
+        {"status": "confirmed", "epsAdjustedByIssuer": False, "effectiveDate": "2025-04-01", "adjustmentFactor": 0.5},
+        {"status": "confirmed", "epsAdjustedByIssuer": False, "effectiveDate": "2026-07-01", "adjustmentFactor": 2},
+    ]}
+    assert store.adjust_per_share_series({"2016": 10}, adjustment, field="epsBps", basis_date="2026-06-01") == {"2016": 20}
+
+
+def test_checker_eps_bps_receive_standalone_notes(tmp_path):
+    run_checker_js(tmp_path, r'''
+    var c=financialDisplayCompany({code:"8194",eps:{"2015":53.96,"2017":86.61},bps:{"2015":560.17,"2017":675.77},
+      financialBasisByYear:{"2016":{decision:"connect",basis:"nonConsolidated",note:"この年は単体決算の値です。",fields:["eps","bps"]}},
+      basisSwitchMetrics:{eps:{"2016":84.62},bps:{"2016":617.735}}});
+    ["eps","bps"].forEach(function(field){
+      var html=miniMetric(field,c[field],"円","line","blue","説明",null,c,field);
+      if(html.indexOf("2016年: この年は単体決算")<0)throw new Error(field+" lacks standalone note");
+      if((html.match(/<polyline/g)||[]).length!==1)throw new Error(field+" not connected");
+      if(/NaN|Infinity/.test(html))throw new Error("invalid geometry");
+    });
+    ''')

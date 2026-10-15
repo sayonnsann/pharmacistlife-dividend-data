@@ -7,6 +7,7 @@ import argparse
 import csv
 import io
 import json
+import math
 import os
 import re
 import sqlite3
@@ -25,7 +26,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 from public_dividend_policy import (POLICY_ID, issuer_eligible, period_metadata, validate_public_payload,
                                    financial_dividend_projection, financial_dividend_years, valid_yuho_adoption)
-from financial_display import prepare_financial_display
+from financial_display import prepare_financial_display, per_share_basis_date
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FINANCIALS = REPOSITORY_ROOT / "data" / "all_financials.json"
@@ -1259,8 +1260,20 @@ def adjustment_factor_for_period(
     *,
     fiscal_month: int | None,
     field: str,
+    basis_date: str | None = None,
 ) -> float:
     """期間末より後に効力が発生した分割だけの補正係数を返す。"""
+    if field == "epsBps" and basis_date is not None:
+        # A known filing basis is shared by every period (including suffixed
+        # multi-period keys). Its cutoff replaces the legacy period heuristic.
+        cutoff = date.fromisoformat(basis_date)
+        return math.prod(
+            finite_number(e.get("adjustmentFactor"))
+            for e in adjustment.get("events", [])
+            if e.get("status") == "confirmed" and e.get("epsAdjustedByIssuer") is False
+            and finite_number(e.get("adjustmentFactor")) is not None
+            and date.fromisoformat(e["effectiveDate"]) > cutoff
+        )
     try:
         period_year = int(period)
     except (TypeError, ValueError):
@@ -1358,6 +1371,7 @@ def adjust_per_share_series(
     *,
     fiscal_month: int | None = None,
     field: str = "dividend",
+    basis_date: str | None = None,
 ) -> Any:
     """期間末より後の分割だけを時系列へ適用する。"""
     if not isinstance(series, dict):
@@ -1370,6 +1384,7 @@ def adjust_per_share_series(
                 period,
                 fiscal_month=fiscal_month,
                 field=field,
+                basis_date=basis_date,
             )
             if finite_number(value) is not None
             else value
@@ -2228,7 +2243,6 @@ def create_database(
                     payout_line_stocks += 1
                 if adjustment is not None:
                     dividend_factor = adjustment["dividendFactor"]
-                    eps_bps_factor = adjustment["epsBpsFactor"]
                     if "dividendPerShare" in financial:
                         payload["dividendPerShare"] = adjust_per_share_series(
                             financial["dividendPerShare"],
@@ -2242,7 +2256,9 @@ def create_database(
                         )
                     # PER/PBR自体は価格と1株当たり値の比なので分割で不変。
                     # 現在価格との計算に使うEPS/BPSだけを現在基準へ揃える。
-                    if eps_bps_factor != 1.0:
+                    if any(e.get("status") == "confirmed" and e.get("epsAdjustedByIssuer") is False
+                           for e in adjustment.get("events", [])):
+                        eps_basis = per_share_basis_date(payload)
                         for key in ("eps", "bps"):
                             if key in payload:
                                 payload[key] = adjust_per_share_series(
@@ -2254,16 +2270,17 @@ def create_database(
                                         else None
                                     ),
                                     field="epsBps",
+                                    basis_date=eps_basis,
                                 )
-                        # Reviewed values from integrated financials already
-                        # share the same base as the ordinary EPS/BPS series.
+                        # The producer aligned reviewed annual-report values
+                        # with the ordinary series before publishing them.
                         switch = payload.get("basisSwitchMetrics") or {}
                         for key in ("eps", "bps"):
                             if key in switch:
                                 switch[key] = adjust_per_share_series(
                                     switch[key], adjustment,
                                     fiscal_month=fiscal_record.get("fiscalMonth") if fiscal_record else None,
-                                    field="epsBps")
+                                    field="epsBps", basis_date=eps_basis)
                     payload["splitAdjustment"] = adjustment
 
                 # 配当系列を事業年度ベースへ差し替える。

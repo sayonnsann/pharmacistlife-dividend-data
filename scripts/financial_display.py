@@ -10,6 +10,32 @@ FIELDS = frozenset({
 })
 
 
+def _event_id_set(ids):
+    if (not isinstance(ids, list)
+            or any(not isinstance(eid, str) or not eid.strip() for eid in ids)
+            or len(ids) != len(set(ids))):
+        raise ValueError("不正なイベントID集合です")
+    return set(ids)
+
+
+def _value_basis_applied(proof, event_ids, mark, basis_date):
+    # A present but incomplete proof must never fall back to the filing window.
+    if "valueBasis" not in proof:
+        return None
+    basis = proof["valueBasis"]
+    if (not isinstance(basis, dict) or basis.get("status") != "determined"
+            or not isinstance(basis.get("observationId"), str) or not basis["observationId"].strip()
+            or basis.get("holdReason") or basis.get("reversedEventIds")
+            or mark.get("basisDate") != basis_date):
+        raise ValueError("値ごとの分割反映基準が未確定です")
+    reflected = _event_id_set(basis["reflectedEventIds"])
+    target = _event_id_set(basis["targetEventIds"])
+    applied = _event_id_set(basis["appliedEventIds"])
+    if not reflected <= target or applied != target - reflected or applied != event_ids:
+        raise ValueError("値ごとの分割反映基準の集合が一致しません")
+    return applied
+
+
 def per_share_basis_date(financial: dict) -> str | None:
     basis = financial.get("basisSwitchPerShareBasis")
     if basis is None:
@@ -58,16 +84,23 @@ def prepare_financial_display(financial: dict) -> dict:
             if field in {"eps", "bps"} and (basis_date is not None or "perShare" in mark):
                 proof = (mark.get("perShare") or {}).get(field) or {}
                 try:
+                    if not isinstance(proof, dict):
+                        raise ValueError()
                     source_date = date.fromisoformat(proof["sourceFilingDate"]).isoformat()
                     raw, factor = proof["sourceValue"], proof["factor"]
                     numbers = (raw, factor)
                     events = proof["events"]
-                    event_ids = [e["eventId"] for e in events]
-                    event_valid = (isinstance(events, list) and len(event_ids) == len(set(event_ids))
-                        and all(e["eventId"] and source_date < date.fromisoformat(e["effectiveDate"]).isoformat() <= basis_date
+                    if not isinstance(events, list) or any(not isinstance(e, dict) for e in events):
+                        raise ValueError()
+                    event_ids = _event_id_set([e["eventId"] for e in events])
+                    applied = _value_basis_applied(proof, event_ids, mark, basis_date)
+                    event_valid = all(date.fromisoformat(e["effectiveDate"]).isoformat() <= basis_date
+                                and (source_date < date.fromisoformat(e["effectiveDate"]).isoformat()
+                                     or (applied is not None and e["eventId"] in applied))
                                 and isinstance(e["factor"], (int, float)) and not isinstance(e["factor"], bool)
-                                and math.isfinite(e["factor"]) and e["factor"] > 0 for e in events))
+                                and math.isfinite(e["factor"]) and e["factor"] > 0 for e in events)
                     valid = (basis_date is not None and event_valid
+                             and ("basisDate" not in mark or mark["basisDate"] == basis_date)
                              and proof.get("status") == "shown" and proof.get("sourceDocID")
                              and proof.get("source") and source_date <= basis_date
                              and proof.get("targetFilingDate") == basis_date

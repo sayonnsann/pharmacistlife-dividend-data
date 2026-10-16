@@ -233,3 +233,107 @@ def test_checker_eps_bps_receive_standalone_notes(tmp_path):
       if(/NaN|Infinity/.test(html))throw new Error("invalid geometry");
     });
     ''')
+
+
+def value_basis_eps(*, partial=True):
+    financial = dated_eps()
+    mark = financial['financialBasisByYear']['2016']
+    mark['basisDate'] = '2026-06-01'
+    proof = mark['perShare']['eps']
+    if partial:
+        proof['sourceFilingDate'] = '2025-06-01'
+    proof['valueBasis'] = {'observationId': 'audited-cell', 'status': 'determined',
+        'reflectedEventIds': ['already-reflected'],
+        'targetEventIds': ['already-reflected', 'prior'], 'appliedEventIds': ['prior']}
+    return financial
+
+
+@pytest.mark.parametrize('field', ['eps', 'bps'])
+@pytest.mark.parametrize('partial', [True, False])
+def test_store_accepts_complete_value_basis_for_both_event_windows(field, partial):
+    financial = value_basis_eps(partial=partial)
+    if field == 'bps':
+        financial['basisSwitchMetrics']['bps'] = financial['basisSwitchMetrics'].pop('eps')
+        mark = financial['financialBasisByYear']['2016']
+        mark['fields'] = ['bps']
+        mark['perShare']['bps'] = mark['perShare'].pop('eps')
+    original = copy.deepcopy(financial)
+    assert prepare_financial_display(financial)['basisSwitchMetrics'][field]['2016'] == 10
+    assert financial == original
+
+
+@pytest.mark.parametrize('partial', [True, False])
+@pytest.mark.parametrize('mutation', [
+    'applied_mismatch', 'extra_event', 'undetermined', 'already_reflected', 'product',
+    'missing_observation', 'missing_s', 'missing_t', 'missing_applied', 'null_basis',
+    'empty_basis', 'missing_status', 'duplicate_s', 'duplicate_t', 'duplicate_applied',
+    'wrong_difference', 'reverse', 'held', 'missing_date', 'wrong_date', 'null_date',
+    'missing_event_date', 'missing_event_factor', 'future_event', 'future_source',
+    'wrong_target', 'wrong_value', 'withheld', 'no_source', 'no_doc', 'no_global_basis',
+    'bool_factor', 'nan_factor', 'zero_factor', 'negative_factor', 'duplicate_events',
+    'bad_event_id', 'bad_s_type', 'bad_s_id', 'bad_event_type', 'bad_events_type',
+])
+def test_store_rejects_incomplete_or_inconsistent_value_basis(partial, mutation):
+    financial = value_basis_eps(partial=partial)
+    mark = financial['financialBasisByYear']['2016']
+    proof = mark['perShare']['eps']
+    basis = proof['valueBasis']
+    if mutation == 'applied_mismatch': basis['appliedEventIds'] = []
+    elif mutation == 'extra_event': proof['events'].append({'eventId': 'extra', 'effectiveDate': '2026-01-01', 'factor': 1})
+    elif mutation == 'undetermined': basis['status'] = 'review'
+    elif mutation == 'already_reflected': basis['reflectedEventIds'].append('prior')
+    elif mutation == 'product': proof['events'][0]['factor'] = .25
+    elif mutation == 'missing_observation': basis.pop('observationId')
+    elif mutation == 'missing_s': basis.pop('reflectedEventIds')
+    elif mutation == 'missing_t': basis.pop('targetEventIds')
+    elif mutation == 'missing_applied': basis.pop('appliedEventIds')
+    elif mutation == 'null_basis': proof['valueBasis'] = None
+    elif mutation == 'empty_basis': proof['valueBasis'] = {}
+    elif mutation == 'missing_status': basis.pop('status')
+    elif mutation.startswith('duplicate_') and mutation != 'duplicate_events':
+        key = {'duplicate_s': 'reflectedEventIds', 'duplicate_t': 'targetEventIds', 'duplicate_applied': 'appliedEventIds'}[mutation]
+        basis[key].append(basis[key][0])
+    elif mutation == 'wrong_difference': basis['targetEventIds'].append('unapplied')
+    elif mutation == 'reverse': basis['reflectedEventIds'].append('outside-target')
+    elif mutation == 'held': basis['holdReason'] = 'ledger_revision_requires_review'
+    elif mutation == 'missing_date': mark.pop('basisDate')
+    elif mutation == 'wrong_date': mark['basisDate'] = '2026-05-01'
+    elif mutation == 'null_date': mark['basisDate'] = None
+    elif mutation == 'missing_event_date': proof['events'][0].pop('effectiveDate')
+    elif mutation == 'missing_event_factor': proof['events'][0].pop('factor')
+    elif mutation == 'future_event': proof['events'][0]['effectiveDate'] = '2026-06-02'
+    elif mutation == 'future_source': proof['sourceFilingDate'] = '2027-01-01'
+    elif mutation == 'wrong_target': proof['targetFilingDate'] = '2026-05-01'
+    elif mutation == 'wrong_value': financial['basisSwitchMetrics']['eps']['2016'] = 11
+    elif mutation == 'withheld': proof['status'] = 'withheld'
+    elif mutation == 'no_source': proof.pop('source')
+    elif mutation == 'no_doc': proof.pop('sourceDocID')
+    elif mutation == 'no_global_basis': financial.pop('basisSwitchPerShareBasis')
+    elif mutation == 'bool_factor': proof['events'][0]['factor'] = True
+    elif mutation == 'nan_factor': proof['events'][0]['factor'] = float('nan')
+    elif mutation == 'zero_factor': proof['events'][0]['factor'] = 0
+    elif mutation == 'negative_factor': proof['events'][0]['factor'] = -.5
+    elif mutation == 'duplicate_events': proof['events'].append(dict(proof['events'][0]))
+    elif mutation == 'bad_event_id': proof['events'][0]['eventId'] = []
+    elif mutation == 'bad_s_type': basis['reflectedEventIds'] = 'already-reflected'
+    elif mutation == 'bad_s_id': basis['reflectedEventIds'] = [None]
+    elif mutation == 'bad_event_type': proof['events'] = [None]
+    elif mutation == 'bad_events_type': proof['events'] = {}
+    else: raise AssertionError(mutation)
+    with pytest.raises(ValueError, match='証跡'):
+        prepare_financial_display(financial)
+
+
+def test_store_partial_restatement_still_requires_value_basis_and_complete_unit_proof():
+    financial = value_basis_eps()
+    proof = financial['financialBasisByYear']['2016']['perShare']['eps']
+    proof.pop('valueBasis')
+    with pytest.raises(ValueError, match='証跡'):
+        prepare_financial_display(financial)
+    proof['valueBasis'] = {'status': 'determined', 'observationId': 'unit-cell',
+        'reflectedEventIds': ['prior'], 'targetEventIds': ['prior'], 'appliedEventIds': []}
+    proof.update(events=[], factor=1, sourceValue=10)
+    assert prepare_financial_display(financial)['basisSwitchMetrics']['eps']['2016'] == 10
+    proof['valueBasis']['appliedEventIds'] = ['prior']
+    with pytest.raises(ValueError, match='証跡'):
+        prepare_financial_display(financial)

@@ -27,6 +27,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
 from public_dividend_policy import (POLICY_ID, issuer_eligible, period_metadata, validate_public_payload,
                                    financial_dividend_projection, financial_dividend_years, valid_yuho_adoption)
 from financial_display import prepare_financial_display, per_share_basis_date
+from financial_numeric_series import validate_financial_records
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FINANCIALS = REPOSITORY_ROOT / "data" / "all_financials.json"
@@ -2081,6 +2082,8 @@ def create_database(
     forecast_overrides: dict[str, Any] | None = None,
     yield_guard_report_path: Path | None = None,
 ) -> tuple[int, int, int]:
+    # Validate the input before projection/calculation can discard corrupt cells.
+    validate_financial_records(financials)
     financial_by_code, skipped_financials = index_by_code(
         financials, "all_financials"
     )

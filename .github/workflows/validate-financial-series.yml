@@ -1,0 +1,33 @@
+name: Validate public financial numeric series
+
+on:
+  push:
+    paths:
+      - data/all_financials.json
+      - scripts/financial_numeric_series.py
+      - scripts/public_dividend_policy.py
+      - scripts/build_store.py
+      - tests/test_financial_numeric_series.py
+      - .github/workflows/validate-financial-series.yml
+  pull_request:
+    paths:
+      - data/all_financials.json
+      - scripts/financial_numeric_series.py
+      - scripts/public_dividend_policy.py
+      - scripts/build_store.py
+      - tests/test_financial_numeric_series.py
+      - .github/workflows/validate-financial-series.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/financial_numeric_series.py data/all_financials.json

@@ -72,6 +72,8 @@ def financial_dividend_years(financial: dict) -> dict[str, set[int]]:
 
 def validate_public_payload(payload: dict, display_years: set[int], reported_years: set[int],
                             *, financial_years: dict[str, set[int]] | None = None) -> None:
+    from financial_numeric_series import validate_financial_record
+    validate_financial_record(payload)
     def walk(value):
         if isinstance(value, dict):
             if PRIVATE_KEYS & value.keys():

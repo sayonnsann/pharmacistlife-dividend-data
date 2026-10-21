@@ -360,7 +360,7 @@ def normalize_fiscal_dividends(document: dict, path: Path | str = "memory") -> d
             adoption = (record.get("displayAdoptions") or {}).get(str(y))
             independent = valid_yuho_adoption(v, series.get(y), evidence, adoption)
             if independent:
-                yuho_years[y] = adoption["asOf"]
+                yuho_years[y] = dict(adoption)
             if ((not independent and (series.get(y) != v
                     or y in {int(v) for v in record.get("externalYears", [])}))
                     or evidence.get("displayEligible") is not True
@@ -1313,6 +1313,64 @@ def adjustment_factor_for_period(
         ):
             factor *= event_factor
     return factor
+
+
+def validate_yuho_series_basis(
+    adoption: dict[str, Any],
+    value: float,
+    reference: float | None,
+    applied_actions: list[dict[str, Any]] | None,
+    *,
+    today: date,
+) -> None:
+    """採用値が未補正のstreakSeriesと同じ基準にあることを検査する。"""
+    if date.fromisoformat(adoption["asOf"]) > today:
+        raise ValueError("display adoption is from the future")
+    converted = finite_number(adoption.get("converted"))
+    reference = finite_number(reference)
+    if (adoption.get("status") != "adopt" or converted is None or converted < 0
+            or converted != value or reference is None or reference < 0):
+        raise ValueError("display adoption/streakSeries mismatch (3% tolerance)")
+    # Keep the same zero rule and tolerance as valid_yuho_adoption.
+    matches = (converted == 0 if reference == 0 else
+               abs(converted / reference - 1) <= .03 + 1e-12)
+    if not matches:
+        raise ValueError("display adoption/streakSeries mismatch (3% tolerance)")
+
+    def identity(event):
+        if not isinstance(event, dict):
+            raise ValueError("display adoption: stock action must be an object")
+        try:
+            day = date.fromisoformat(event["effectiveDate"])
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("display adoption: invalid stock action date") from error
+        # appliedActions uses new/old ratio; appliedEvents also carries shares.
+        if "oldShares" in event or "newShares" in event:
+            old = finite_number(event.get("oldShares"))
+            new = finite_number(event.get("newShares"))
+            if old is None or new is None or old <= 0 or new <= 0:
+                raise ValueError("display adoption: invalid stock action ratio")
+            ratio = new / old
+        else:
+            ratio = finite_number(event.get("ratio"))
+        if ratio is None or not math.isfinite(ratio) or ratio <= 0:
+            raise ValueError("display adoption: invalid stock action ratio")
+        return day, ratio
+
+    applied = adoption.get("appliedEvents", [])
+    if not isinstance(applied, list):
+        raise ValueError("display adoption: appliedEvents must be an array")
+    if applied:
+        recorded = [identity(action) for action in (applied_actions or [])]
+        for event in applied:
+            day, ratio = identity(event)
+            if not any(day == recorded_day and math.isclose(
+                    ratio, recorded_ratio, rel_tol=1e-12, abs_tol=0)
+                    for recorded_day, recorded_ratio in recorded):
+                raise ValueError(
+                    f"display adoption: appliedEvents not in record appliedActions "
+                    f"({day.isoformat()}, ratio={ratio:g})"
+                )
 
 
 def adjustment_for_unadjusted_series(
@@ -2301,6 +2359,15 @@ def create_database(
                             or any(series.get(y) != v for y, v in fiscal["displaySeries"].items()
                                    if y not in yuho_years)):
                         raise ValueError(f"{code}: unsafe display dividend")
+                    for year, adoption in yuho_years.items():
+                        try:
+                            validate_yuho_series_basis(
+                                adoption, fiscal["displaySeries"][year], series.get(year),
+                                fiscal.get("appliedActions"), today=today,
+                            )
+                        except ValueError as error:
+                            raise ValueError(f"{code}/{year}: {error}") from error
+                    series_adjustment = {"events": []}
                     if adjustment is not None:
                         series_adjustment = adjustment_for_unadjusted_series(
                             adjustment,
@@ -2331,23 +2398,16 @@ def create_database(
                     if not streak_reliable:
                         streak_unreliable_stocks += 1
                     display_series = {y: series[y] for y in sorted(display_years)}
-                    for year, basis_day in yuho_years.items():
-                        # These observations already include every event through
-                        # the producer's asOf. Never apply FY-based factors twice.
-                        day = date.fromisoformat(basis_day)
-                        if day > today:
-                            raise ValueError(f"{code}: display adoption is from the future")
-                        factor = 1.0
-                        seen_events = set()
-                        for event in stock_actions_by_code.get(code, []):
-                            old, new = finite_number(event.get("oldShares")), finite_number(event.get("newShares"))
-                            if (event.get("status") == "confirmed" and old and new and old > 0 and new > 0
-                                    and day < date.fromisoformat(event["effectiveDate"]) <= today):
-                                identity = (event["effectiveDate"], old / new)
-                                if identity not in seen_events:
-                                    factor *= old / new
-                                    seen_events.add(identity)
-                        display_series[year] = fiscal["displaySeries"][year] * factor
+                    for year in yuho_years:
+                        # converted is on the producer's streakSeries basis.
+                        # Apply the same remaining FY factor once, regardless of raw basis/asOf.
+                        display_series[year] = (
+                            fiscal["displaySeries"][year]
+                            * adjustment_factor_for_period(
+                                series_adjustment, year,
+                                fiscal_month=fiscal.get("fiscalMonth"), field="dividend",
+                            )
+                        )
                     display_basis = fiscal.get("displayBasis") or {}
                     display_stats = fiscal_dividend_stats(
                         display_series, streak_reliable=display_basis.get("reliable", streak_reliable),

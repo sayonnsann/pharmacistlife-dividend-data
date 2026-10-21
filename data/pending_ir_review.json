@@ -2235,6 +2235,18 @@
       },
       "detectedAt": "2026-10-10",
       "status": "pending"
+    },
+    {
+      "code": "7523",
+      "name": "アールビバン",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "d675632ac21f0041ccf15863efe27c24483f3f76d3ba09433dd15ae5701ee7bc",
+        "eventType": "reverse_split",
+        "eventDate": "2026-10-20"
+      },
+      "detectedAt": "2026-10-21",
+      "status": "pending"
     }
   ]
 }

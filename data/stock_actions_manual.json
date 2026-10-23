@@ -313,24 +313,6 @@
       "checkedAt": "2026-09-04"
     },
     {
-      "eventId": "2991-2025-11-01-split-1-to-2",
-      "securityCode": "2991",
-      "name": "株式会社ランドネット",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2025-11-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100WWX1.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(2991-2025-11-01-split-1-to-2)から自動生成",
-      "checkedAt": "2026-09-05"
-    },
-    {
       "eventId": "350A-2025-11-01-split-1-to-6",
       "securityCode": "350A",
       "name": "デジタルグリッド株式会社",

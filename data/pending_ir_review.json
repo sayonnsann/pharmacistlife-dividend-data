@@ -2247,6 +2247,18 @@
       },
       "detectedAt": "2026-10-21",
       "status": "pending"
+    },
+    {
+      "code": "3676",
+      "name": "デジタルハーツホールディングス",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "ffdeb49caff79ac6e8a25123fcbf3385518357cbe2f91ddd728b53ae7d9b0d8a",
+        "eventType": "reverse_split",
+        "eventDate": "2026-10-23"
+      },
+      "detectedAt": "2026-10-24",
+      "status": "pending"
     }
   ]
 }

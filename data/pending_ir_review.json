@@ -2275,6 +2275,18 @@
       },
       "detectedAt": "2026-10-25",
       "status": "pending"
+    },
+    {
+      "code": "7500",
+      "name": "西川計測",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "671858bef071ac51fb0dc42383f4bcb1cf0648d0d4b3015e455c4bd4472af6b4",
+        "eventType": "stock_split",
+        "eventDate": "2026-10-26"
+      },
+      "detectedAt": "2026-10-27",
+      "status": "pending"
     }
   ]
 }

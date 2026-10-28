@@ -2287,6 +2287,30 @@
       },
       "detectedAt": "2026-10-27",
       "status": "pending"
+    },
+    {
+      "code": "7921",
+      "name": "TAKARA & COMPANY",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "f1132c7719745d88f0d2c7ed9851f8a14ecd5987c501770168e64fb990f55c03",
+        "eventType": "stock_split",
+        "eventDate": "2026-10-27"
+      },
+      "detectedAt": "2026-10-28",
+      "status": "pending"
+    },
+    {
+      "code": "3276",
+      "name": "JPMC",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "5f98508cf1ed7ea428c3c03a6553fa305b197c3d0d8f5b7ca1e1b42c70ef038e",
+        "eventType": "reverse_split",
+        "eventDate": "2026-10-27"
+      },
+      "detectedAt": "2026-10-28",
+      "status": "pending"
     }
   ]
 }

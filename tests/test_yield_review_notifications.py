@@ -175,6 +175,20 @@ def test_cli_error_does_not_expose_exception_or_private_json(tmp_path, monkeypat
     assert "SENTINEL" not in capsys.readouterr().out
 
 
+def test_cli_shows_fixed_reason_without_report_values(tmp_path, monkeypatch):
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps({**guard_report(), "guard_mismatch_count": 1, "mismatch_count": 0}))
+    monkeypatch.setenv("GITHUB_REPOSITORY", "owner/repo")
+    monkeypatch.setenv("GH_TOKEN", "TOKEN_SENTINEL")
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
+    monkeypatch.setattr(sys, "argv", ["notify", "guards", "--report", str(report)])
+    monkeypatch.setattr(notify, "sync_issue", lambda *args: None)
+    with pytest.raises(SystemExit) as error:
+        notify.main()
+    assert "画面データの検査に不一致" in str(error.value)
+    assert "SENTINEL" not in str(error.value) and "1234" not in str(error.value)
+
+
 def test_build_report_uses_exact_split_snapshot_and_finished_payload_without_logging_values(tmp_path):
     store = audit.store
     database = tmp_path / "stocks.sqlite"

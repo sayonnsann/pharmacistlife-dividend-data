@@ -114,24 +114,6 @@
       "checkedAt": "2026-08-17"
     },
     {
-      "eventId": "6574-2025-08-02-split-1-to-10",
-      "securityCode": "6574",
-      "name": "株式会社コンヴァノ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 10,
-      "effectiveDate": "2025-08-02",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100X2YT.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(6574-2025-08-02-split-1-to-10)から自動生成",
-      "checkedAt": "2026-09-05"
-    },
-    {
       "eventId": "3498-2025-09-01-split-1-to-2",
       "securityCode": "3498",
       "name": "霞ヶ関キャピタル",

@@ -31,11 +31,23 @@ REVIEW_GUIDE = """取り込む前に、PRの「画面データの全項目比較
 この通知から自動で取り込むことはありません。"""
 
 
+class FixedMessageError(Exception):
+    """文言が固定で入力の値を含まない例外。CLIで失敗理由として表示してよい。"""
+
+
+class CheckError(FixedMessageError, ValueError):
+    pass
+
+
+class ApiError(FixedMessageError, RuntimeError):
+    pass
+
+
 class GitHub:
     """APIをここだけに隔離。本文・認証情報を例外やログへ出さない。"""
     def __init__(self, repository, token):
         if not re.fullmatch(r"[\w.-]+/[\w.-]+", repository) or not token:
-            raise ValueError("GitHubの設定が不足しています")
+            raise CheckError("GitHubの設定が不足しています")
         self.repository = repository
         self.token = token
 
@@ -53,9 +65,9 @@ class GitHub:
                 raw = response.read()
             return json.loads(raw) if raw else None
         except HTTPError as error:
-            raise RuntimeError(f"GitHub API失敗（HTTP {error.code}）") from None
+            raise ApiError(f"GitHub API失敗（HTTP {int(error.code)}）") from None
         except (URLError, OSError, ValueError):
-            raise RuntimeError("GitHub APIの通信・応答に失敗しました") from None
+            raise ApiError("GitHub APIの通信・応答に失敗しました") from None
 
     def pages(self, path, **query):
         result = []
@@ -63,7 +75,7 @@ class GitHub:
         while True:
             rows = self.request("GET", path + "?" + urlencode({**query, "per_page": 100, "page": page}))
             if not isinstance(rows, list):
-                raise RuntimeError("GitHub APIの一覧形式が不正です")
+                raise ApiError("GitHub APIの一覧形式が不正です")
             result.extend(rows)
             if len(rows) < 100:
                 return result
@@ -177,10 +189,10 @@ def notify_guards(api, report, summary_path):
         output.write(summary)
     if (not report.get("total") or not report.get("split_records_available")
             or any(row.get("guard_reason") not in ("kouhaitou_split_unreflected", "split_like_ratio") for row in report["guarded"])):
-        raise ValueError("点検に必要な分割記録がないか、レポートが不正です。既存issueを維持します")
+        raise CheckError("点検に必要な分割記録がないか、レポートが不正です。既存issueを維持します")
     audit_failed = report.get("guard_mismatch_count") != 0 or report.get("mismatch_count") != 0
     if audit_failed and not unreflected:
-        raise ValueError("画面データの検査が不一致です。既存issueを維持します")
+        raise CheckError("画面データの検査が不一致です。既存issueを維持します")
     body = split_tables(
         f"{datetime.now(ZoneInfo('Asia/Tokyo')).date().isoformat()}の点検: 分割が台帳に入っていない疑いがあり、利回りの安全装置が働いています。\n\n"
         + "検出日はkouhaitou-dbの execution_date（記録上の日付）です。旧分子は安全装置が選んだCSVの年間配当です。\n\n"
@@ -188,7 +200,7 @@ def notify_guards(api, report, summary_path):
         [("分割未反映の銘柄", GUARD_HEADERS, guard_rows(unreflected))]) if unreflected else None
     sync_issue(api, SPLIT_TITLE, "split-unreflected", body)
     if audit_failed:
-        raise ValueError("分割未反映は通知済みですが、画面データの検査に不一致があります")
+        raise CheckError("分割未反映は通知済みですが、画面データの検査に不一致があります")
 
 
 def main():
@@ -202,6 +214,9 @@ def main():
             notify_stale(api, datetime.now(timezone.utc))
         else:
             notify_guards(api, json.loads(args.report.read_text()), Path(os.environ["GITHUB_STEP_SUMMARY"]))
+    except FixedMessageError as error:
+        # 固定文の理由だけを出す。入力の値は含まれない。
+        raise SystemExit(f"通知の点検・API操作に失敗しました（{error}）。既存の通知は解消扱いにせず、再実行してください") from None
     except Exception:
         # JSONやネットワーク例外の本文には入力の一部が含まれ得る。
         raise SystemExit("通知の点検・API操作に失敗しました。既存の通知は解消扱いにせず、再実行してください") from None

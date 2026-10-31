@@ -265,6 +265,9 @@ jobs:
             "ftp://${FTP_HOST}"
           echo "forecasts_state.json を検証つきで差し替えました（$local_size bytes）"
 
+      - name: 比較用の前回公開SQLiteをFTPSから取得
+        run: python3 -B scripts/fetch_previous_store.py "$SQLITE_FILE"
+
       - name: SQLiteストアを構築
         id: build_store
         run: >-
@@ -339,12 +342,16 @@ jobs:
           python scripts/check_split_fallback.py "$SQLITE_FILE"
 
       # 通知の失敗で本番反映を妨げないよう配信後に実行する。
-      # 配信や他の警告が失敗した場合にも、構築成功なら点検する。
+      # 入力異常で構築を停止した場合も、その理由を通知する。
       - name: 利回りの安全装置を点検・分割未反映をissueで通知
-        if: ${{ always() && steps.build_store.outcome == 'success' }}
+        if: ${{ always() && (steps.build_store.outcome == 'success' || steps.build_store.outcome == 'failure') }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python scripts/yield_review_notifications.py guards --report "$RUNNER_TEMP/yield-guards.json"
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/yield-guards.json" ]]; then
+            python3 -B scripts/yield_review_notifications.py guards --report "$RUNNER_TEMP/yield-guards.json"
+          fi
 
       # 分割・併合の「要確認リスト」(scripts/build_ir_review_queue.py)は、
       # このジョブが contents: read でコミットできないため、

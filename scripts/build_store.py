@@ -28,6 +28,7 @@ from public_dividend_policy import (POLICY_ID, issuer_eligible, period_metadata,
                                    financial_dividend_projection, financial_dividend_years, valid_yuho_adoption)
 from financial_display import prepare_financial_display, per_share_basis_date
 from financial_numeric_series import validate_financial_records
+import yield_safety
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FINANCIALS = REPOSITORY_ROOT / "data" / "all_financials.json"
@@ -2081,7 +2082,20 @@ def create_database(
     stock_action_fallbacks: list[dict[str, Any]] | None = None,
     forecast_overrides: dict[str, Any] | None = None,
     yield_guard_report_path: Path | None = None,
+    public_events_path: Path | None = None,
 ) -> tuple[int, int, int]:
+    today = today or datetime.now(JST).date()
+    try:
+        public_events = (yield_safety.load_public_events(public_events_path, today)
+                         if public_events_path is not None else {})
+    except yield_safety.PublicEventsError as exc:
+        if yield_guard_report_path is not None:
+            yield_guard_report_path.write_text(
+                json.dumps({"public_stock_events_error": str(exc)}) + "\n", encoding="utf-8")
+        raise
+    previous_payloads = yield_safety.previous_payloads(database_path)
+    yield_drops = []
+    forecast_holds = forecast_unknown_holds = 0
     # Validate the input before projection/calculation can discard corrupt cells.
     validate_financial_records(financials)
     financial_by_code, skipped_financials = index_by_code(
@@ -2118,7 +2132,6 @@ def create_database(
     stock_action_fallbacks = (
         stock_action_fallbacks if stock_action_fallbacks is not None else []
     )
-    today = today or datetime.now(JST).date()
     breakdown_path = REPOSITORY_ROOT / "data" / "dividend_breakdown.json"
     dividend_breakdown: dict = {}
     if breakdown_path.exists():
@@ -2225,6 +2238,13 @@ def create_database(
                 ) = forecast_values(
                     forecast_record, effective_price, today=today
                 )
+                forecast_hold = yield_safety.forecast_hold_reason(
+                    forecast_record, public_events.get(code, []), today
+                ) if forecast_dividend is not None else None
+                if forecast_hold:
+                    forecast_yield = None
+                    forecast_holds += 1
+                    forecast_unknown_holds += forecast_hold == "forecast_basis_unknown"
                 forecast_record = forecast_record or {}
 
                 payload = prepare_financial_display(financial)
@@ -2428,6 +2448,8 @@ def create_database(
                 # 利回りは完成したグラフのannualを直接読む。予想・短信の
                 # annualPending/annualPartialを足す前に選び、二重補正を防ぐ。
                 daily_yield = None
+                raw_daily_yield = None
+                guard_reason = None
                 if payload.get("annual"):
                     annual = payload["annual"]
                     numerator_year = max(annual, key=int)
@@ -2440,7 +2462,9 @@ def create_database(
                         override_event_ids=yield_overrides,
                     )
                     guard_reason = yield_split_guard_reason(
-                        code, numerator, previous, stock_actions_by_code.get(code, []),
+                        code, numerator, previous,
+                        yield_safety.guard_events(stock_actions_by_code.get(code, []),
+                                                  public_events.get(code, [])),
                         guard_split_adjustments,
                     )
                     payload["dividendYieldBasis"] = {
@@ -2453,10 +2477,19 @@ def create_database(
                     if guard_reason:
                         payload["dividendYieldBasis"]["guardReason"] = guard_reason
                     if daily_price:
-                        daily_yield = round(numerator / daily_price * 100, 2)
+                        raw_daily_yield = numerator / daily_price * 100
+                        daily_yield = round(raw_daily_yield, 2)
                 else:
                     payload["dividendYieldBasis"] = {"source": "no_display_dividend",
                                                      "fiscalYear": None, "annualDividend": None}
+
+                drop = yield_safety.sudden_drop(
+                    previous_payloads.get(code), payload["dividendYieldBasis"],
+                    raw_daily_yield, prices_updated)
+                if drop:
+                    yield_drops.append(dict(code=code, name=financial.get("name"), **drop))
+                if yield_safety.hold_actual(guard_reason):
+                    daily_yield = None
 
                 # まだ系列に載っていない事業年度を、会社発表の予想・確定額で足す。
                 # 以前ここに出していたYahooの「集計中」（権利落ちベースの暦年
@@ -2548,6 +2581,8 @@ def create_database(
                     payload["dividendYield"] = None
                 payload["forecastDividend"] = forecast_dividend
                 payload["forecastYield"] = forecast_yield
+                if forecast_hold:
+                    payload["forecastYieldHoldReason"] = forecast_hold
                 payload["forecastPeriod"] = forecast_period
                 payload["forecastFetchedAt"] = forecast_fetched_at
                 if forecast_record.get("forecastSource") == "manual_override":
@@ -2702,17 +2737,21 @@ def create_database(
         temporary_path.unlink(missing_ok=True)
         raise
 
+    yield_safety.summary(f"予想利回りの空欄化: {forecast_holds}社 / 基準日不明: {forecast_unknown_holds}社")
     if yield_guard_report_path is not None:
         # ビルドで実際に使った記録を渡す。再取得で検出日・比率がずれないようにする。
         from audit_yield_numerator import audit_fiscal_payloads
         report = audit_fiscal_payloads(
             {row[0]: json.loads(row[-1]) for row in rows}, guard_split_adjustments)
+        report["yield_drops"] = yield_drops
         yield_guard_report_path.write_text(json.dumps(report, ensure_ascii=False) + "\n", encoding="utf-8")
     return len(rows), matched_tickers, frozen_calendar_stocks
 
 
 def main() -> None:
     args = parse_args()
+    if args.yield_guard_report is None and os.environ.get("RUNNER_TEMP"):
+        args.yield_guard_report = Path(os.environ["RUNNER_TEMP"]) / "yield-guards.json"
     financials = load_json(args.financials, list)
     sectors = load_json(args.sectors, dict)
     tickers = load_tickers(args.tickers)
@@ -2747,6 +2786,7 @@ def main() -> None:
         stock_action_fallbacks=stock_action_fallbacks,
         forecast_overrides=forecast_overrides,
         yield_guard_report_path=args.yield_guard_report,
+        public_events_path=REPOSITORY_ROOT / "data/public_stock_events.json",
     )
     size = args.output.stat().st_size
     print(f"生成完了: {args.output}")

@@ -18,6 +18,8 @@ from zoneinfo import ZoneInfo
 PR_PREFIX = "レビュー待ち: 利回り用台帳"
 STALE_TITLE = "利回り用台帳: 3日以上レビュー待ちのPRがあります"
 SPLIT_TITLE = "利回り用台帳: 分割が画面データに未反映の銘柄があります"
+EVENTS_TITLE = "利回り用台帳: 公開用株式イベントの異常で公開を停止しました"
+DROP_TITLE = "利回り用台帳: 実績利回りが急低下した銘柄があります"
 REVIEW_GUIDE = """取り込む前に、PRの「画面データの全項目比較」コメントを確認してください。コメントがない・比較できなかった場合は取り込まず、Actionsを再実行してください。
 
 | 見る表 | 確かめること |
@@ -179,6 +181,31 @@ def guard_rows(rows):
 
 
 def notify_guards(api, report, summary_path):
+    error = report.get("public_stock_events_error")
+    if error:
+        reasons = {
+            "public_stock_events_missing": "受領済みの出来事ファイルがありません。",
+            "public_stock_events_invalid": "出来事ファイルが壊れているか、形式が違います。",
+            "public_stock_events_stale": "出来事ファイルのasOfDateがビルド日より3日以上前です。",
+        }
+        message = reasons.get(error, "出来事ファイルを検証できません。")
+        body = message + " SQLiteの構築・公開を停止しました。母艦の同期結果とHOLDを確認してください。"
+        with summary_path.open("a", encoding="utf-8") as output:
+            output.write(body + "\n")
+        sync_issue(api, EVENTS_TITLE, "split-unreflected", body)
+        return
+    sync_issue(api, EVENTS_TITLE, "split-unreflected", None)
+    if "yield_drops" in report:
+        drops = report.get("yield_drops", [])
+        drop_rows = [(code(row.get("code")), str(row.get("name") or "不明")[:120],
+                      number(row.get("previousYield")), number(row.get("currentYield")),
+                      number(row.get("ratio"))) for row in drops]
+        sections = [("実績利回りの急低下", ["銘柄コード", "名称", "前回(%)", "当日・空欄化前(%)", "比"], drop_rows)]
+        with summary_path.open("a", encoding="utf-8") as output:
+            output.write("実績利回りの急低下: " + str(len(drops)) + "銘柄\n")
+        sync_issue(api, DROP_TITLE, "yield-sudden-drop",
+                   split_tables("前回公開stocks.sqliteとの比較で、0 < 当日/前回 <= 0.5を検出しました。", sections)
+                   if drops else None)
     unreflected = [row for row in report["guarded"] if row["guard_reason"] == "kouhaitou_split_unreflected"]
     ratio = [row for row in report["guarded"] if row["guard_reason"] == "split_like_ratio"]
     summary = ("## 利回りの安全装置の日次点検\n\n"

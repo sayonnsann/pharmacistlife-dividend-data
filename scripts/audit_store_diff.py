@@ -121,6 +121,8 @@ def run(args):
                 prices_url, module.load_stock_actions(actions, as_of=args.as_of), actions,
                 fiscal, args.fiscal_dividends, calendar, args.calendar_dividends,
                 today=args.as_of, forecast_overrides=module.load_forecast_overrides(root / 'data/forecast_overrides.json'),
+                **({'public_events_path': root / 'data/public_stock_events.json'}
+                   if hasattr(module, 'yield_safety') else {}),
             )
             coverage[name] = dict(forecast_records=len(forecasts), fiscal_records=len(fiscal),
                                   calendar_records=len(calendar))

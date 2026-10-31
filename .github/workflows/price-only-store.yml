@@ -36,6 +36,9 @@ concurrency:
 
 jobs:
   update-prices:
+    permissions:
+      contents: read
+      issues: write
     runs-on: ubuntu-latest
     # 株価だけの反映なので、日次フル更新(30分)より短い上限で十分。
     timeout-minutes: 15
@@ -202,7 +205,11 @@ jobs:
             rm -f "$CALENDAR_FILE"
           fi
 
+      - name: 比較用の前回公開SQLiteをFTPSから取得
+        run: python3 -B scripts/fetch_previous_store.py "$SQLITE_FILE"
+
       - name: SQLiteストアを構築（株価はキャッシュ回避で取得）
+        id: build_store
         run: >-
           python scripts/build_store.py
           --forecasts "$STATE_FILE"
@@ -245,6 +252,16 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/check_split_fallback.py "$SQLITE_FILE"
+
+      - name: 利回りの安全装置・急低下・公開停止をissueで通知
+        if: ${{ always() && (steps.build_store.outcome == 'success' || steps.build_store.outcome == 'failure') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/yield-guards.json" ]]; then
+            python3 -B scripts/yield_review_notifications.py guards --report "$RUNNER_TEMP/yield-guards.json"
+          fi
 
       - name: 完了
         run: echo "配当チェッカーDBの株価のみ更新が完了しました。"

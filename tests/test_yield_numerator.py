@@ -285,7 +285,7 @@ class YieldNumeratorOverrideIntegrationTest(unittest.TestCase):
         payload = self.build({}, [], dividend=30, source_year=2025,
                              fiscal=self.fiscal({2026: 40}), active_adjustments=active)
         self.assertEqual(payload['annual']['2026'], 40)
-        self.assertEqual(payload['dividendYield'], 4)
+        self.assertIsNone(payload['dividendYield'])
         self.assertEqual(payload['dividendYieldBasis'], dict(
             source='fiscal_series', fiscalYear=2026, annualDividend=40,
             guardReason='kouhaitou_split_unreflected'))

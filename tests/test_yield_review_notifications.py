@@ -208,8 +208,40 @@ def test_build_report_uses_exact_split_snapshot_and_finished_payload_without_log
     report = json.loads(output.read_text())
     with sqlite3.connect(database) as conn:
         payload = json.loads(conn.execute("SELECT payload FROM stocks").fetchone()[0])
+    assert report.pop("yield_drops") == []
     assert report == audit.audit_fiscal_payloads({"1234": payload}, snapshot)
     assert report["guarded"][0]["kouhaitou_splits"] == [{"execution_date": "2026-09-29", "ratio": 3}]
     assert report["guarded"][0]["series_latest_dividend"] == 98765.4321
     fetch_splits.assert_called_once()  # レポート用の再取得をしない。
     assert "98765.4321" not in log.getvalue() and "PRIVATE_SENTINEL" not in log.getvalue()
+
+
+def test_sudden_drop_issue_and_no_drop_resolution(tmp_path):
+    api = FakeGitHub()
+    summary = tmp_path / "summary.md"
+    report = {**guard_report("split_like_ratio"), "yield_drops": [
+        dict(code="6574", name="コンヴァノ", previousYield=1.03, currentYield=.08, ratio=.08 / 1.03)]}
+    notify.notify_guards(api, report, summary)
+    created = [data for method, path, data in api.calls if method == "POST" and path == "issues"]
+    assert len(created) == 1 and created[0]["title"] == notify.DROP_TITLE
+    assert "6574" in created[0]["body"] and "0.08" in created[0]["body"]
+    assert "急低下: 1銘柄" in summary.read_text()
+    api.calls.clear()
+    notify.notify_guards(api, {**report, "yield_drops": []}, summary)
+    assert ("PATCH", "issues/91", {"state": "closed"}) in api.calls
+
+
+@pytest.mark.parametrize("reason,text", [
+    ("public_stock_events_missing", "ありません"),
+    ("public_stock_events_invalid", "形式が違います"),
+    ("public_stock_events_stale", "3日以上前")])
+def test_blocked_build_notifies_reason_without_closing_other_issues(tmp_path, reason, text):
+    api = FakeGitHub(issues=[{"number": 10, "title": notify.SPLIT_TITLE},
+                            {"number": 11, "title": notify.DROP_TITLE}])
+    summary = tmp_path / "summary.md"
+    notify.notify_guards(api, {"public_stock_events_error": reason}, summary)
+    assert not any(method == "PATCH" for method, _, _ in api.calls)
+    body = api.calls[-1][2]["body"]
+    assert api.calls[-1][2]["title"] == notify.EVENTS_TITLE
+    assert text in body and "公開を停止" in body
+    assert text in summary.read_text()

@@ -2311,6 +2311,18 @@
       },
       "detectedAt": "2026-10-28",
       "status": "pending"
+    },
+    {
+      "code": "4413",
+      "name": "ボードルア",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "71cc4fe80b97456a2b2563de53174f938025b2439a7737e38f27a5c84d0e40ed",
+        "eventType": "reverse_split",
+        "eventDate": "2026-10-29"
+      },
+      "detectedAt": "2026-10-31",
+      "status": "pending"
     }
   ]
 }

@@ -1,22 +1,13 @@
 {
   "pendingSplitEvents": {
-    "5f98508cf1ed7ea428c3c03a6553fa305b197c3d0d8f5b7ca1e1b42c70ef038e": {
+    "71cc4fe80b97456a2b2563de53174f938025b2439a7737e38f27a5c84d0e40ed": {
       "attempts": 2,
-      "code": "3276",
-      "edinetCode": "E25870",
-      "eventDate": "2026-10-27",
+      "code": "4413",
+      "edinetCode": "E37133",
+      "eventDate": "2026-10-29",
       "eventType": "reverse_split",
-      "firstSeenAt": "2026-10-28",
-      "secCode": "3276"
-    },
-    "f1132c7719745d88f0d2c7ed9851f8a14ecd5987c501770168e64fb990f55c03": {
-      "attempts": 2,
-      "code": "7921",
-      "edinetCode": "E00710",
-      "eventDate": "2026-10-27",
-      "eventType": "stock_split",
-      "firstSeenAt": "2026-10-28",
-      "secCode": "7921"
+      "firstSeenAt": "2026-10-30",
+      "secCode": "4413"
     }
   },
   "suspectYears": {
@@ -69,5 +60,5 @@
       "2026"
     ]
   },
-  "updatedAt": "2026-10-29"
+  "updatedAt": "2026-10-31"
 }

@@ -194,6 +194,17 @@ def test_adjusted_forecast_held_while_price_predates_effective_date():
             forecast_basis="post_split_adjusted", price_as_of=price_as_of) == "stock_event_after_forecast"
 
 
+def test_adjusted_forecast_held_when_two_past_events_are_in_window():
+    # 6574-like pair of splits: we cannot tell which one the conversion covered.
+    pair = [event(day="2026-09-01", old=1, new=10), event(day="2026-10-01", old=1, new=10)]
+    assert safety.forecast_hold_reason(ADJUSTED_FC, pair, TODAY,
+        forecast_basis="post_split_adjusted", price_as_of=date(2026, 10, 30)) == "stock_event_after_forecast"
+    # Events outside the window (before the forecast basis date) do not count.
+    old_and_new = [event(day="2026-08-01", old=1, new=10), event(day="2026-10-01", old=1, new=10)]
+    assert safety.forecast_hold_reason(ADJUSTED_FC, old_and_new, TODAY,
+        forecast_basis="post_split_adjusted", price_as_of=date(2026, 10, 30)) is None
+
+
 def test_raw_forecast_stays_held_after_effective_date():
     assert safety.forecast_hold_reason(ADJUSTED_FC, [event(day="2026-10-01", old=1, new=4)], TODAY,
         forecast_basis="raw", price_as_of=date(2026, 10, 30)) == "stock_event_after_forecast"

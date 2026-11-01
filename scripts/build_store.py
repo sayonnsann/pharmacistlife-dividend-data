@@ -2239,7 +2239,9 @@ def create_database(
                     forecast_record, effective_price, today=today
                 )
                 forecast_hold = yield_safety.forecast_hold_reason(
-                    forecast_record, public_events.get(code, []), today
+                    forecast_record, public_events.get(code, []), today,
+                    forecast_basis=forecast_basis,
+                    price_as_of=yield_safety.price_as_of_day(price_session_as_of),
                 ) if forecast_dividend is not None else None
                 if forecast_hold:
                     forecast_yield = None

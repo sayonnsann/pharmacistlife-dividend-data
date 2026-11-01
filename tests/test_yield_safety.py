@@ -129,7 +129,8 @@ def test_incomparable_previous_is_skipped():
         assert safety.sudden_drop(old, old["dividendYieldBasis"], .08, updated) is None
 
 
-def build(tmp_path, *, events=None, active=(), forecast=None, price=1000, updated="2026/11/01 09:05:00"):
+def build(tmp_path, *, events=None, active=(), forecast=None, price=1000, updated="2026/11/01 09:05:00",
+          meta=None):
     public = tmp_path / "public_stock_events.json"
     if events is not None:
         write_events(public, events)
@@ -139,7 +140,7 @@ def build(tmp_path, *, events=None, active=(), forecast=None, price=1000, update
         connectionStatus="connected", connectionReason="fixture")})
     with (patch.object(store, "load_daily_prices", return_value=({"6574": price}, {"6574": 1}, updated)),
           patch.object(store, "load_yield_split_adjustments", return_value=list(active)),
-          patch.object(store, "load_price_session_meta", return_value=None),
+          patch.object(store, "load_price_session_meta", return_value=meta),
           patch.object(store, "load_yield_source_year", return_value=2026)):
         store.create_database(database, [dict(code="6574", name="fixture")], {}, {},
             {"6574": forecast} if forecast else {}, [Path("fixture")] * 4, "fixture.csv",
@@ -172,6 +173,42 @@ def test_future_meiko_and_unrelated_issuer(tmp_path):
     assert store.forecast_values(fc, 8556, today=TODAY)[-1] == "pre_split_reported"
     assert safety.forecast_hold_reason(fc, events["6787"], TODAY)
     assert safety.forecast_hold_reason(fc, events.get("6574", []), TODAY) is None
+
+
+ADJUSTED_FC = dict(forecastSource={"disclosureDate": "2026-08-24"}, lastFetchedAt="2026-10-02")
+
+
+def test_adjusted_forecast_shown_once_price_is_on_or_after_effective_date():
+    # 1904-like: converted forecast, split effective 10/01, price dated 10/30.
+    assert safety.forecast_hold_reason(ADJUSTED_FC, [event(day="2026-10-01", old=1, new=4)], TODAY,
+        forecast_basis="post_split_adjusted", price_as_of=date(2026, 10, 30)) is None
+    assert safety.forecast_hold_reason(ADJUSTED_FC, [event(day="2026-10-30", old=1, new=4)], TODAY,
+        forecast_basis="post_split_adjusted", price_as_of=date(2026, 10, 30)) is None
+
+
+def test_adjusted_forecast_held_while_price_predates_effective_date():
+    # 6787-like: effective 11/02, price still dated 10/30 (or unknown).
+    split = [event(code="6787", day="2026-11-02", old=1, new=2)]
+    for price_as_of in (date(2026, 10, 30), None):
+        assert safety.forecast_hold_reason(ADJUSTED_FC, split, TODAY,
+            forecast_basis="post_split_adjusted", price_as_of=price_as_of) == "stock_event_after_forecast"
+
+
+def test_raw_forecast_stays_held_after_effective_date():
+    assert safety.forecast_hold_reason(ADJUSTED_FC, [event(day="2026-10-01", old=1, new=4)], TODAY,
+        forecast_basis="raw", price_as_of=date(2026, 10, 30)) == "stock_event_after_forecast"
+
+
+def test_build_passes_price_session_date_to_forecast_hold(tmp_path):
+    fc = dict(forecastDividend=1, forecastFiscalYear=2027, forecastPeriod="2027年3月期",
+              forecastSource={"disclosureDate": "2026-08-24"}, lastFetchedAt="2026-08-24")
+    split = [event(day="2026-10-01", old=1, new=4)]
+    with patch.object(store, "forecast_values", return_value=(1, .1, "2027年3月期", "2026-08-24",
+                                                              "post_split_adjusted")):
+        shown = build(tmp_path, events=split, forecast=fc, meta={"as_of_date": "2026-10-30"})
+        held = build(tmp_path, events=split, forecast=fc, meta={"as_of_date": "2026-09-30"})
+    assert shown[1] == .1 and "forecastYieldHoldReason" not in shown[2]
+    assert held[1] is None and held[2]["forecastYieldHoldReason"] == "stock_event_after_forecast"
 
 
 def test_actual_hold_works_without_public_and_monitor_runs_before_hold(tmp_path):

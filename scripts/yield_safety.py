@@ -106,12 +106,25 @@ def basis_date(record):
     return None
 
 
-def forecast_hold_reason(record, events, today):
+def price_as_of_day(value):
+    try:
+        return iso_day(value)
+    except ValueError:
+        return None
+
+
+def forecast_hold_reason(record, events, today, *, forecast_basis=None, price_as_of=None):
     basis = basis_date(record)
     upper = today + timedelta(days=14)
     lower = basis if basis is not None else today - timedelta(days=400)
     for event in events:
         effective = iso_day(event["effectiveDate"])
+        # A forecast already converted to the post-event basis is safe once the
+        # price is dated on/after the effective date (the price is then surely on
+        # the new basis). Before that, keep holding: the price may still be old.
+        if (forecast_basis == "post_split_adjusted" and price_as_of is not None
+                and effective <= price_as_of):
+            continue
         if effective <= upper and (lower < effective if basis is not None else lower <= effective):
             return "forecast_basis_unknown" if basis is None else "stock_event_after_forecast"
     return None

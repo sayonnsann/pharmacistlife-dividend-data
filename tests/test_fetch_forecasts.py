@@ -2168,5 +2168,46 @@ class EventSlotSizeTest(unittest.TestCase):
                         fetch_forecasts.event_slot_size()
 
 
+class FeedHttpErrorTests(unittest.TestCase):
+    """feedの404以外のHTTPエラーは銘柄ごとに飛ばし、3件で全体を止める。"""
+
+    def build(self, codes):
+        feed_errors = []
+        with tempfile.TemporaryDirectory() as tmp:
+            edinet_dir = Path(tmp)
+            (edinet_dir / "1111.json").write_text(
+                json.dumps({"fiscalMonth": 3, "edinetCode": "E00001"}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                fetch_forecasts,
+                "urlopen",
+                side_effect=HTTPError("u", 403, "Forbidden", {}, None),
+            ), contextlib.redirect_stderr(io.StringIO()):
+                result = fetch_forecasts.build_candidates(
+                    codes,
+                    {},
+                    {"stocks": {}},
+                    edinet_dir,
+                    fetch_forecasts.date(2026, 11, 3),
+                    {},
+                    allow_feed_network=True,
+                    feed_errors=feed_errors,
+                )
+        return result, feed_errors
+
+    def test_one_feed_403_is_skipped_and_the_rest_continue(self) -> None:
+        (candidates, missing_feed), feed_errors = self.build(["500A", "1111"])
+        self.assertEqual([c.code for c in candidates], ["1111"])
+        self.assertEqual(missing_feed, 0)
+        self.assertEqual(feed_errors, ["500A"])
+
+    def test_three_feed_errors_stop_the_run(self) -> None:
+        with self.assertRaises(RuntimeError) as caught:
+            self.build(["500A", "500B", "500C", "1111"])
+        self.assertNotIsInstance(caught.exception, fetch_forecasts.FeedHTTPError)
+        self.assertIn("500A,500B,500C", str(caught.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

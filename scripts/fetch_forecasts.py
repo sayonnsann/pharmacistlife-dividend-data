@@ -45,6 +45,10 @@ EDINET_CODE_PATTERN = re.compile(r"^E[0-9]{5}$")
 # 認証・権限の失敗は「その銘柄が悪い」のではなく設定の問題なので、
 # 次の銘柄へ進んでも全部失敗する。ここだけは全体障害として止める。
 FATAL_HTTP_STATUSES = frozenset({401, 403})
+# feed（jsDelivr の公開 edinet/<code>.json）の404以外のHTTPエラーは、その銘柄
+# だけ飛ばす。ただし1回の実行でこの件数に達したら、CDN側でまとめて断られて
+# いるとみて全体を止める（何百回も取りに行かないため）。
+FEED_ERROR_LIMIT = 3
 # 途中保存の間隔。全部終わってから1回だけ書くと、後半で落ちたときに
 # その日に取った分がまるごと消える。
 SAVE_INTERVAL = 20
@@ -618,6 +622,10 @@ def parse_fetched_date(record: Any) -> date | None:
         return None
 
 
+class FeedHTTPError(RuntimeError):
+    """feedの404以外のHTTPエラー。build_candidates が銘柄ごとに数える。"""
+
+
 def load_feed(
     code: str, edinet_dir: Path, *, allow_network: bool
 ) -> dict[str, Any] | None:
@@ -634,7 +642,7 @@ def load_feed(
     except HTTPError as error:
         if error.code == 404:
             return None
-        raise RuntimeError(f"{code}: EDINET feed HTTP {error.code}") from error
+        raise FeedHTTPError(f"{code}: EDINET feed HTTP {error.code}") from error
     except (URLError, TimeoutError) as error:
         raise RuntimeError(f"{code}: EDINET feed取得失敗") from error
     if not isinstance(value, dict):
@@ -692,6 +700,7 @@ def build_candidates(
     priority_codes: dict[str, int],
     *,
     allow_feed_network: bool,
+    feed_errors: list[str] | None = None,
 ) -> tuple[list[Candidate], int]:
     candidates: list[Candidate] = []
     missing_feed = 0
@@ -701,7 +710,20 @@ def build_candidates(
         if not code or code in seen:
             continue
         seen.add(code)
-        feed = load_feed(code, edinet_dir, allow_network=allow_feed_network)
+        try:
+            feed = load_feed(code, edinet_dir, allow_network=allow_feed_network)
+        except FeedHTTPError as error:
+            # 新しい上場の会社など、feedがまだ無い1銘柄で全体を止めない。
+            if feed_errors is None:
+                raise
+            feed_errors.append(code)
+            print(f"警告: {error}（この銘柄は飛ばします）", file=sys.stderr)
+            if len(feed_errors) >= FEED_ERROR_LIMIT:
+                raise RuntimeError(
+                    f"EDINET feedのHTTPエラーが{len(feed_errors)}件に達したため中断"
+                    f"（{','.join(feed_errors)}）"
+                ) from error
+            continue
         if feed is None:
             missing_feed += 1
             continue
@@ -1899,6 +1921,7 @@ def main() -> None:
     dividend_yields = load_dividend_yields(args.prices_url)
     state = load_state(args.state)
     priority_codes = read_priority_codes()
+    feed_errors: list[str] = []
     candidates, missing_feed = build_candidates(
         codes,
         dividend_yields,
@@ -1907,6 +1930,7 @@ def main() -> None:
         args.today,
         priority_codes,
         allow_feed_network=not args.dry_run,
+        feed_errors=feed_errors,
     )
     if args.dry_run:
         queue, due_count, normal_position = ordered_queue(candidates, state)
@@ -2116,7 +2140,9 @@ def main() -> None:
         f"summary selected={len(selected)} ok={processed} failed={failed} "
         f"eventPicks={len(event_picks)} eventRequests={event_requests} "
         f"rateLimitStopped={'true' if rate_limit_stopped else 'false'} "
-        f"rateLimitDays={rate_limit_days}"
+        f"rateLimitDays={rate_limit_days} "
+        f"feedErrors={len(feed_errors)} "
+        f"feedErrorCodes={','.join(feed_errors) or '-'}"
     )
     if last_remaining is not None:
         print(f"edinetdb日次残量: {last_remaining:,}")

@@ -201,6 +201,13 @@ def parse_args() -> argparse.Namespace:
         help="利回り順の並べ替えに使う日次株価CSV（file://も可）",
     )
     parser.add_argument("--edinet-dir", type=Path, default=DEFAULT_EDINET_DIR)
+    parser.add_argument(
+        "--feed-from-network",
+        action="store_true",
+        help="--edinet-dir に無い銘柄のfeedを jsDelivr から取る（既定は取らずに"
+        "feed/コード除外として数える。daily-store は同じリポジトリをcheckout"
+        "しているので、取りに行っても無いファイルに404・403をもらうだけ）",
+    )
     parser.add_argument("--state", type=Path, default=DEFAULT_STATE)
     parser.add_argument(
         "--today",
@@ -1929,7 +1936,7 @@ def main() -> None:
         args.edinet_dir,
         args.today,
         priority_codes,
-        allow_feed_network=not args.dry_run,
+        allow_feed_network=args.feed_from_network and not args.dry_run,
         feed_errors=feed_errors,
     )
     if args.dry_run:
@@ -2141,6 +2148,7 @@ def main() -> None:
         f"eventPicks={len(event_picks)} eventRequests={event_requests} "
         f"rateLimitStopped={'true' if rate_limit_stopped else 'false'} "
         f"rateLimitDays={rate_limit_days} "
+        f"missingFeed={missing_feed} "
         f"feedErrors={len(feed_errors)} "
         f"feedErrorCodes={','.join(feed_errors) or '-'}"
     )

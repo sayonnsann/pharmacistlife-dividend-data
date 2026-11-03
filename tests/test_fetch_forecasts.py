@@ -2208,6 +2208,36 @@ class FeedHttpErrorTests(unittest.TestCase):
         self.assertNotIsInstance(caught.exception, fetch_forecasts.FeedHTTPError)
         self.assertIn("500A,500B,500C", str(caught.exception))
 
+    def test_without_network_a_missing_feed_is_counted_not_fetched(self) -> None:
+        feed_errors = []
+        with tempfile.TemporaryDirectory() as tmp:
+            edinet_dir = Path(tmp)
+            (edinet_dir / "1111.json").write_text(
+                json.dumps({"fiscalMonth": 3, "edinetCode": "E00001"}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(
+                fetch_forecasts, "urlopen", side_effect=AssertionError("network")
+            ) as urlopen:
+                candidates, missing_feed = fetch_forecasts.build_candidates(
+                    ["500A", "1111"],
+                    {},
+                    {"stocks": {}},
+                    edinet_dir,
+                    fetch_forecasts.date(2026, 11, 3),
+                    {},
+                    allow_feed_network=False,
+                    feed_errors=feed_errors,
+                )
+        urlopen.assert_not_called()
+        self.assertEqual([c.code for c in candidates], ["1111"])
+        self.assertEqual(missing_feed, 1)
+        self.assertEqual(feed_errors, [])
+
+    def test_feed_network_is_off_by_default(self) -> None:
+        with mock.patch.object(sys, "argv", ["fetch_forecasts.py"]):
+            self.assertFalse(fetch_forecasts.parse_args().feed_from_network)
+
 
 if __name__ == "__main__":
     unittest.main()

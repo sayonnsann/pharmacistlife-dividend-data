@@ -2323,6 +2323,18 @@
       },
       "detectedAt": "2026-10-31",
       "status": "pending"
+    },
+    {
+      "code": "7743",
+      "name": "シード",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "bb017d873b800490b565db794b77b5440ba7159c894731d5ae58575062ca8adc",
+        "eventType": "reverse_split",
+        "eventDate": "2026-11-05"
+      },
+      "detectedAt": "2026-11-06",
+      "status": "pending"
     }
   ]
 }

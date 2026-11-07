@@ -3,8 +3,8 @@
  "note": "EDINET有報の株式分割台帳から、配当系列の最終年度末より後に効力が発生し、比率50倍未満かつJPX上場一覧に存在するイベントだけを取り込んだ表示側データ。併合は含めない。",
  "generatedAt": "2026-09-16T15:51:58+00:00",
  "generatedFrom": {
-  "ledger": "/Users/yusuke/workspace/edinet-direct/data/stock_action_ledger.json",
-  "audit": "/Users/yusuke/workspace/edinet-direct/scripts/audit_stock_actions.py",
+  "ledger": "edinet-direct/data/stock_action_ledger.json",
+  "audit": "edinet-direct/scripts/audit_stock_actions.py",
   "auditDecision": "合格",
   "auditAction": "split",
   "auditedCount": 39,

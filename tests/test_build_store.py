@@ -823,7 +823,7 @@ class FilterDocumentReadmissionTest(unittest.TestCase):
 class StockActionIntegrationTest(unittest.TestCase):
     MANUAL = ROOT / "data" / "stock_actions_manual.json"
     EXTRACTED = ROOT / "data" / "stock_actions_extracted.json"
-    FISCAL = Path("/Users/yusuke/workspace/edinet-direct/data/fiscal_dividends.json")
+    FISCAL = filter_extracted_stock_actions.DEFAULT_FISCAL_DIVIDENDS
     BASELINE_APPLIED_DIVIDEND_CODES = frozenset(
         {
             "1414", "1436", "1798", "1847", "1925", "1961", "1982", "2220",

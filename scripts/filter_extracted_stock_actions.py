@@ -28,8 +28,11 @@ from typing import Any
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = REPOSITORY_ROOT / "data" / "stock_actions_extracted.json"
 DEFAULT_OUTPUT = DEFAULT_INPUT
+# 既定は同じ親フォルダに並べた edinet-direct（Mac・母艦とも workspace の下に並ぶ）。
+# 別の置き場所なら環境変数 DVC_FISCAL_DIVIDENDS か --fiscal-dividends で指定する。
 DEFAULT_FISCAL_DIVIDENDS = Path(
-    "/Users/yusuke/workspace/edinet-direct/data/fiscal_dividends.json"
+    os.environ.get("DVC_FISCAL_DIVIDENDS")
+    or REPOSITORY_ROOT.parent / "edinet-direct" / "data" / "fiscal_dividends.json"
 )
 DEFAULT_TICKERS = REPOSITORY_ROOT / "data" / "tickers.json"
 MAX_SPLIT_RATIO = 50.0

@@ -2335,6 +2335,42 @@
       },
       "detectedAt": "2026-11-06",
       "status": "pending"
+    },
+    {
+      "code": "9706",
+      "name": "日本空港ビルデング",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "921c05abe2c453251779c9510516381ecfcc005bb0ef22881cb5aa5ba3922cc6",
+        "eventType": "stock_split",
+        "eventDate": "2026-11-06"
+      },
+      "detectedAt": "2026-11-07",
+      "status": "pending"
+    },
+    {
+      "code": "6507",
+      "name": "シンフォニアテクノロジー",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "e3e87d2c1adaa2c748fb4fdeb23f80a97c50fb783bc639850b53fe0c8fbc3222",
+        "eventType": "stock_split",
+        "eventDate": "2026-11-06"
+      },
+      "detectedAt": "2026-11-07",
+      "status": "pending"
+    },
+    {
+      "code": "3544",
+      "name": "サツドラホールディングス",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "f8ff40078460b50fbc037a55a927c59c2903b016214b25aff151ab2a2049794f",
+        "eventType": "reverse_split",
+        "eventDate": "2026-11-06"
+      },
+      "detectedAt": "2026-11-07",
+      "status": "pending"
     }
   ]
 }

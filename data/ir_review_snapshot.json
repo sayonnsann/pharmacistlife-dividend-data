@@ -1,16 +1,7 @@
 {
   "pendingSplitEvents": {
-    "921c05abe2c453251779c9510516381ecfcc005bb0ef22881cb5aa5ba3922cc6": {
-      "attempts": 0,
-      "code": "9706",
-      "edinetCode": "E03863",
-      "eventDate": "2026-11-06",
-      "eventType": "stock_split",
-      "firstSeenAt": "2026-11-07",
-      "secCode": "9706"
-    },
     "bb017d873b800490b565db794b77b5440ba7159c894731d5ae58575062ca8adc": {
-      "attempts": 1,
+      "attempts": 2,
       "code": "7743",
       "edinetCode": "E02414",
       "eventDate": "2026-11-05",
@@ -18,17 +9,8 @@
       "firstSeenAt": "2026-11-06",
       "secCode": "7743"
     },
-    "e3e87d2c1adaa2c748fb4fdeb23f80a97c50fb783bc639850b53fe0c8fbc3222": {
-      "attempts": 0,
-      "code": "6507",
-      "edinetCode": "E01743",
-      "eventDate": "2026-11-06",
-      "eventType": "stock_split",
-      "firstSeenAt": "2026-11-07",
-      "secCode": "6507"
-    },
     "f8ff40078460b50fbc037a55a927c59c2903b016214b25aff151ab2a2049794f": {
-      "attempts": 0,
+      "attempts": 1,
       "code": "3544",
       "edinetCode": "E32381",
       "eventDate": "2026-11-06",
@@ -87,5 +69,5 @@
       "2026"
     ]
   },
-  "updatedAt": "2026-11-07"
+  "updatedAt": "2026-11-08"
 }

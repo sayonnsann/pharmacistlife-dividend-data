@@ -84,12 +84,12 @@ def test_integer_split_ratio_and_relative_tolerance(ratio, accepted):
         {"2024": {"base": 80.0, "special": 20.0}},
         {2024: 100.0 * ratio}, None, fiscal_month=3, code="9999",
     )
-    assert bool(result)
+    assert bool(result) == accepted
     assert bool(warnings) != accepted
     if accepted:
         assert sum(result["2024"].values()) == pytest.approx(100.0 * ratio)
     else:
-        assert result == {"2024": {"base": 80.0, "special": 20.0}}
+        assert result == {}
         assert "9999/2024" in warnings[0]
         assert f"比r={ratio}" in warnings[0]
 
@@ -103,10 +103,10 @@ def test_noninteger_ratio_requires_event_after_period_end(effective_date, accept
         {"2024": {"base": 80.0, "special": 20.0}}, {2024: 60.0},
         build_store.split_adjustment([event]), fiscal_month=3,
     )
-    assert bool(result)
+    assert bool(result) == accepted
     assert bool(warnings) != accepted
     if not accepted:
-        assert result == {"2024": {"base": 80.0, "special": 20.0}}
+        assert result == {}
 
 
 def test_applied_actions_and_ledger_are_deduplicated_in_cumulative_ratio():
@@ -130,16 +130,26 @@ def test_applied_actions_and_ledger_are_deduplicated_in_cumulative_ratio():
     ({"base": None, "special": 20.0}, 10.0),
     ({"base": 20.0, "special": 10.0}, 0.0),
 ])
-def test_unexplained_breakdown_is_kept_for_legacy_replacement(detail, annual):
+def test_unexplained_breakdown_is_excluded(detail, annual):
+    # 合計が系列と合わず分割でも説明できない内訳は、期ずれ・基準ずれのおそれが
+    # あるので使わない。普通配当の系列は総額のまま。
     result, warnings = build_store.adjust_dividend_breakdown(
         {"2024": detail}, {2024: annual}, None, fiscal_month=3,
     )
-    assert result == {"2024": detail}
+    assert result == {}
     assert len(warnings) == 1
-    assert "内訳は未補正のまま使用" in warnings[0]
-    base = build_store.finite_number(detail["base"])
-    expected = base if base is not None and base >= 0 else annual
-    assert build_store.base_dividend_series({2024: annual}, result) == {2024: expected}
+    assert "内訳を使わない" in warnings[0]
+    assert build_store.base_dividend_series({2024: annual}, result) == {2024: annual}
+
+
+def test_unexplained_year_is_excluded_but_other_years_are_kept():
+    breakdown = {"2023": {"base": 20.0, "special": 5.0}, "2024": {"base": 10.0, "special": 5.0}}
+    result, warnings = build_store.adjust_dividend_breakdown(
+        breakdown, {2023: 25.0, 2024: 20.0}, None, fiscal_month=3,
+    )
+    assert result == {"2023": {"base": 20.0, "special": 5.0}}
+    assert len(warnings) == 1 and "/2024:" in warnings[0]
+    assert build_store.base_dividend_series({2023: 25.0, 2024: 20.0}, result) == {2023: 20.0, 2024: 20.0}
 
 
 def test_zero_total_and_zero_annual_are_kept():
@@ -201,7 +211,8 @@ def test_store_uses_same_breakdown_for_streaks_and_display(
         assert fiscal == original
         return
     if unexplained:
-        assert payload["dividendBreakdown"] == {"2024": detail}
+        # 説明できない内訳は使わない（表示にも出さない）。
+        assert payload["dividendBreakdown"] == {}
         assert payload["streakNoDecreaseBase"] == 0
         assert payload["warnings"][0] == "配当内訳の分割基準に確認が必要です"
     else:

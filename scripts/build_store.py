@@ -600,7 +600,7 @@ def adjust_dividend_breakdown(
 ) -> tuple[dict[str, Any], list[str]]:
     """内訳を配分比として使い、分割で説明できる金額だけannualへ揃える。
 
-    分割で説明できない年度は警告を残し、未補正の内訳を従来どおり使う。
+    分割で説明できない年度は警告を残し、その年度の内訳は結果から外す。
     補正は観測比でなく、その比を説明する正確な分割係数で行う。
     棒と同じ桁数へ丸め、普通配当を残額にして合計を合わせる。
     元データと出典は変更しない。反映済みイベントも比率の根拠に使える。
@@ -659,10 +659,13 @@ def adjust_dividend_breakdown(
                     candidates.append(nearest if candidate == ratio else 1 / nearest)
         split_factor = next((v for v in candidates if close(v)), None)
         if split_factor is None:
+            # 合計が系列と合わず分割でも説明できない内訳は、期ずれ・基準ずれの
+            # おそれがあるので使わない（普通配当の系列も総額のまま数える）。
             warnings.append(
                 f"配当内訳 {code}/{year}: annual={annual}, base+special={total}, "
-                f"比r={ratio} は分割比率で説明できないため内訳は未補正のまま使用"
+                f"比r={ratio} は分割比率で説明できないため内訳を使わない"
             )
+            del result[year]
             continue
         adjusted = dict(detail)
         # JSON numbers do not preserve trailing zeroes. Use meaningful decimal

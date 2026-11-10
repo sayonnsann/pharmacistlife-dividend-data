@@ -10,7 +10,10 @@ name: fiscal_dividends.json / checker本体 をConoHaへ反映
 # 冒頭の安全確認と同じ理由)。workspace→Actions→ConoHa非公開領域のみを通す
 # ことで、公開制約を満たしたまま自動反映する。
 #
-# JST 03:30 / 06:30に夜間バッチの公開物だけを自動反映する。
+# JST 03:17 / 04:47 / 06:23 / 08:53 / 11:13 に夜間バッチの公開物だけを自動反映する。
+# GitHubの定時は混雑時に落ちたり数時間遅れたりする（2026-10〜11は03:30の回が30日で4回しか
+# 動かなかった）ため、分をずらして回数を増やしている。本番とSHA-256が同じなら送らないので、
+# 回数を増やしても同じファイルを送り直すことはない。
 # 手動mode=autoでも同じ安全装置を通せる。checker本体はmode=manual専用。
 #
 # workspace_ref: fiscal_dividends.jsonを取得するworkspace側のブランチ/コミット。
@@ -20,7 +23,11 @@ name: fiscal_dividends.json / checker本体 をConoHaへ反映
 
 on:
   schedule:
-    - cron: "30 18,21 * * *"  # JST 03:30 / 06:30
+    - cron: "17 18 * * *"  # JST 03:17
+    - cron: "47 19 * * *"  # JST 04:47
+    - cron: "23 21 * * *"  # JST 06:23
+    - cron: "53 23 * * *"  # JST 08:53
+    - cron: "13 2 * * *"   # JST 11:13（HOLDのあとの流し直しが朝に終わる日のため）
   workflow_dispatch:
     inputs:
       mode:
@@ -47,10 +54,18 @@ permissions:
   contents: read
   actions: write  # 反映後にprice-only-store.ymlをトリガーするために必要
 
+# 定時が重なって遅れたときなどに、同時に2本動いて同じファイルを送り合わないよう1本に絞る。
+# 走っている回は止めず、後の回は前の回が終わるのを待つ。
+concurrency:
+  group: deploy-fiscal
+  cancel-in-progress: false
+
 jobs:
   deploy-fiscal:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 普段の反映は17秒前後（送信の段の実測）。2026-10-25・26は送信のlftpが応答待ちのまま止まり、10分で打ち切られた。
+    # 送信は1回あたりの待ちに上限を付けて最大3回まで試すので、その合計が収まる15分にする。
+    timeout-minutes: 15
     env:
       FTP_HOST: ${{ secrets.FTP_HOST }}
       FTP_USER: ${{ secrets.FTP_USER }}
@@ -191,26 +206,59 @@ jobs:
           set -euo pipefail
           FILE="workspace-src/edinet-direct/data/fiscal_dividends.json"
           remote_dir="${FTP_REMOTE_DIR%/}"
-          lftp -u "${FTP_USER},${FTP_PASS}" \
-            -e "set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
-                put -O ${remote_dir}/ \"$FILE\" -o fiscal_dividends.json.new; \
-                bye" \
-            "ftp://${FTP_HOST}"
-          # 実サイズ検証（申告ではなく現物を確認）
           local_size=$(wc -c < "$FILE" | tr -d ' ')
-          remote_size=$(curl --ssl-reqd --silent --user "${FTP_USER}:${FTP_PASS}" --head \
-            "ftp://${FTP_HOST}${remote_dir}/fiscal_dividends.json.new" | awk '/Content-Length/ {print $2}' | tr -d '\r')
-          if [ "$local_size" != "$remote_size" ]; then
-            echo "::error::fiscal_dividends.json のアップロード検証に失敗（local=$local_size remote=$remote_size）"
+          # 一時名(.new)への送信と実サイズ検証を、最大3回まで試す。1回ごとの待ちに上限を付ける
+          # (lftp: net:timeout 30秒・内部の再接続2回、curl: 60秒)。接続先などの非公開情報を
+          # ログへ流さないよう、lftp・curl の出力は捨てて、成否と回数だけを出す。
+          # 本番のファイル名へ切り替える処理は、ここでは行わない（.new が揃うまで本番は変わらない）。
+          uploaded=false
+          for attempt in 1 2 3; do
+            remote_size=""
+            if lftp -u "${FTP_USER},${FTP_PASS}" \
+              -e "set cmd:fail-exit true; set net:timeout 30; set net:max-retries 2; set net:reconnect-interval-base 10; \
+                  set ssl:verify-certificate true; set ftp:ssl-force true; set ftp:ssl-protect-data true; \
+                  put -O ${remote_dir}/ \"$FILE\" -o fiscal_dividends.json.new; \
+                  bye" \
+              "ftp://${FTP_HOST}" > /dev/null 2>&1; then
+              # 実サイズ検証（申告ではなく現物を確認）
+              remote_size=$(curl --ssl-reqd --silent --max-time 60 --user "${FTP_USER}:${FTP_PASS}" --head \
+                "ftp://${FTP_HOST}${remote_dir}/fiscal_dividends.json.new" 2>/dev/null | awk '/Content-Length/ {print $2}' | tr -d '\r' || true)
+            fi
+            if [ "$local_size" = "$remote_size" ]; then
+              uploaded=true
+              echo "送信と実サイズ検証に成功（${attempt}回目）"
+              break
+            fi
+            echo "::warning::送信または実サイズ検証に失敗（${attempt}回目/3回）"
+            if [ "$attempt" -lt 3 ]; then sleep 20; fi
+          done
+          if [ "$uploaded" != true ]; then
+            echo "::error::fiscal_dividends.json の送信に3回失敗しました。本番のファイルは変えていません。"
             exit 1
           fi
+          # 切り替えは1回だけ行う（途中で失敗したときに繰り返すと .bak を消してしまうため）。
+          # 待ちの上限と lftp 内部の再接続（2回まで）だけを付ける。
+          # cmd:fail-exit で、途中の rm・mv が失敗したら lftp を0以外で終わらせる（最後の bye の
+          # 終了コードで成功に見えないようにする）。本番→.bak の mv だけは、本番がまだ無い初回に
+          # 備えて「|| echo」で失敗を許す（lftp の || は、左が失敗したときだけ右を動かす）。
           lftp -u "${FTP_USER},${FTP_PASS}" \
-            -e "set ssl:verify-certificate true; set ftp:ssl-force true; \
+            -e "set cmd:fail-exit true; set net:timeout 30; set net:max-retries 2; set net:reconnect-interval-base 10; \
+                set ssl:verify-certificate true; set ftp:ssl-force true; \
                 rm -f ${remote_dir}/fiscal_dividends.json.bak; \
-                mv ${remote_dir}/fiscal_dividends.json ${remote_dir}/fiscal_dividends.json.bak || true; \
+                mv ${remote_dir}/fiscal_dividends.json ${remote_dir}/fiscal_dividends.json.bak || echo no-current-file; \
                 mv ${remote_dir}/fiscal_dividends.json.new ${remote_dir}/fiscal_dividends.json; \
                 bye" \
-            "ftp://${FTP_HOST}"
+            "ftp://${FTP_HOST}" > /dev/null 2>&1 || {
+              echo "::error::本番のファイル名への切り替えに失敗しました。本番の fiscal_dividends.json が無い可能性があります。.bak から戻せるか確かめてください。"
+              exit 1
+            }
+          # 切り替えたあと、本番のファイル名の実サイズが送ったファイルと同じかを確かめる。
+          final_size=$(curl --ssl-reqd --silent --max-time 60 --user "${FTP_USER}:${FTP_PASS}" --head \
+            "ftp://${FTP_HOST}${remote_dir}/fiscal_dividends.json" 2>/dev/null | awk '/Content-Length/ {print $2}' | tr -d '\r' || true)
+          if [ "$local_size" != "$final_size" ]; then
+            echo "::error::切り替えたあとの本番の fiscal_dividends.json の大きさが合いません（local=$local_size remote=${final_size:-取得できず}）。本番の fiscal_dividends.json が無い可能性があります。.bak から戻せるか確かめてください。"
+            exit 1
+          fi
           echo "fiscal_dividends.json を検証つきで差し替えました（$local_size bytes）"
 
       - name: checker.htmlをdata/checker-body.htmlへ原子的に反映

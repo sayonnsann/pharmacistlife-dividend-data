@@ -89,7 +89,7 @@
   .dvc-forecast{display:flex;align-items:baseline;justify-content:center;flex-wrap:wrap;gap:2px 6px;margin:-4px 0 16px;padding:9px 12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;color:#1e3a8a;font-size:13px}.dvc-forecast-main{font-weight:700}.dvc-forecast-detail{color:#475569;font-size:12px}
   .dvc-earnings-card{margin:14px 0 0;background:#fff}.dvc-earnings-card.dvc-earnings-next{border-color:#cbd5e1;background:#f8fafc}.dvc-earnings-card.dvc-earnings-next h4{color:#475569}.dvc-earnings-card.dvc-earnings-next .dvc-earnings-metric{background:#fff;border-color:#e2e8f0}.dvc-earnings-subtitle{margin:2px 0 0;color:var(--dvc-muted);font-size:12px}.dvc-earnings-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.dvc-earnings-metric{min-width:0;padding:10px 9px;border:1px solid #dbeafe;border-radius:9px;background:#f8fbff;text-align:center}.dvc-earnings-label{display:block;color:#475569;font-size:12px;font-weight:700}.dvc-earnings-value{display:block;margin-top:3px;color:#172554;font-size:18px;font-weight:800;white-space:nowrap}.dvc-earnings-change{display:block;margin-top:2px;color:#64748b;font-size:12px}.dvc-earnings-change.dvc-growth-pos{color:#16a34a}.dvc-earnings-change.dvc-growth-neg{color:#dc2626}.dvc-roe-note{margin:8px 0 0}
   .dvc-chart-wrap{margin-top:20px;overflow-x:auto}.dvc-bar-label{font-size:11px;fill:#6b7280}.dvc-bar-value{font-size:11px;fill:#2b2b2b}.dvc-growth-label{font-size:10px}.dvc-growth-pos{fill:#16a34a;color:#16a34a}.dvc-growth-neg{fill:#dc2626;color:#dc2626}.dvc-payout-label{font-size:10px;fill:#b45309}.dvc-lane-divider{stroke:#dfe7f1;stroke-width:1}.dvc-bar-missing-tick{stroke:#cbd5e1;stroke-width:2;stroke-dasharray:2 3}.dvc-bar-label-missing{fill:#b6c2cf}
-  .dvc-chart-legend,.dvc-fin-legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11px;color:#6b7280;margin-top:8px}.dvc-chart-legend span,.dvc-fin-legend span{display:flex;align-items:center;gap:6px}.dvc-legend-swatch{display:inline-block;width:12px;height:12px;border-radius:2px}.dvc-legend-line{width:15px;height:3px;border-radius:0}.dvc-legend-average{width:18px;height:0;border-top:2px dashed currentColor;opacity:.65}.dvc-legend-sector{width:18px;height:0;border-top:2px dotted #7c3aed}.dvc-legend-text{font-style:normal;font-weight:700}
+  .dvc-chart-legend,.dvc-fin-legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:11px;color:#6b7280;margin-top:8px}.dvc-chart-legend span,.dvc-fin-legend span{display:flex;align-items:center;gap:6px}.dvc-legend-swatch{display:inline-block;width:12px;height:12px;border-radius:2px}.dvc-legend-line{width:15px;height:3px;border-radius:0}.dvc-legend-average{width:18px;height:0;border-top:2px dashed currentColor;opacity:.65}.dvc-legend-sector{width:18px;height:0;border-top:2px dotted #7c3aed}.dvc-legend-text{font-style:normal;font-weight:700}.dvc-bar-label-short{font-size:10px}.dvc-bar-value-short{font-size:9px}.dvc-axis-label.dvc-axis-label-short{font-size:10px}
   .dvc-source{margin:7px 0 0;color:#64748b;font-size:11px}.dvc-source strong{color:#475569}
   .dvc-financials{margin-top:24px;padding-top:18px;border-top:2px solid #e2e8f0}.dvc-fin-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.dvc-fin-head h3{margin:0;color:#172554;font-size:19px}.dvc-fin-head p{margin:3px 0 0;color:#64748b;font-size:12px}.dvc-fin-source{flex:0 0 auto;padding:4px 9px;border:1px solid #bfdbfe;border-radius:6px;color:#2563eb;background:#eff6ff;font-size:11px;font-weight:700}
   .dvc-warnings{margin:14px 0;padding:10px 12px 10px 30px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;color:#64748b;font-size:12px}.dvc-warnings li+li{margin-top:4px}.dvc-warning-split{color:#9a3412;font-weight:600}
@@ -312,7 +312,40 @@
     });
     return{amount:amount,growth:growth,dense:!showAll}
   }
-  function buildBarChart(annual,payoutRatio,dividendBreakdown,annualPartial,confirmed,pending,seriesInfo){
+  // 段階2: 決算期変更の短い期（12か月より短い期）を、前後の年のあいだに足して描く。
+  // 色と模様はこの1か所で変える（配当の棒・財務のグラフ・凡例の全部がここを読む）。
+  var SHORT_PERIOD_STYLE={fill:"#dbeafe",hatch:"#3b82f6",hatchGap:5,hatchWidth:1.5,hatchAngle:45,barWidth:16};
+  // 無配の短い期の扱い（連続年数）。A="stop_streak"（ここで止める）/ B="skip_without_stop"（数えないが止めない）。
+  // edinet-direct の scripts/streak_bridges.py と pdd の scripts/build_store.py の同じ名前の定数と、同じ値にそろえる。
+  var SHORT_PERIOD_NO_DIVIDEND_POLICY="skip_without_stop";
+  var SHORT_PERIOD_NO_DIVIDEND_TEXT={stop_streak:"無配のため、連続年数はここで途切れます",skip_without_stop:"無配のため、連続年数では数えていません"};
+  var SHORT_PERIOD_COUNTED_TEXT={both:"連続増配・連続非減配の年数では1期として数えています",nonDecrease:"連続非減配の年数では1期として数えています（連続増配の年数には入っていません）",increase:"連続増配の年数では1期として数えています（連続非減配の年数には入っていません）"};
+  var shortPatternSeq=0;
+  function isFiniteNumber(v){return typeof v==="number"&&isFinite(v)}
+  function shortPatternDef(){var id="dvc-short-hatch-"+(shortPatternSeq+=1),st=SHORT_PERIOD_STYLE;return{id:id,svg:'<defs><pattern id="'+id+'" patternUnits="userSpaceOnUse" width="'+st.hatchGap+'" height="'+st.hatchGap+'" patternTransform="rotate('+st.hatchAngle+')"><rect width="'+st.hatchGap+'" height="'+st.hatchGap+'" fill="'+st.fill+'"></rect><line x1="0" y1="0" x2="0" y2="'+st.hatchGap+'" stroke="'+st.hatch+'" stroke-width="'+st.hatchWidth+'"></line></pattern></defs>'}}
+  function shortLegendSwatch(){var st=SHORT_PERIOD_STYLE;return '<i class="dvc-legend-swatch" style="background:repeating-linear-gradient(-'+st.hatchAngle+'deg,'+st.hatch+' 0 '+st.hatchWidth+'px,'+st.fill+' '+st.hatchWidth+'px '+st.hatchGap+'px);box-shadow:inset 0 0 0 1px '+st.hatch+'"></i>'}
+  function shortYM(v){var m=String(v||"").match(/^(\d{4})-(\d{2})/);return m?{y:Number(m[1]),m:Number(m[2])}:null}
+  function shortAxisLabel(item){var e=shortYM(item&&item.periodEnd);return e?String(e.y).slice(2)+"/"+(e.m<10?"0":"")+e.m:""}
+  // 期間の長さ。months が null か0（1か月に満たない期）は「8日」のように日数で出す。日数は lengthDays、無ければ期の初日と末日から数える
+  function shortPeriodDays(item){if(isFiniteNumber(item.lengthDays)&&item.lengthDays>0)return item.lengthDays;var s=String(item.periodStart||"").match(/^(\d{4})-(\d{2})-(\d{2})$/),e=String(item.periodEnd||"").match(/^(\d{4})-(\d{2})-(\d{2})$/),d;if(!s||!e)return null;d=Math.round((Date.UTC(+e[1],+e[2]-1,+e[3])-Date.UTC(+s[1],+s[2]-1,+s[3]))/864e5)+1;return d>0?d:null}
+  function shortMonthsLabel(item){var days;if(!item)return"";if(isFiniteNumber(item.months)&&item.months>0)return item.months+"か月";if(item.months===null||item.months===undefined||item.months===0){days=shortPeriodDays(item);return days?days+"日":""}return""}
+  // 「決算期変更の短い期（2014年4月〜12月の9か月）」。期首が分からない期は「（2014年12月までの期）」
+  function shortPeriodText(item){var s=shortYM(item&&item.periodStart),e=shortYM(item&&item.periodEnd),months=shortMonthsLabel(item),range;if(!e)return"決算期変更の短い期";range=s?(s.y===e.y&&s.m===e.m?s.y+"年"+s.m+"月":s.y+"年"+s.m+"月〜"+(s.y===e.y?"":e.y+"年")+e.m+"月"):e.y+"年"+e.m+"月までの期";return"決算期変更の短い期（"+range+(months?(s?"の":"・")+months:"")+"）"}
+  function shortCountedText(item){var c=(item&&item.countedIn)||[],inc=c.indexOf("streakIncrease")>=0,nd=c.indexOf("streakNonDecrease")>=0;return inc&&nd?SHORT_PERIOD_COUNTED_TEXT.both:nd?SHORT_PERIOD_COUNTED_TEXT.nonDecrease:inc?SHORT_PERIOD_COUNTED_TEXT.increase:""}
+  // stop=無配 / count=配当額あり / unknown=配当額が分からない（値が無い期と、分割の調整ができない期）
+  function shortPeriodKind(item){if(item.status==="stop")return"stop";if(item.status==="count"&&isFiniteNumber(item.dividend))return"count";return"unknown"}
+  // カーソルを合わせたときの説明。連続の中で数えた期だけに「1期として数えています」を付ける
+  function shortPeriodTitle(item){var kind=shortPeriodKind(item),head=shortPeriodText(item),counted=shortCountedText(item);if(kind==="stop")return"無配 / "+head+"。"+(SHORT_PERIOD_NO_DIVIDEND_TEXT[SHORT_PERIOD_NO_DIVIDEND_POLICY]||"");if(kind==="unknown")return head+"。配当額は未確認です"+(counted?"。"+counted:"");return"配当"+formatValue(item.dividend,"円")+" / "+head+(counted?"。"+counted:"")}
+  // 短い期を置く場所（この年の後ろ）。前後の年（between）があればその前の年、無ければ期末の順
+  function shortPlacementAfter(item,years,fiscalMonth){
+    if(item.between&&item.between.length===2&&isFiniteNumber(item.between[0]))return String(item.between[0]);
+    var e=shortYM(item.periodEnd),plain=years.filter(function(y){return /^\d{4}$/.test(y)}),fm=isFiniteNumber(fiscalMonth)&&fiscalMonth>=1&&fiscalMonth<=12?fiscalMonth:12,after;
+    if(!e||!plain.length)return null;after=String(Number(plain[0])-1);
+    plain.forEach(function(y){if(Number(y)*12+fm<e.y*12+e.m)after=y});return after
+  }
+  function shortPeriodSlots(items,displayYears,fiscalMonth){var byAfter={},count=0,first=Number(displayYears[0]),last=Number(displayYears[displayYears.length-1]);(Array.isArray(items)?items:[]).forEach(function(item){if(!item||typeof item!=="object")return;var after=shortPlacementAfter(item,displayYears,fiscalMonth),a=Number(after);if(after===null||!isFinite(a)||a<first-1||a>last)return;(byAfter[after]=byAfter[after]||[]).push(item);count+=1});return{byAfter:byAfter,count:count}}
+  function shortPeriodStreakNote(r){return r&&r.streakShortPeriodsCounted?'<p class="dvc-source">決算期変更の短い期も1期として数えています。</p>':""}
+  function buildBarChart(annual,payoutRatio,dividendBreakdown,annualPartial,confirmed,pending,seriesInfo,shortPeriods){
     var confirmedYears=Object.keys(annual).sort(),growth,values,max,payoutYears,payoutValues,payoutMax,barW=34,gap=10,chartH=200,leftPad=4,topPad=26,w,h,xCenter={},bars,payoutLine="",legend,hasBreakdown=false,hasForecast=false,hasConfirmed=false,partialSet={},displayYears,labelPlan,hasGap=false;
     annualPartial=annualPartial||{};dividendBreakdown=dividendBreakdown||{};payoutRatio=payoutRatio||{};confirmed=confirmed||{};pending=pending||{};seriesInfo=seriesInfo||{};
     var isFiscal=seriesInfo.basis!=="calendar",axisText=isFiscal?"事業年度":"暦年・更新停止";
@@ -330,10 +363,15 @@
     growth=yoyGrowthByYear(annual,confirmedYears);
     values=displayYears.map(function(y){if(partialSet[y])return annualPartial[y];return(typeof annual[y]==="number"&&isFinite(annual[y]))?annual[y]:null});
     var numericValues=values.filter(function(v){return v!==null});
-    max=(numericValues.length?Math.max.apply(null,numericValues):0)*1.15||1;
+    // 短い期の細い棒は、前後の年のあいだに足す（年の棒の位置は、短い期が無ければ今までと同じ）
+    var shortSlots=shortPeriodSlots(shortPeriods,displayYears,seriesInfo.fiscalMonth),shortW=SHORT_PERIOD_STYLE.barWidth,xStart={},shortPlaced=[],shortAfterYear={},shortValues=[],cursor=leftPad;
+    function placeShorts(after){(shortSlots.byAfter[after]||[]).forEach(function(item){shortPlaced.push({item:item,x:cursor});shortAfterYear[String(Number(after)+1)]=true;cursor+=shortW+gap;if(shortPeriodKind(item)==="count")shortValues.push(item.dividend)})}
+    placeShorts(String(minYear-1));displayYears.forEach(function(y){xStart[y]=cursor;cursor+=barW+gap;placeShorts(y)});
+    var maxSource=numericValues.concat(shortValues);
+    max=(maxSource.length?Math.max.apply(null,maxSource):0)*1.15||1;
     labelPlan=barLabelPlan(displayYears,values,barW,gap);
     payoutYears=confirmedYears.filter(function(y){return payoutRatio[y]!==undefined&&payoutRatio[y]!==null});payoutValues=payoutYears.map(function(y){return payoutRatio[y]});payoutMax=Math.max(100,Math.max.apply(null,payoutValues.concat([0]))*1.15);
-    w=displayYears.length*(barW+gap)+leftPad;h=chartH+topPad+56;
+    w=displayYears.length*(barW+gap)+shortSlots.count*(shortW+gap)+leftPad;h=chartH+topPad+56;
     // 配当性向の折れ線は棒グラフと同じ領域に重ねず、上部の専用レーンに分離する。
     // payoutLaneH=上部(目安28%)を配当性向専用、残りを棒グラフ専用にする。
     // labelHeadroomは、最も高い棒でも金額・前年比ラベルの2行分が
@@ -346,7 +384,7 @@
         labelHeadroom=34,
         barPlotH=Math.max(20,barLaneH-labelHeadroom);
     bars=displayYears.map(function(year,i){
-      var isPartial=!!partialSet[year],hasAnnual=typeof annual[year]==="number"&&isFinite(annual[year]),x=leftPad+i*(barW+gap);
+      var isPartial=!!partialSet[year],hasAnnual=typeof annual[year]==="number"&&isFinite(annual[year]),x=xStart[year];
       xCenter[year]=x+barW/2;
       if(!isPartial&&!hasAnnual){
         // データが無い年: バーは描かず、位置だけ確保する。カーソルを合わせると
@@ -361,11 +399,20 @@
       partialLabel=isPartial?((pin&&pin.label)?pin.label:(isConfirmed?"確定":"予想")):"";
       var mainFill=(isPartial&&!isConfirmed)?"#cbd5e1":"#3b82f6",titleText=year+"年: 配当"+formatValue(v,"円");
       if(g!==undefined)titleText+=" / 前年比 "+(g>=0?"+":"")+g.toFixed(0)+"%";
+      if(g!==undefined&&shortAfterYear[year])titleText+="\n前年比は、決算期変更の短い期をはさんだ前の12か月の期（"+(Number(year)-1)+"年）との比べです";
       if(partialLabel)titleText+=" / "+partialLabel;
       bar='<rect x="'+x+'" y="'+yt+'" width="'+barW+'" height="'+bh+'" rx="3" fill="'+mainFill+'"><title>'+esc(titleText)+'</title></rect>';
       if(bd&&typeof bd.base==="number"&&isFinite(bd.base)&&typeof bd.special==="number"&&isFinite(bd.special)&&bd.special>=0&&bd.special<=v){base=bd.base;special=bd.special;if(Math.abs(base+special-v)>0.000001)base=v-special;specialH=(special/max)*barPlotH;baseH=(base/max)*barPlotH;kind=bd.kind?String(bd.kind):"";tooltip="記念・特別配当 "+special+"円"+(kind?"("+kind+")":"");titleText+=" / "+tooltip;bar='<rect x="'+x+'" y="'+(yt+specialH)+'" width="'+barW+'" height="'+baseH+'" fill="'+mainFill+'"><title>'+esc(titleText)+'</title></rect><rect x="'+x+'" y="'+yt+'" width="'+barW+'" height="'+specialH+'" rx="3" fill="#93c5fd"><title>'+esc(tooltip)+'</title></rect>';hasBreakdown=true}
       if(g!==undefined&&showGrowth)gl='<text class="dvc-growth-label '+(g>=0?"dvc-growth-pos":"dvc-growth-neg")+'" x="'+(x+barW/2)+'" y="'+(yt-18)+'" text-anchor="middle">'+(g>=0?"+":"")+g.toFixed(0)+'%</text>';
       return bar+gl+(showAmount?'<text class="dvc-bar-value" x="'+(x+barW/2)+'" y="'+(yt-4)+'" text-anchor="middle">'+esc(v)+'</text>':"")+'<text class="dvc-bar-label" x="'+(x+barW/2)+'" y="'+(topPad+chartH+16)+'" text-anchor="middle">'+esc(year.slice(2))+'</text>'+(isPartial?'<text class="dvc-bar-label" x="'+(x+barW/2)+'" y="'+(topPad+chartH+30)+'" text-anchor="middle" fill="'+(isConfirmed?"#2563eb":"#94a3b8")+'">'+esc(partialLabel)+'</text>':"")
+    }).join("");
+    var shortPattern=shortPlaced.length?shortPatternDef():null;
+    bars+=shortPlaced.map(function(p){
+      // 短い期: 配当ありは淡い青に斜線の細い棒、無配は高さ0の棒に「無配」、分からない期は「未確認」
+      var item=p.item,kind=shortPeriodKind(item),x=p.x,cx=x+shortW/2,title=esc(shortPeriodTitle(item)),months=shortMonthsLabel(item),body,bh,yt,labelStyle=' style="fill:'+SHORT_PERIOD_STYLE.hatch+'"';
+      if(kind==="count"){bh=(item.dividend/max)*barPlotH;yt=barBaseline-bh;body='<rect x="'+x+'" y="'+yt+'" width="'+shortW+'" height="'+bh+'" rx="2" fill="url(#'+shortPattern.id+')" stroke="'+SHORT_PERIOD_STYLE.hatch+'" stroke-width="1"><title>'+title+'</title></rect>'+(labelPlan.dense?"":'<text class="dvc-bar-value dvc-bar-value-short" x="'+cx+'" y="'+(yt-4)+'" text-anchor="middle">'+esc(item.dividend)+'</text>')}
+      else body='<g><title>'+title+'</title><rect x="'+x+'" y="'+(barBaseline-2)+'" width="'+shortW+'" height="2" fill="'+SHORT_PERIOD_STYLE.hatch+'"'+(kind==="unknown"?' fill-opacity=".45"':"")+'></rect><text class="dvc-bar-value dvc-bar-value-short" x="'+cx+'" y="'+(barBaseline-6)+'" text-anchor="middle">'+(kind==="stop"?"無配":"未確認")+'</text></g>';
+      return '<g class="dvc-short-period">'+body+'<text class="dvc-bar-label dvc-bar-label-short" x="'+cx+'" y="'+(topPad+chartH+16)+'" text-anchor="middle"'+labelStyle+'>'+esc(shortAxisLabel(item))+'</text>'+(months?'<text class="dvc-bar-label dvc-bar-label-short" x="'+cx+'" y="'+(topPad+chartH+30)+'" text-anchor="middle"'+labelStyle+'>'+esc(months)+'</text>':"")+'</g>'
     }).join("");
     displayYears.forEach(function(y){if(!partialSet[y])return;var pin=pending[y];if(pin&&pin.kind==="confirmed"){hasConfirmed=true}else{hasForecast=true}});
     var laneBackground='<rect x="0" y="'+topPad+'" width="'+w+'" height="'+payoutLaneH+'" fill="#f8fafc"></rect>',
@@ -387,8 +434,8 @@
       dots=payoutYears.map(function(y){var py=topPad+payoutLaneH-(payoutRatio[y]/payoutMax)*payoutLaneH;return '<circle cx="'+xCenter[y]+'" cy="'+py+'" r="3" fill="#f59e0b"></circle><text class="dvc-payout-label" x="'+xCenter[y]+'" y="'+(py-8)+'" text-anchor="middle">'+payoutRatio[y].toFixed(0)+'%</text>'}).join("");
       payoutLine=polylines+dots;
     }
-    legend='<div class="dvc-chart-legend"><span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>年間配当金(円、棒グラフ・'+esc(axisText)+')</span>'+(hasForecast?'<span><i class="dvc-legend-swatch" style="background:#cbd5e1"></i>グレー+「予想」=会社発表の配当予想(まだ確定していない年度)</span>':"")+(hasConfirmed?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>青+「確定」=会社発表の確定額(有価証券報告書はまだ出ていない年度)</span>':"")+(hasBreakdown?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>■通常配当　<i class="dvc-legend-swatch" style="background:#93c5fd"></i>■記念・特別配当</span>':"")+'<span><i class="dvc-legend-swatch dvc-legend-line" style="background:#f59e0b"></i>配当性向(%、上部帯)</span><span><i class="dvc-legend-text dvc-growth-pos">+12%</i>は前年比の増配率</span>'+(labelPlan.dense?'<span class="dvc-legend-text">バーが多い場合は主要年のみ表示。各バーにカーソルを合わせると詳細を確認できます。</span>':"")+'</div>';
-    return '<div class="dvc-chart-wrap"><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+" "+h+'">'+laneBackground+laneDivider+bars+payoutLine+"</svg></div>"+legend+'<p class="dvc-source"><strong>出典:</strong> '+'配当実績: 有価証券報告書・決算短信など会社の公式資料'+' / 配当性向: 会社の公式資料 / 配当予想・確定額: EDINET DB</p>'+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
+    legend='<div class="dvc-chart-legend"><span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>年間配当金(円、棒グラフ・'+esc(axisText)+')</span>'+(shortPlaced.length?'<span>'+shortLegendSwatch()+'決算期変更の短い期（月数）</span>':"")+(hasForecast?'<span><i class="dvc-legend-swatch" style="background:#cbd5e1"></i>グレー+「予想」=会社発表の配当予想(まだ確定していない年度)</span>':"")+(hasConfirmed?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>青+「確定」=会社発表の確定額(有価証券報告書はまだ出ていない年度)</span>':"")+(hasBreakdown?'<span><i class="dvc-legend-swatch" style="background:#3b82f6"></i>■通常配当　<i class="dvc-legend-swatch" style="background:#93c5fd"></i>■記念・特別配当</span>':"")+'<span><i class="dvc-legend-swatch dvc-legend-line" style="background:#f59e0b"></i>配当性向(%、上部帯)</span><span><i class="dvc-legend-text dvc-growth-pos">+12%</i>は前年比の増配率</span>'+(labelPlan.dense?'<span class="dvc-legend-text">バーが多い場合は主要年のみ表示。各バーにカーソルを合わせると詳細を確認できます。</span>':"")+'</div>';
+    return '<div class="dvc-chart-wrap"><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+" "+h+'">'+(shortPattern?shortPattern.svg:"")+laneBackground+laneDivider+bars+payoutLine+"</svg></div>"+legend+'<p class="dvc-source"><strong>出典:</strong> '+'配当実績: 有価証券報告書・決算短信など会社の公式資料'+' / 配当性向: 会社の公式資料 / 配当予想・確定額: EDINET DB</p>'+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
   }
   function dividendPeriodNote(r){
     var s=r.dividendSeries||{},text;
@@ -422,7 +469,7 @@
   function domainFor(series,br){var vals=[];series.forEach(function(s){validYears(s.data).forEach(function(y){vals.push(s.data[y])})});if(!vals.length)return{min:0,max:1};if(!br)return padded(vals);var lo=padded(br.lower),umin=Math.min.apply(null,br.upper),umax=Math.max.apply(null,br.upper),span=umax-umin,p=span>0?span*.18:Math.max(Math.abs(umax)*.08,1);return{min:lo.min,max:umax+p,lowerMax:lo.max,upperMin:Math.max(lo.max,umin-p),broken:true}}
   function scalesFor(years,d){var pw=SVG_W-PAD.left-PAD.right,ph=SVG_H-PAD.top-PAD.bottom,g=d.broken?18:0,uh=d.broken?Math.round(ph*.24):0,lh=d.broken?ph-uh-g:ph,bt=PAD.top+uh,bb=bt+g;return{x:function(i){return years.length===1?PAD.left+pw/2:PAD.left+(i/(years.length-1))*pw},y:function(v){if(d.broken){if(v>=d.upperMin)return PAD.top+((d.max-v)/(d.max-d.upperMin))*uh;if(v>d.lowerMax)return bt+g/2;return bb+((d.lowerMax-v)/(d.lowerMax-d.min))*lh}return PAD.top+((d.max-v)/(d.max-d.min))*ph},plotW:pw,breakTop:bt,breakBottom:bb,breakY:bt+g/2}}
   function axisValue(v,u){if(u==="億円")return Math.abs(v)>=10000?formatNumber(v/10000,1)+"兆":formatNumber(v,0);if(u==="%")return formatNumber(v,Math.abs(v)<10?1:0);return formatNumber(v,0)}
-  function axes(years,d,s,u,periods){
+  function axes(years,d,s,u,periods,shortInfo){
     var out=[],i,value,y,lineClass;
     if(d.broken){
       for(i=0;i<=1;i+=1){
@@ -451,6 +498,8 @@
       }
     }
     years.forEach(function(year,index){
+      // 短い期の列は、年のラベルと重ならないように1段下に「14/12」と書く
+      if(shortInfo&&shortInfo[year]){out.push('<text class="dvc-axis-label dvc-axis-label-short" x="'+s.x(index)+'" y="'+(SVG_H-3)+'" text-anchor="middle" style="fill:'+SHORT_PERIOD_STYLE.hatch+'">'+esc(shortInfo[year].label)+'</text>');return}
       var x=s.x(index),y=periods?SVG_H-31:SVG_H-15,periodLabel=((periods&&periods[year])||year.indexOf("_")>=0)?financialPeriodLabel(year,periods):year.slice(2);
       out.push('<text class="dvc-axis-label" x="'+x+'" y="'+y+'" text-anchor="'+(periods?'end':'middle')+'"'+(periods?' transform="rotate(-40 '+x+' '+y+')"':'')+'>'+esc(periodLabel)+'</text>');
     });
@@ -459,32 +508,54 @@
   }
   function wave(x1,x2,y,a){var d="M "+x1+" "+y,x=x1,dir=-1;while(x+8<=x2){d+=" q 4 "+(a*dir)+" 8 0";x+=8;dir*=-1}return d}
   function breakMarks(s){var l=PAD.left,r=SVG_W-PAD.right,y=s.breakY;return '<rect x="'+(l-12)+'" y="'+s.breakTop+'" width="'+(r-l+14)+'" height="'+(s.breakBottom-s.breakTop)+'" fill="#fff" fill-opacity=".94"></rect><path class="dvc-axis-break-grid" d="'+wave(l+11,r,y-3,2.5)+'"></path><path class="dvc-axis-break-grid" d="'+wave(l+11,r,y+3,2.5)+'"></path><path class="dvc-axis-break" d="'+wave(l-10,l+11,y-3,3)+'"></path><path class="dvc-axis-break" d="'+wave(l-10,l+11,y+3,3)+'"></path>'}
-  function averageLines(series,s,d){return series.map(function(item,i){if(item.isSector||item.isSeparate)return"";var a=average(item.data);if(a===null||(d.broken&&a>d.lowerMax&&a<d.upperMin))return"";return '<line x1="'+PAD.left+'" y1="'+s.y(a)+'" x2="'+(SVG_W-PAD.right)+'" y2="'+s.y(a)+'" stroke="'+(item.color||COLORS[i])+'" stroke-width="1.5" stroke-dasharray="6 5" stroke-opacity=".45"></line>'}).join("")}
-  function legend(series,type,unit){var labels=[];series.forEach(function(item,i){if(item.isSector){labels.push('<span><i class="dvc-legend-sector"></i>'+esc(item.label)+"</span>");return}var color=item.color||COLORS[i],a=average(item.data);labels.push('<span><i class="dvc-legend-swatch'+(type==="line"?" dvc-legend-line":"")+'" style="background:'+color+'"></i>'+esc(item.label)+"</span>");if(a!==null&&!item.isSeparate)labels.push('<span><i class="dvc-legend-average" style="color:'+color+'"></i>'+esc("期間平均 "+compactValue(a,unit))+"</span>")});return '<div class="dvc-fin-legend">'+labels.join("")+"</div>"}
-  function chart(series,unit,type,label,periods){
+  function averageLines(series,s,d){return series.map(function(item,i){if(item.isSector||item.isSeparate||item.isShort)return"";var a=average(item.data);if(a===null||(d.broken&&a>d.lowerMax&&a<d.upperMin))return"";return '<line x1="'+PAD.left+'" y1="'+s.y(a)+'" x2="'+(SVG_W-PAD.right)+'" y2="'+s.y(a)+'" stroke="'+(item.color||COLORS[i])+'" stroke-width="1.5" stroke-dasharray="6 5" stroke-opacity=".45"></line>'}).join("")}
+  function legend(series,type,unit){var labels=[];series.forEach(function(item,i){if(item.isSector){labels.push('<span><i class="dvc-legend-sector"></i>'+esc(item.label)+"</span>");return}if(item.isShort){labels.push("<span>"+shortLegendSwatch()+esc(item.label)+"</span>");return}var color=item.color||COLORS[i],a=average(item.data);labels.push('<span><i class="dvc-legend-swatch'+(type==="line"?" dvc-legend-line":"")+'" style="background:'+color+'"></i>'+esc(item.label)+"</span>");if(a!==null&&!item.isSeparate)labels.push('<span><i class="dvc-legend-average" style="color:'+color+'"></i>'+esc("期間平均 "+compactValue(a,unit))+"</span>")});return '<div class="dvc-fin-legend">'+labels.join("")+"</div>"}
+  // 財務のグラフの軸に、短い期の列を前後の年のあいだに足す（範囲の外の短い期は出さない）
+  function insertShortYears(years,shortInfo){
+    var plain=years.filter(function(y){return /^\d{4}$/.test(y)}),first=Number(plain[0]),last=Number(plain[plain.length-1]),byAfter={},out=[],kept={};
+    Object.keys(shortInfo).sort(function(a,b){return String(shortInfo[a].periodEnd)<String(shortInfo[b].periodEnd)?-1:1}).forEach(function(k){var info=shortInfo[k],after=info.after!==null?info.after:shortPlacementAfter(info,plain,info.fiscalMonth),a=Number(after);if(after===null||!isFinite(a)||a<first-1||a>last)return;(byAfter[after]=byAfter[after]||[]).push(k);kept[k]=true});
+    out=out.concat(byAfter[String(first-1)]||[]);
+    years.forEach(function(y){out.push(y);if(byAfter[y])out=out.concat(byAfter[y])});
+    return{years:out,kept:kept}
+  }
+  function chart(series,unit,type,label,periods,shortInfo){
     var graph=series.filter(function(s){return validYears(s.data).length>=1});if(!graph.length)return"";
-    var dataYears=unionYears(graph),years=financialAxisYears(dataYears,periods),hasGap=years.length>dataYears.length;
-    var br=detectBreak(graph,unit),d=domainFor(graph,br),s=scalesFor(years,d),body=axes(years,d,s,unit,periods)+averageLines(graph,s,d),zero=s.y(0);
-    function pointTitle(item,y,v){var meta=(periods||{})[y];return item.label+" "+financialPeriodLabel(y,periods)+(meta&&meta.periodLabel?"（"+meta.periodLabel+"）":"")+": "+formatValue(v,unit)+(item.notes&&item.notes[y]?"。"+item.notes[y]:"")}
+    var regular=graph.filter(function(s){return !s.isShort});if(regular.length!==graph.length&&(!regular.length||!shortInfo)){graph=regular;shortInfo=null}if(!graph.length)return"";
+    var dataYears=unionYears(regular),years=financialAxisYears(dataYears,periods),hasGap=years.length>dataYears.length,placed;
+    if(shortInfo){placed=insertShortYears(years,shortInfo);years=placed.years;graph=graph.filter(function(s){return !s.isShort||Object.keys(s.data).some(function(k){return placed.kept[k]})});if(graph.length===regular.length)shortInfo=null}
+    var shortPattern=shortInfo?shortPatternDef():null;
+    var br=detectBreak(graph,unit),d=domainFor(graph,br),s=scalesFor(years,d),body=axes(years,d,s,unit,periods,shortInfo)+averageLines(graph,s,d),zero=s.y(0);
+    function pointTitle(item,y,v){var meta=(periods||{})[y];if(item.isShort&&shortInfo&&shortInfo[y])return item.label+" "+shortInfo[y].text+": "+formatValue(v,unit)+(type==="line"?"。前後の12か月の期とは期間の長さが違うため、線でつないでいません":"。12か月より短い期間の値です");return item.label+" "+financialPeriodLabel(y,periods)+(meta&&meta.periodLabel?"（"+meta.periodLabel+"）":"")+": "+formatValue(v,unit)+(item.notes&&item.notes[y]?"。"+item.notes[y]:"")}
     if(type==="bar"){
-      var groupW=s.plotW/years.length,barW=Math.min(38,Math.max(10,groupW-18));s.x=function(i){return PAD.left+groupW*i+groupW/2};body=axes(years,d,s,unit,periods)+averageLines(graph,s,d);
+      var groupW=s.plotW/years.length,barW=Math.min(38,Math.max(10,groupW-18));s.x=function(i){return PAD.left+groupW*i+groupW/2};body=axes(years,d,s,unit,periods,shortInfo)+averageLines(graph,s,d);
       years.forEach(function(y,yi){graph.forEach(function(item,si){
         var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;
         var vy=s.y(v),top=Math.min(vy,zero),height=Math.max(1.5,Math.abs(zero-vy)),x=s.x(yi)-barW/2,isOut=br&&br.isOutlier(v),ly=v>=0?Math.max(PAD.top+9,top-6):Math.min(SVG_H-PAD.bottom-2,top+height+13);
-        body+='<rect x="'+x+'" y="'+top+'" width="'+barW+'" height="'+height+'" rx="3" fill="'+(item.color||COLORS[si])+'"'+(item.isSeparate?' stroke="#92400e" stroke-dasharray="4 3"':'')+'><title>'+esc(pointTitle(item,y,v))+'</title></rect><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):axisValue(v,unit))+"</text>"
+        body+='<rect x="'+x+'" y="'+top+'" width="'+barW+'" height="'+height+'" rx="3" fill="'+(item.isShort?"url(#"+shortPattern.id+")":(item.color||COLORS[si]))+'"'+(item.isSeparate?' stroke="#92400e" stroke-dasharray="4 3"':item.isShort?' stroke="'+SHORT_PERIOD_STYLE.hatch+'" stroke-width="1"':'')+'><title>'+esc(pointTitle(item,y,v))+'</title></rect>'+(item.isShort?"":'<text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):axisValue(v,unit))+"</text>")
       })})
     }else{
       graph.forEach(function(item,si){
         var color=item.color||COLORS[si],segments=[],seg=[];
-        years.forEach(function(y,yi){var v=item.data[y];if(typeof v==="number"&&isFinite(v)){seg.push(s.x(yi)+","+s.y(v))}else if(seg.length){segments.push(seg);seg=[]}});
+        // 12か月の期の線は、短い期の列を飛ばしてつなぐ。短い期の点は線でつながない
+        years.forEach(function(y,yi){if(shortInfo&&shortInfo[y])return;var v=item.data[y];if(typeof v==="number"&&isFinite(v)){seg.push(s.x(yi)+","+s.y(v))}else if(seg.length){segments.push(seg);seg=[]}});
+        if(item.isShort)segments=[];
         if(seg.length)segments.push(seg);
         segments.forEach(function(points){if(points.length>=2)body+='<polyline points="'+points.join(" ")+'" fill="none" stroke="'+color+'" stroke-width="'+(item.isSector?2:3)+'"'+(item.isSector?' stroke-dasharray="2 5"':item.isSeparate?' stroke-dasharray="6 4"':'')+' stroke-linecap="round" stroke-linejoin="round"></polyline>'});
         if(item.isSector)return;
-        years.forEach(function(y,yi){var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;var cy=s.y(v),isOut=br&&br.isOutlier(v),ly=cy<PAD.top+18?cy+20:cy-10;body+='<circle cx="'+s.x(yi)+'" cy="'+cy+'" r="5" fill="#fff" stroke="'+color+'" stroke-width="3"><title>'+esc(pointTitle(item,y,v))+'</title></circle><text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):formatValue(v,unit).replace(unit,""))+"</text>"})
+        years.forEach(function(y,yi){var v=item.data[y];if(typeof v!=="number"||!isFinite(v))return;var cy=s.y(v),isOut=br&&br.isOutlier(v),ly=cy<PAD.top+18?cy+20:cy-10,cx=s.x(yi);body+=(item.isShort?'<path d="M '+cx+' '+(cy-6)+' L '+(cx+6)+' '+cy+' L '+cx+' '+(cy+6)+' L '+(cx-6)+' '+cy+' Z" fill="url(#'+shortPattern.id+')" stroke="'+SHORT_PERIOD_STYLE.hatch+'" stroke-width="2"><title>'+esc(pointTitle(item,y,v))+'</title></path>':'<circle cx="'+cx+'" cy="'+cy+'" r="5" fill="#fff" stroke="'+color+'" stroke-width="3"><title>'+esc(pointTitle(item,y,v))+'</title></circle>')+(item.isShort?"":'<text class="dvc-value-label'+(isOut?" dvc-outlier-label":"")+'" x="'+s.x(yi)+'" y="'+ly+'" text-anchor="middle">'+esc(isOut?formatValue(v,unit):formatValue(v,unit).replace(unit,""))+"</text>")})
       })
     }
     if(br)body+=breakMarks(s);
-    return '<div class="dvc-fin-chart"><svg viewBox="0 0 '+SVG_W+" "+SVG_H+'" role="img" aria-label="'+esc(label)+'">'+body+"</svg></div>"+legend(graph,type,unit)+(br?'<p class="dvc-chart-note">※縦軸の一部を二重波線の位置で省略しています。上側の点には実際の数値を表示しています。</p>':"")+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
+    return '<div class="dvc-fin-chart"><svg viewBox="0 0 '+SVG_W+" "+SVG_H+'" role="img" aria-label="'+esc(label)+'">'+(shortPattern?shortPattern.svg:"")+body+"</svg></div>"+legend(graph,type,unit)+(br?'<p class="dvc-chart-note">※縦軸の一部を二重波線の位置で省略しています。上側の点には実際の数値を表示しています。</p>':"")+(hasGap?'<p class="dvc-chart-note">空白の年はデータ未確認(未収集または確認中)です。</p>':"")
+  }
+  // 財務の短い期（payload の shortPeriods）のうち、この欄の値がある期。期間の平均と業種の中央値には入れない
+  function shortMetricSeries(company,key,unit,existing){
+    var periods=company&&company.shortPeriods,data={},info={},fm=company&&company.dividendSeries&&company.dividendSeries.fiscalMonth,divs=(company&&company.shortPeriodDividends)||[];
+    if(!Array.isArray(periods)||!periods.length)return null;
+    periods.forEach(function(p){var m=p&&p.metrics,e=shortYM(p&&p.periodEnd),v,k,match;if(!m||!e)return;v=key==="freeCashFlow"?(isFiniteNumber(m.operatingCashFlow)&&isFiniteNumber(m.investingCashFlow)?m.operatingCashFlow+m.investingCashFlow:null):m[key];if(!isFiniteNumber(v))return;if(unit==="億円")v=v/100000000;k=e.y+"_"+(e.m<10?"0":"")+e.m;if(data[k]!==undefined||(existing&&existing[k]!==undefined))return;
+      match=divs.filter(function(dv){return dv&&String(dv.periodEnd).slice(0,7)===String(p.periodEnd).slice(0,7)})[0];
+      data[k]=v;info[k]={after:match&&match.between?String(match.between[0]):null,label:shortAxisLabel(p),text:shortPeriodText(p),periodEnd:p.periodEnd,fiscalMonth:fm}});
+    return Object.keys(data).length?{data:data,info:info}:null
   }
   function miniMetric(title,data,unit,type,color,description,emptyMessage,company,key,sourceLabel){
     var periods=company&&company.financialPeriods,count=validYears(data,periods).length,normal={},separate={},notes={},content;
@@ -492,7 +563,9 @@
     var series=[{label:title,data:normal,color:color,notes:notes}],med=sectorSeries(company,key,normal);
     if(validYears(separate).length)series.push({label:title+"（決算の範囲が異なる区間）",data:separate,color:"#d97706",isSeparate:true,notes:notes});
     if(type==="line"&&validYears(normal).length>=2&&validYears(med).length>=2)series.push({label:"業種中央値（"+company.industry+"）",data:med,color:"#7c3aed",isSector:true});
-    if(count>=2)content=chart(series,unit,type,title+"の推移",periods);else if(count===1){var p=latest(data,periods);content='<div class="dvc-single"><span class="dvc-single-label">'+esc(title)+'（1期のみ）</span><span class="dvc-single-value">'+esc(formatValue(p.value,unit))+' <small class="dvc-single-year">'+esc(financialPeriodLabel(p.year,periods))+"</small></span></div>"}else content='<div class="dvc-empty">'+esc(emptyMessage||title+"のデータはありません")+"</div>";
+    var shortSeries=count>=2?shortMetricSeries(company,key,unit,data):null;
+    if(shortSeries)series.push({label:title+"（決算期変更の短い期）",data:shortSeries.data,color:SHORT_PERIOD_STYLE.hatch,isShort:true});
+    if(count>=2)content=chart(series,unit,type,title+"の推移",periods,shortSeries?shortSeries.info:null);else if(count===1){var p=latest(data,periods);content='<div class="dvc-single"><span class="dvc-single-label">'+esc(title)+'（1期のみ）</span><span class="dvc-single-value">'+esc(formatValue(p.value,unit))+' <small class="dvc-single-year">'+esc(financialPeriodLabel(p.year,periods))+"</small></span></div>"}else content='<div class="dvc-empty">'+esc(emptyMessage||title+"のデータはありません")+"</div>";
     return '<div class="dvc-mini-panel"><div class="dvc-metric-head"><p class="dvc-mini-title">'+esc(title)+'<span class="dvc-metric-source">'+esc(sourceLabel||"出典: 会社の公式資料")+'</span></p>'+(validYears(normal).length>=2?'<span class="dvc-trend-badge">'+esc(trendSummary(normal,unit))+"</span>":"")+"</div>"+sectorPosition(company,key,normal,unit)+'<p class="dvc-metric-description">'+esc(description)+"</p>"+content+financialMetricNotes(company,key,data)+"</div>"
   }
   function dividendYieldMetric(company){
@@ -542,7 +615,7 @@
     var panel=document.getElementById("dvc-detail"),stats,financialHtml=buildFinancialSection(r.code),hasEarnings=financialHtml.indexOf('id="dvc-section-earnings"')>=0,hasFinancials=financialHtml.indexOf('id="dvc-section-financials"')>=0;
     state.currentCode=r.code;panel.style.display="block";
     stats=stat("株価(データ取得時点)",r.price?r.price.toLocaleString("ja-JP")+"円":"-",null,priceUpdateNote(r))+stat("現在の配当利回り",fmtPct(r.dividendYield),null,null,true,typeof r.dividendYield==="number"&&r.dividendYield>=HIGHLIGHT.yieldPct)+stat("予想利回り",fmtPct(typeof r.forecastYield==="number"&&isFinite(r.forecastYield)?r.forecastYield:null),null,null,true,typeof r.forecastYield==="number"&&r.forecastYield>=HIGHLIGHT.yieldPct)+stat("連続増配年数",fmtYears(r.streakIncrease),null,null,true,typeof r.streakIncrease==="number"&&r.streakIncrease>=HIGHLIGHT.streakYears)+baseStreakStat(r)+stat("連続非減配年数",fmtYears(r.streakNonDecrease))+stat("3年平均増配率",fmtPct(r.cagr3))+stat("5年平均増配率",fmtPct(r.cagr5))+stat("10年平均増配率",fmtPct(r.cagr10));
-    panel.innerHTML='<div class="dvc-detail-head"><div><div class="dvc-detail-title"><h2>'+esc(r.name)+'</h2><span class="dvc-detail-code">'+esc(r.code)+'</span></div><div class="dvc-detail-meta">'+esc((r.market||"")+" / "+(r.sector||""))+'</div></div><button id="dvc-close-detail" class="dvc-close-button" type="button" aria-label="銘柄詳細を閉じる"><span aria-hidden="true">×</span> 閉じる</button></div>'+detailNav(hasEarnings,hasFinancials)+'<div class="dvc-stat-grid">'+stats+"</div>"+streakNote(r)+forecastSummary(r)+'<section id="dvc-section-dividend" class="dvc-dividend-section"><h3>年別配当金推移(1株あたり・円)</h3>'+buildBarChart(r.annual||{},r.payoutRatio||{},r.dividendBreakdown||{},r.annualPartial||{},confirmedInfo(r),r.annualPending||{},r.dividendSeries||{})+dividendPeriodNote(r)+dividendBreakdownNote(r.dividendBreakdown||{})+"</section>"+financialHtml+buildExternalLinks(r.code);
+    panel.innerHTML='<div class="dvc-detail-head"><div><div class="dvc-detail-title"><h2>'+esc(r.name)+'</h2><span class="dvc-detail-code">'+esc(r.code)+'</span></div><div class="dvc-detail-meta">'+esc((r.market||"")+" / "+(r.sector||""))+'</div></div><button id="dvc-close-detail" class="dvc-close-button" type="button" aria-label="銘柄詳細を閉じる"><span aria-hidden="true">×</span> 閉じる</button></div>'+detailNav(hasEarnings,hasFinancials)+'<div class="dvc-stat-grid">'+stats+"</div>"+streakNote(r)+shortPeriodStreakNote(r)+forecastSummary(r)+'<section id="dvc-section-dividend" class="dvc-dividend-section"><h3>年別配当金推移(1株あたり・円)</h3>'+buildBarChart(r.annual||{},r.payoutRatio||{},r.dividendBreakdown||{},r.annualPartial||{},confirmedInfo(r),r.annualPending||{},r.dividendSeries||{},r.shortPeriodDividends||[])+dividendPeriodNote(r)+dividendBreakdownNote(r.dividendBreakdown||{})+"</section>"+financialHtml+buildExternalLinks(r.code);
     document.getElementById("dvc-close-detail").addEventListener("click",closeDetail);
     Array.prototype.forEach.call(panel.querySelectorAll(".dvc-section-nav a"),function(link){link.addEventListener("click",function(e){var target=document.querySelector(link.getAttribute("href"));e.preventDefault();if(target&&target.scrollIntoView)target.scrollIntoView({behavior:"smooth",block:"start"});updateDetailHash(r.code)})});
     Array.prototype.forEach.call(panel.querySelectorAll(".dvc-chart-wrap"),function(wrap){wrap.scrollLeft=wrap.scrollWidth});

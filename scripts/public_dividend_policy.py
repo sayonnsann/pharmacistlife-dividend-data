@@ -6,7 +6,51 @@ DISPLAY_CATEGORIES = frozenset({"a", "b", "c", "d", "f"})
 PRIVATE_KEYS = frozenset({"series", "streakSeries", "displaySeries", "yearProvenance",
                           "externalRawValue", "researchAnnual", "seriesValue",
                           "manualDividendAdjustment", "ratioDetail", "displayProvenance",
-                          "displayAdoptions", "yuhoDisplayYears"})
+                          "displayAdoptions", "yuhoDisplayYears", "streakBridges"})
+# 段階2: 決算期変更の短い期を画面に出す欄。公開してよい欄として、形と出どころを決めておく
+# （会社の資料だけ。haitoukin などの外部の値は入らない。違う形なら公開の前に止める）。
+SHORT_PERIOD_DIVIDEND_KEYS = frozenset({"periodStart", "periodEnd", "months", "lengthDays",
+                                        "dividend", "status", "between", "source", "countedIn"})
+SHORT_PERIOD_DIVIDEND_SOURCES = frozenset({"edinet", "ir"})
+SHORT_PERIOD_COUNTED_IN = frozenset({"streakIncrease", "streakNonDecrease"})
+# lengthDays は1か月に満たない期（months が null）だけにある日数
+SHORT_PERIOD_KEYS = frozenset({"periodStart", "periodEnd", "months", "lengthDays", "metrics"})
+SHORT_PERIOD_METRICS = frozenset({
+    "roe", "roa", "equityRatio", "deRatio", "eps", "bps", "revenue", "netIncome",
+    "operatingCashFlow", "investingCashFlow", "financingCashFlow", "cashAndEquivalents",
+    "payoutRatioTotalBased", "doe", "dividendYieldHistory"})
+
+
+def validate_short_period_fields(payload: dict) -> None:
+    """shortPeriodDividends・shortPeriods が決めた形で、会社の資料の値だけかを確かめる。"""
+    import math
+
+    def finite(value):
+        return (not isinstance(value, bool) and isinstance(value, (int, float))
+                and math.isfinite(value))
+
+    dividends = payload.get("shortPeriodDividends")
+    if dividends is not None:
+        if not isinstance(dividends, list) or not dividends:
+            raise ValueError("公開shortPeriodDividendsの形が不正です")
+        for item in dividends:
+            if (not isinstance(item, dict) or set(item) - SHORT_PERIOD_DIVIDEND_KEYS
+                    or item.get("source") not in SHORT_PERIOD_DIVIDEND_SOURCES
+                    or not isinstance(item.get("countedIn"), list)
+                    or set(item["countedIn"]) - SHORT_PERIOD_COUNTED_IN
+                    or (item.get("dividend") is not None
+                        and (not finite(item["dividend"]) or item["dividend"] < 0))):
+                raise ValueError("公開shortPeriodDividendsに許可していない欄・出どころがあります")
+    periods = payload.get("shortPeriods")
+    if periods is not None:
+        if not isinstance(periods, list) or not periods:
+            raise ValueError("公開shortPeriodsの形が不正です")
+        for item in periods:
+            metrics = item.get("metrics") if isinstance(item, dict) else None
+            if (not isinstance(metrics, dict) or set(item) - SHORT_PERIOD_KEYS
+                    or set(metrics) - SHORT_PERIOD_METRICS
+                    or not all(finite(value) for value in metrics.values())):
+                raise ValueError("公開shortPeriodsに許可していない欄・値があります")
 
 
 def valid_yuho_adoption(value, reference, evidence, adoption):
@@ -84,6 +128,7 @@ def validate_public_payload(payload: dict, display_years: set[int], reported_yea
             for child in value:
                 walk(child)
     walk(payload)
+    validate_short_period_fields(payload)
     for key in ("annual", "dividendBreakdown"):
         if any(int(y) not in display_years for y in (payload.get(key) or {})):
             raise ValueError(f"公開{key}に表示対象外の年度があります")

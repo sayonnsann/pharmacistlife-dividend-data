@@ -413,6 +413,38 @@ def normalize_fiscal_dividends(document: dict, path: Path | str = "memory") -> d
                     ) from error
                 applied_actions.append(dict(action))
 
+        # 決算期変更の短い期を連続年数で1期と数える材料（edinet-direct の
+        # streak_bridges.py。段階1b）。非公開の計算用の欄で、公開payloadには出さない。
+        # 欄が無い記録（旧版・短い期が無い会社）は今までどおり。
+        streak_bridges = None
+        if "streakBridges" in record:
+            raw_bridges = record["streakBridges"]
+            if not isinstance(raw_bridges, list):
+                raise ValueError(f"{path}: {raw_code}.streakBridgesがarrayではありません")
+            streak_bridges = []
+            for index, item in enumerate(raw_bridges):
+                label = f"{path}: {raw_code}.streakBridges[{index}]"
+                if not isinstance(item, dict):
+                    raise ValueError(f"{label}がobjectではありません")
+                between = item.get("between")
+                if (not isinstance(between, list) or len(between) != 2
+                        or not all(isinstance(y, int) and not isinstance(y, bool) for y in between)
+                        or between[1] != between[0] + 1):
+                    raise ValueError(f"{label}.betweenが連続する2つの年ではありません")
+                if item.get("status") not in STREAK_BRIDGE_STATUSES:
+                    raise ValueError(f"{label}.statusが不正です")
+                streak_bridges.append(
+                    {"between": [between[0], between[1]], "status": item["status"]}
+                )
+
+        # 段階2: 決算期変更の短い期を画面に出すための欄（edinet-direct の
+        # streak_bridges.build_short_period_dividends）。出どころは会社の資料だけで、
+        # 公開してよい欄。形が違えば止める。欄が無い記録は今までどおり。
+        short_period_dividends = None
+        if "shortPeriodDividends" in record:
+            short_period_dividends = normalize_short_period_dividends(
+                record["shortPeriodDividends"], f"{path}: {raw_code}.shortPeriodDividends")
+
         result[code] = {
             "series": series,
             "streakSeries": series,
@@ -437,7 +469,108 @@ def normalize_fiscal_dividends(document: dict, path: Path | str = "memory") -> d
         }
         if applied_actions is not None:
             result[code]["appliedActions"] = applied_actions
+        if streak_bridges:
+            result[code]["streakBridges"] = streak_bridges
+        if short_period_dividends:
+            result[code]["shortPeriodDividends"] = short_period_dividends
     return result
+
+
+SHORT_PERIOD_SOURCES = frozenset({"edinet", "ir"})
+
+
+def _short_period_date(value: Any, *, allow_month: bool) -> date | None:
+    """"YYYY-MM-DD" はその日、allow_month なら "YYYY-MM" はその月の末日。読めなければ None。"""
+    text = str(value) if isinstance(value, str) else ""
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        pass
+    if allow_month and re.fullmatch(r"\d{4}-\d{2}", text) and 1 <= int(text[5:]) <= 12:
+        year, month = int(text[:4]), int(text[5:])
+        return (date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)) - timedelta(days=1)
+    return None
+
+
+def normalize_short_period_dividends(raw: Any, label: str) -> list[dict[str, Any]]:
+    """shortPeriodDividends を確かめ、画面に要る欄だけを残す（期末の順）。"""
+    if not isinstance(raw, list):
+        raise ValueError(f"{label}がarrayではありません")
+    items = []
+    for index, item in enumerate(raw):
+        where = f"{label}[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{where}がobjectではありません")
+        if item.get("source") not in SHORT_PERIOD_SOURCES:
+            # haitoukin など、会社の資料でない出どころは公開しない
+            raise ValueError(f"{where}.sourceが会社の資料ではありません")
+        if item.get("status") not in STREAK_BRIDGE_STATUSES:
+            raise ValueError(f"{where}.statusが不正です")
+        if _short_period_date(item.get("periodEnd"), allow_month=True) is None:
+            raise ValueError(f"{where}.periodEndが日付ではありません")
+        start = item.get("periodStart")
+        if start is not None and _short_period_date(start, allow_month=False) is None:
+            raise ValueError(f"{where}.periodStartが日付ではありません")
+        months = item.get("months")
+        # null（1か月に満たない期・期首が分からない期）と 0 は受け付ける（画面は日数で出す）。
+        # 負の数・文字列・小数・13以上などは今までどおり止める。
+        if months is not None and (isinstance(months, bool) or not isinstance(months, int)
+                                   or not 0 <= months <= 12):
+            raise ValueError(f"{where}.monthsが不正です")
+        length_days = item.get("lengthDays")
+        if length_days is not None and (isinstance(length_days, bool)
+                                        or not isinstance(length_days, int) or length_days < 1):
+            raise ValueError(f"{where}.lengthDaysが不正です")
+        dividend = item.get("dividend")
+        if dividend is not None and (finite_number(dividend) is None or dividend < 0):
+            raise ValueError(f"{where}.dividendが不正です")
+        between = item.get("between")
+        if between is not None and (
+                not isinstance(between, list) or len(between) != 2
+                or not all(isinstance(y, int) and not isinstance(y, bool) for y in between)
+                or between[1] != between[0] + 1):
+            raise ValueError(f"{where}.betweenが連続する2つの年ではありません")
+        entry = {
+            "periodStart": start,
+            "periodEnd": item["periodEnd"],
+            "months": months,
+            **({"lengthDays": length_days} if length_days is not None else {}),
+            "dividend": None if dividend is None else float(dividend),
+            "status": item["status"],
+            "between": None if between is None else [between[0], between[1]],
+            "source": item["source"],
+        }
+        if "recordDates" in item:
+            # 期の中に分割があった期だけにある（edinet-direct が中間と期末を別々に調整した基準日）。
+            # この画面で足す未反映の分割の当て方を決めるのに使う。payload には出さない。
+            entry["recordDates"] = _normalize_short_period_record_dates(
+                item["recordDates"], item, f"{where}.recordDates")
+        items.append(entry)
+    items.sort(key=lambda entry: str(entry["periodEnd"]))
+    return items
+
+
+def _normalize_short_period_record_dates(
+    raw: Any, item: dict[str, Any], where: str,
+) -> dict[str, Any] | None:
+    """recordDates（{"interim": [日付...], "final": 日付} か null）を確かめる。"""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) != {"interim", "final"}:
+        raise ValueError(f"{where}の形が不正です")
+    interim = raw["interim"]
+    if not isinstance(interim, list):
+        raise ValueError(f"{where}.interimがarrayではありません")
+    days = [_short_period_date(day, allow_month=False) for day in [*interim, raw["final"]]]
+    if any(day is None for day in days):
+        raise ValueError(f"{where}に日付でない値があります")
+    if any(later <= earlier for earlier, later in zip(days, days[1:])):
+        raise ValueError(f"{where}の基準日が順に並んでいません")
+    end = _short_period_date(item.get("periodEnd"), allow_month=True)
+    start = _short_period_date(item.get("periodStart"), allow_month=False)
+    if start is None or not start <= days[0] or not days[-1] <= end:
+        raise ValueError(f"{where}の基準日が期の外にあります")
+    return {"interim": [day.isoformat() for day in days[:-1]], "final": days[-1].isoformat()}
 
 
 def load_calendar_dividends(path: Path | None) -> dict[str, dict[str, Any]]:
@@ -496,8 +629,91 @@ def load_tickers(path: Path) -> dict[str, dict[str, Any]]:
     return result
 
 
+STREAK_BRIDGE_COUNT = "count"
+STREAK_BRIDGE_STOP = "stop"
+STREAK_BRIDGE_UNKNOWN = "unknown"
+STREAK_BRIDGE_STATUSES = (STREAK_BRIDGE_COUNT, STREAK_BRIDGE_STOP, STREAK_BRIDGE_UNKNOWN)
+
+# 無配（0円・「－」）の短い期を、連続年数でどう扱うか（2026-11-10 オーナーの判断で B）。
+#   A = "stop_streak"       : 数えずに、そこで連続を止める（段階1bの決まり）
+#   B = "skip_without_stop" : 数えないが、止めもしない（配当が分からない期と同じ扱い）
+# 切り替えるときは、次の3か所を同じ値にそろえる（テストで同じ値か確かめている）。
+#   1. edinet-direct: scripts/streak_bridges.py の SHORT_PERIOD_NO_DIVIDEND_POLICY
+#   2. このファイルの SHORT_PERIOD_NO_DIVIDEND_POLICY（_streak_walk の止め方）
+#   3. serving/checker.html の SHORT_PERIOD_NO_DIVIDEND_POLICY（無配の短い期の説明の文）
+# 値は payload の会社の欄には入れない（全社に共通の決まりなので、画面は checker.html の定数を読む）。
+NO_DIVIDEND_POLICY_STOP = "stop_streak"
+NO_DIVIDEND_POLICY_SKIP = "skip_without_stop"
+NO_DIVIDEND_POLICIES = (NO_DIVIDEND_POLICY_STOP, NO_DIVIDEND_POLICY_SKIP)
+SHORT_PERIOD_NO_DIVIDEND_POLICY = NO_DIVIDEND_POLICY_SKIP
+
+
+def streak_bridges_by_pair(raw: Any) -> dict[tuple[int, int], list[str]]:
+    """fiscal_dividends の streakBridges を (前の年, 後の年) -> status のリストに直す。
+
+    決算期変更の短い期（12か月より短い期）を、連続年数で1期と数えるための材料
+    （edinet-direct/scripts/streak_bridges.py が書き出す。段階1b）。
+    無い・空なら空の dict（今までと同じ数え方）。
+    """
+    result: dict[tuple[int, int], list[str]] = {}
+    for item in raw or []:
+        between = item["between"]
+        result.setdefault((between[0], between[1]), []).append(item["status"])
+    return result
+
+
+def _streak_walk(
+    series: dict[int, float],
+    years: list[int],
+    *,
+    allow_equal: bool,
+    bridges: dict[tuple[int, int], list[str]] | None = None,
+    policy: str | None = None,
+) -> tuple[int, bool, int, list[tuple[int, int]]]:
+    """_streak_from_series の本体。
+
+    戻り値は (年数, 天井か, 足した短い期の数, 数えた比べの組 [(前の年, 後の年), ...])。
+    数えた組は、今の連続（最新の年から遡った連続）の中で比べた前後の年。その組の
+    "count" の短い期が、連続年数で1期として数えられた期（画面の countedIn の印）。
+    policy は無配の短い期の扱い（None なら SHORT_PERIOD_NO_DIVIDEND_POLICY）。
+    """
+    if policy is None:
+        policy = SHORT_PERIOD_NO_DIVIDEND_POLICY
+    count = 0
+    short_periods = 0
+    counted_pairs: list[tuple[int, int]] = []
+    index = len(years) - 1
+    while index > 0:
+        current_year, previous_year = years[index], years[index - 1]
+        if current_year - previous_year != 1:
+            break
+        current, previous = series[current_year], series[previous_year]
+        if current <= 0 or previous <= 0:
+            break
+        if not (current >= previous if allow_equal else current > previous):
+            break
+        # 前後の12か月の期の比べが数えられるとき、間の短い期を見る（段階1b）。
+        # 無配（0円・「－」）の短い期を挟んだら、決まり A ではその比べは数えずに
+        # 止める（B では数えずに進む）。
+        # 配当が分からない短い期は、止めずに数えもしない。
+        # 配当のある短い期は、会社の「○期連続」に合わせて1期として足す。
+        statuses = (bridges or {}).get((previous_year, current_year), ())
+        if STREAK_BRIDGE_STOP in statuses and policy == NO_DIVIDEND_POLICY_STOP:
+            break
+        added = sum(1 for status in statuses if status == STREAK_BRIDGE_COUNT)
+        count += 1 + added
+        short_periods += added
+        counted_pairs.append((previous_year, current_year))
+        index -= 1
+    return count, count > 0 and index == 0, short_periods, counted_pairs
+
+
 def _streak_from_series(
-    series: dict[int, float], years: list[int], *, allow_equal: bool
+    series: dict[int, float],
+    years: list[int],
+    *,
+    allow_equal: bool,
+    bridges: dict[tuple[int, int], list[str]] | None = None,
 ) -> tuple[int, bool]:
     """最新年から遡って連続増配（または連続非減配）の年数と、天井かどうかを返す。
 
@@ -510,21 +726,15 @@ def _streak_from_series(
         「連続して増配してきた」とは言えないので、そこで区切る。
         暦年の系列（yfinance）は無配年のデータ自体を持たないので、
         この扱いにすると従来の数え方と結果が揃う。
+      - 間に挟まった決算期変更の短い期（bridges）が無配（"stop"）
+
+    bridges は (前の年, 後の年) -> 短い期の status のリスト（streak_bridges_by_pair）。
+    無い・空なら今までと同じ結果。edinet-direct の report_streak_changes.py と同じ式。
     """
-    count = 0
-    index = len(years) - 1
-    while index > 0:
-        current_year, previous_year = years[index], years[index - 1]
-        if current_year - previous_year != 1:
-            break
-        current, previous = series[current_year], series[previous_year]
-        if current <= 0 or previous <= 0:
-            break
-        if not (current >= previous if allow_equal else current > previous):
-            break
-        count += 1
-        index -= 1
-    return count, count > 0 and index == 0
+    count, capped, _, _ = _streak_walk(
+        series, years, allow_equal=allow_equal, bridges=bridges
+    )
+    return count, capped
 
 
 def fiscal_dividend_stats(
@@ -532,8 +742,14 @@ def fiscal_dividend_stats(
     *,
     streak_reliable: bool = True,
     break_years: list[int] | tuple[int, ...] = (),
+    bridges: dict[tuple[int, int], list[str]] | None = None,
 ) -> dict[str, Any]:
     """事業年度の配当系列から連続増配年数と平均増配率を出す。
+
+    bridges（決算期変更の短い期）を渡したときだけ、足した短い期の数を
+    streakIncreaseShortPeriods / streakNonDecreaseShortPeriods として、数えた比べの組を
+    streakIncreaseCountedPairs / streakNonDecreaseCountedPairs として足す
+    （渡さないときの戻り値は今までと同じ）。
 
     streak_reliable=False は、株式分割の基準がそろっていない年があって
     連続増配を数えられない銘柄（edinet-direct が印を付ける）。この場合は
@@ -546,11 +762,11 @@ def fiscal_dividend_stats(
     基準の切れ目をまたぐ区間だけNULLにし、またがない区間は残す。
     """
     years = sorted(series)
-    streak_increase, increase_capped = _streak_from_series(
-        series, years, allow_equal=False
+    streak_increase, increase_capped, increase_short, increase_pairs = _streak_walk(
+        series, years, allow_equal=False, bridges=bridges
     )
-    streak_non_decrease, non_decrease_capped = _streak_from_series(
-        series, years, allow_equal=True
+    streak_non_decrease, non_decrease_capped, non_decrease_short, non_decrease_pairs = _streak_walk(
+        series, years, allow_equal=True, bridges=bridges
     )
 
     def cagr(span: int) -> float | None:
@@ -577,8 +793,12 @@ def fiscal_dividend_stats(
         streak_non_decrease = None
         increase_capped = False
         non_decrease_capped = False
+        increase_short = 0
+        non_decrease_short = 0
+        increase_pairs = []
+        non_decrease_pairs = []
 
-    return {
+    result = {
         "streakIncrease": streak_increase,
         "streakIncreaseCapped": increase_capped,
         "streakNonDecrease": streak_non_decrease,
@@ -587,6 +807,13 @@ def fiscal_dividend_stats(
         "cagr5": cagr(5),
         "cagr10": cagr(10),
     }
+    if bridges:
+        result["streakIncreaseShortPeriods"] = increase_short
+        result["streakNonDecreaseShortPeriods"] = non_decrease_short
+        # 段階2: 今の連続の中で比べた前後の年の組（画面の countedIn の印に使う。payload には出さない）
+        result["streakIncreaseCountedPairs"] = increase_pairs
+        result["streakNonDecreaseCountedPairs"] = non_decrease_pairs
+    return result
 
 
 def adjust_dividend_breakdown(
@@ -703,7 +930,9 @@ def base_dividend_series(
 
 
 def streak_base_from_breakdown(
-    series: dict[int, float], breakdown: dict[str, Any]
+    series: dict[int, float],
+    breakdown: dict[str, Any],
+    bridges: dict[tuple[int, int], list[str]] | None = None,
 ) -> int | None:
     """普通配当だけの系列で、連続増配年数を再計算する。
 
@@ -715,11 +944,13 @@ def streak_base_from_breakdown(
     if not series or not isinstance(breakdown, dict):
         return None
     base_series = base_dividend_series(series, breakdown)
-    return fiscal_dividend_stats(base_series)["streakIncrease"]
+    return fiscal_dividend_stats(base_series, bridges=bridges)["streakIncrease"]
 
 
 def streak_no_decrease_base_from_breakdown(
-    series: dict[int, float], breakdown: dict[str, Any]
+    series: dict[int, float],
+    breakdown: dict[str, Any],
+    bridges: dict[tuple[int, int], list[str]] | None = None,
 ) -> int | None:
     """普通配当だけの系列で、連続非減配年数（実質累進配当）を再計算する。
 
@@ -730,7 +961,7 @@ def streak_no_decrease_base_from_breakdown(
     if not series or not isinstance(breakdown, dict):
         return None
     base_series = base_dividend_series(series, breakdown)
-    return fiscal_dividend_stats(base_series)["streakNonDecrease"]
+    return fiscal_dividend_stats(base_series, bridges=bridges)["streakNonDecrease"]
 
 
 def _crosses_break(
@@ -1266,8 +1497,13 @@ def adjustment_factor_for_period(
     fiscal_month: int | None,
     field: str,
     basis_date: str | None = None,
+    period_end: date | None = None,
 ) -> float:
-    """期間末より後に効力が発生した分割だけの補正係数を返す。"""
+    """期間末より後に効力が発生した分割だけの補正係数を返す。
+
+    period_end を渡すと、年と決算月から期末を見積もらずに、その日を期末として使う
+    （決算期変更の短い期。段階2）。渡さないときは今までどおり。
+    """
     if field == "epsBps" and basis_date is not None:
         # A known filing basis is shared by every period (including suffixed
         # multi-period keys). Its cutoff replaces the legacy period heuristic.
@@ -1279,10 +1515,11 @@ def adjustment_factor_for_period(
             and finite_number(e.get("adjustmentFactor")) is not None
             and date.fromisoformat(e["effectiveDate"]) > cutoff
         )
-    try:
-        period_year = int(period)
-    except (TypeError, ValueError):
-        return 1.0
+    if period_end is None:
+        try:
+            period_year = int(period)
+        except (TypeError, ValueError):
+            return 1.0
 
     factor = 1.0
     for event in adjustment.get("events", []):
@@ -1293,7 +1530,9 @@ def adjustment_factor_for_period(
             effective_date = date.fromisoformat(str(event["effectiveDate"]))
         except (KeyError, TypeError, ValueError):
             continue
-        if fiscal_month is None:
+        if period_end is not None:
+            applies = effective_date > period_end
+        elif fiscal_month is None:
             # 事業年度末が分からない系列は、イベント年の値もイベント前の
             # 基準で保存されている安全側として扱う。
             applies = effective_date.year >= period_year
@@ -1301,11 +1540,11 @@ def adjustment_factor_for_period(
             if not 1 <= fiscal_month <= 12:
                 return 1.0
             if fiscal_month == 12:
-                period_end = date(period_year, 12, 31)
+                year_end = date(period_year, 12, 31)
             else:
                 next_month = date(period_year, fiscal_month + 1, 1)
-                period_end = next_month - timedelta(days=1)
-            applies = effective_date > period_end
+                year_end = next_month - timedelta(days=1)
+            applies = effective_date > year_end
         if not applies:
             continue
         if field == "dividend" and event.get("applyDividendAdjustment") is True:
@@ -1368,6 +1607,130 @@ def adjustment_for_unadjusted_series(
         ):
             events.append(event)
     return {**adjustment, "events": events}
+
+
+def _short_period_window_start(item: dict[str, Any], end: date) -> date:
+    """短い期の「期の中」の始まり。期首が分からなければ期末の1年前の月初とみなす。"""
+    start = _short_period_date(item.get("periodStart"), allow_month=False)
+    return start if start is not None else date(end.year - 1, end.month, 1)
+
+
+def _short_period_unreflected_factor(
+    item: dict[str, Any], series_adjustment: dict[str, Any],
+) -> float | None:
+    """この画面で足す未反映の分割（series_adjustment）の、短い期の配当への係数。
+
+    edinet-direct の streak_bridges.short_period_dividend_detail と同じ決まり:
+    分割の効力日が配当の基準日より後なら当てる（同じ日は当てない）。
+    - 期の中（期首の翌日〜期末。期首が分からなければ期末の1年前の月初から）に分割が無ければ、
+      期末の日で比べる（今までと同じ）。
+    - 期の中にあれば、edinet-direct が使った基準日（recordDates）で比べる。中間と期末の
+      どちらにも当たる・どちらにも当たらないときだけ決まる。片方だけに当たるときは、
+      中間と期末の額がこの画面には無いので決められない（None）。基準日が無いときも None。
+    """
+    end = _short_period_date(item["periodEnd"], allow_month=True)
+    window_start = _short_period_window_start(item, end)
+    record_dates = item.get("recordDates")
+    days = (
+        [date.fromisoformat(day) for day in [*record_dates["interim"], record_dates["final"]]]
+        if record_dates else None
+    )
+    factor = 1.0
+    for event in series_adjustment.get("events", []):
+        if event.get("applyDividendAdjustment") is not True:
+            continue
+        event_factor = finite_number(event.get("adjustmentFactor"))
+        if event_factor is None:
+            continue
+        # 配当は基準日の株主に払われるので、基準日と効力日の前後で決める。
+        # 権利落ち日は株価の切り替わりの日で、配当の換算には使わない。
+        try:
+            effective = date.fromisoformat(str(event["effectiveDate"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        if effective > end:
+            factor *= event_factor
+            continue
+        if effective <= window_start:
+            continue
+        if days is None:
+            return None
+        if all(effective > day for day in days):
+            factor *= event_factor
+        elif not all(effective <= day for day in days):
+            return None
+    return factor
+
+
+def short_period_dividend_payload(
+    items: list[dict[str, Any]],
+    stats: dict[str, Any],
+    bridges: list[dict[str, Any]] | None,
+    series_adjustment: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """画面に出す短い期の配当（payload の shortPeriodDividends）。
+
+    - dividend: edinet-direct が12か月の期と同じ決まりで調整した値に、12か月の期と同じく
+      この画面で足す未反映の分割（series_adjustment）を当てる。当て方は
+      _short_period_unreflected_factor（edinet-direct と同じ「基準日より後の分割を当てる」決まり。
+      edinet-direct が当てた分割は series_adjustment に入らないので、二重には当たらない）。
+      決められないときは None にする。
+    - countedIn: 今の連続（最新の年から遡った連続）の中で、この短い期を1期として数えた
+      連続年数の欄の名前（"streakIncrease"・"streakNonDecrease"）。配当のある（count）期で、
+      streakBridges に同じ前後の年の count があり、その前後の年の比べを数えたときだけ付く。
+    - recordDates は計算にだけ使い、payload には出さない。
+    """
+    count_pairs = {
+        (bridge["between"][0], bridge["between"][1])
+        for bridge in bridges or []
+        if bridge.get("status") == STREAK_BRIDGE_COUNT
+    }
+    counted = {
+        "streakIncrease": {tuple(pair) for pair in stats.get("streakIncreaseCountedPairs", [])},
+        "streakNonDecrease": {tuple(pair) for pair in stats.get("streakNonDecreaseCountedPairs", [])},
+    }
+    result = []
+    for item in items:
+        entry = {key: value for key, value in item.items() if key != "recordDates"}
+        if entry["dividend"] is not None and series_adjustment is not None:
+            factor = _short_period_unreflected_factor(item, series_adjustment)
+            if factor is None:
+                entry["dividend"] = None
+            elif factor != 1.0:
+                entry["dividend"] = round(entry["dividend"] * factor, 4)
+        pair = tuple(entry["between"]) if entry["between"] is not None else None
+        entry["countedIn"] = [
+            key for key in ("streakIncrease", "streakNonDecrease")
+            if entry["status"] == STREAK_BRIDGE_COUNT and pair in count_pairs and pair in counted[key]
+        ]
+        result.append(entry)
+    return result
+
+
+def adjust_short_period_metrics(
+    periods: Any, adjustment: dict[str, Any], *, basis_date: str | None = None
+) -> Any:
+    """財務の短い期（all_financials の shortPeriods）の EPS・BPS に、12か月の期と同じ調整を当てる。
+
+    12か月の期の eps・bps に当てる adjust_per_share_series（field="epsBps"）と同じ係数を、
+    年ではなく短い期の期末の日で決める。元のリストは書き換えない。
+    """
+    if not isinstance(periods, list):
+        return periods
+    result = []
+    for period in periods:
+        if not isinstance(period, dict) or not isinstance(period.get("metrics"), dict):
+            result.append(period)
+            continue
+        end = _short_period_date(period.get("periodEnd"), allow_month=True)
+        metrics = dict(period["metrics"])
+        for key in ("eps", "bps"):
+            if finite_number(metrics.get(key)) is not None and end is not None:
+                metrics[key] = float(metrics[key]) * adjustment_factor_for_period(
+                    adjustment, None, fiscal_month=None, field="epsBps",
+                    basis_date=basis_date, period_end=end)
+        result.append({**period, "metrics": metrics})
+    return result
 
 
 def adjust_per_share_series(
@@ -2258,7 +2621,8 @@ def create_database(
                 payload.pop("confirmedDividend", None)
                 payload.pop("confirmedFiscalYearEnd", None)
                 for private_key in ("annual", "annualPartial", "annualPending", "series", "streakSeries",
-                                    "displaySeries", "yearProvenance", "dividendBreakdown"):
+                                    "displaySeries", "yearProvenance", "dividendBreakdown",
+                                    "streakBridges"):
                     payload.pop(private_key, None)
                 payload["roeYearEnd"] = roe_year_end(payload)
                 payload["streakBase"] = None
@@ -2300,6 +2664,10 @@ def create_database(
                                     field="epsBps",
                                     basis_date=eps_basis,
                                 )
+                        # 段階2: 財務の短い期の EPS・BPS にも同じ調整を当てる（欄のある会社だけ）
+                        if "shortPeriods" in payload:
+                            payload["shortPeriods"] = adjust_short_period_metrics(
+                                payload["shortPeriods"], adjustment, basis_date=eps_basis)
                         # The producer aligned reviewed annual-report values
                         # with the ordinary series before publishing them.
                         switch = payload.get("basisSwitchMetrics") or {}
@@ -2315,6 +2683,7 @@ def create_database(
                 # 暦年の凍結系列は年数計算にだけ使用する。
                 fiscal = fiscal_record
                 series_fiscal_month = fiscal.get("fiscalMonth") if fiscal else 12
+                short_period_dividends = None
                 if fiscal is not None and fiscal["series"]:
                     fiscal_based_stocks += 1
                     series = fiscal.get("streakSeries", fiscal["series"])
@@ -2326,6 +2695,7 @@ def create_database(
                             or any(series.get(y) != v for y, v in fiscal["displaySeries"].items()
                                    if y not in yuho_years)):
                         raise ValueError(f"{code}: unsafe display dividend")
+                    series_adjustment = None
                     if adjustment is not None:
                         series_adjustment = adjustment_for_unadjusted_series(
                             adjustment,
@@ -2348,13 +2718,25 @@ def create_database(
                             for year, value in series.items()
                         }
                     streak_reliable = fiscal.get("streakReliable", True)
+                    # 決算期変更の短い期（段階1b）。欄のある会社だけ渡す。
+                    streak_bridges = (
+                        streak_bridges_by_pair(fiscal["streakBridges"])
+                        if fiscal.get("streakBridges")
+                        else None
+                    )
                     stats = fiscal_dividend_stats(
                         series,
                         streak_reliable=streak_reliable,
                         break_years=fiscal.get("streakBreakYears", []),
+                        bridges=streak_bridges,
                     )
                     if not streak_reliable:
                         streak_unreliable_stocks += 1
+                    # 段階2: 決算期変更の短い期の配当（欄のある会社だけ）
+                    if fiscal.get("shortPeriodDividends"):
+                        short_period_dividends = short_period_dividend_payload(
+                            fiscal["shortPeriodDividends"], stats,
+                            fiscal.get("streakBridges"), series_adjustment)
                     display_series = {y: series[y] for y in sorted(display_years)}
                     for year, basis_day in yuho_years.items():
                         # These observations already include every event through
@@ -2405,6 +2787,7 @@ def create_database(
                     )
                 else:
                     fiscal = None
+                    streak_bridges = None
                     series_fiscal_month = 12
                     # 事業年度の系列を作れなかった銘柄。EDINETにも
                     # haitoukin-checkerにも配当の記載が無い会社で、実質的な
@@ -2547,17 +2930,23 @@ def create_database(
                     payload["dividendBreakdown"] = {y: v for y, v in breakdown_entry.items()
                                                    if str(y).isdigit() and int(y) in display_years
                                                    and int(y) not in (fiscal.get("yuhoDisplayYears", {}) if fiscal else {})}
-                    base_stats = fiscal_dividend_stats(base_dividend_series(series, breakdown_entry))
+                    base_stats = fiscal_dividend_stats(
+                        base_dividend_series(series, breakdown_entry), bridges=streak_bridges
+                    )
                     payload["streakBaseCapped"] = base_stats["streakIncreaseCapped"]
                     payload["streakNoDecreaseBaseCapped"] = base_stats["streakNonDecreaseCapped"]
                     payload["streakBase"] = streak_base_from_breakdown(
-                        series, breakdown_entry
+                        series, breakdown_entry, bridges=streak_bridges
                     )
                     payload["streakNoDecreaseBase"] = (
                         streak_no_decrease_base_from_breakdown(
-                            series, breakdown_entry
+                            series, breakdown_entry, bridges=streak_bridges
                         )
                     )
+                    base_short_periods = {
+                        "streakBase": base_stats.get("streakIncreaseShortPeriods", 0),
+                        "streakNoDecreaseBase": base_stats.get("streakNonDecreaseShortPeriods", 0),
+                    }
                 else:
                     # 内訳DBに記録が無い銘柄＝記念・特別配当の記録が無い
                     # （＝全額が普通配当）ので、実質値は全額ベースの
@@ -2569,6 +2958,25 @@ def create_database(
                     payload["streakNoDecreaseBase"] = payload.get(
                         "streakNonDecrease"
                     )
+                    base_short_periods = {
+                        "streakBase": stats.get("streakIncreaseShortPeriods", 0),
+                        "streakNoDecreaseBase": stats.get("streakNonDecreaseShortPeriods", 0),
+                    }
+                # 画面の注釈「決算期変更の短い期も1期として数えています」の印（段階1b）。
+                # 短い期を1期以上足した欄だけ、足した期の数を入れる。全部0なら欄ごと入れない。
+                short_periods_counted = {
+                    key: value
+                    for key, value in (
+                        ("streakIncrease", stats.get("streakIncreaseShortPeriods", 0)),
+                        ("streakNonDecrease", stats.get("streakNonDecreaseShortPeriods", 0)),
+                        *base_short_periods.items(),
+                    )
+                    if value
+                }
+                if short_periods_counted:
+                    payload["streakShortPeriodsCounted"] = short_periods_counted
+                if short_period_dividends:
+                    payload["shortPeriodDividends"] = short_period_dividends
                 validate_public_payload(payload, display_years, series_years, financial_years=financial_years)
                 if daily_price:
                     payload["price"] = daily_price

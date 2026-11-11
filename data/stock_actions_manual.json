@@ -1033,25 +1033,6 @@
       "checkedAt": "2026-08-17"
     },
     {
-      "eventId": "9305-2026-06-01-split-1-to-2",
-      "securityCode": "9305",
-      "name": "株式会社ヤマタネ",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2026-06-01",
-      "status": "provisional",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": null,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100YEYD.pdf",
-        "type": "edinet",
-        "docID": "S100YEYD"
-      },
-      "note": "edinet-direct側マスター(9305-2026-06-01-split-1-to-2)から自動生成",
-      "checkedAt": "2026-09-28"
-    },
-    {
       "eventId": "2164-2026-06-26-split-5-to-9",
       "securityCode": "2164",
       "name": "株式会社地域新聞社",

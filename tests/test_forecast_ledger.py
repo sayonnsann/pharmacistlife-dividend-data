@@ -252,3 +252,16 @@ def test_comparison_cli_small_state_and_isolated_before_dependencies(tmp_path):
     assert failed.returncode != 0
     assert "unreadable-secret-host" not in failed.stdout + failed.stderr
     assert str(tmp_path) not in failed.stdout + failed.stderr
+
+
+def test_artner_2163_matches_the_issuer_tanshin():
+    """2163 アルトナーの2027年1月期第2四半期決算短信（2026-09-10）: 中間43円は分割前、
+    期末予想21.50円は分割後（2026-08-01に1→2）。年間合計は記載なし。分割後にそろえると43円。"""
+    record = dict(forecastDividend=21.5, forecastInterimDividend=43,
+                  forecastFinalDividend=21.5, forecastDividendAdjusted=None,
+                  forecastPeriod="2027年1月期(予)", forecastFiscalYear=2027)
+    split = dict(event("2026-08-01"), eventId="2163-2026-08-01", securityCode="2163")
+    result = store.forecast_on_price_basis(
+        record, today=TODAY, adjustment=store.split_adjustment([split]), fiscal_month=1)
+    assert (result["value"], result["basis"]) == (43, "post_split_composed_ledger")
+    assert (result["interim"], result["final"]) == (21.5, 21.5)

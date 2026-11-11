@@ -2008,39 +2008,131 @@ def legs_match_annual(
     return abs(float(interim) + float(final) - float(annual)) <= tolerance
 
 
-def forecast_on_price_basis(record: Any, *, today: date) -> dict[str, Any]:
-    """予想配当を、株価と同じ株数基準に揃えて返す。
+def _forecast_shift_months(day: date, months: int) -> date:
+    """月末・うるう日を丸めて暦月を移動する。"""
+    from calendar import monthrange
+    year, month0 = divmod(day.year * 12 + day.month - 1 + months, 12)
+    month = month0 + 1
+    return date(year, month, min(day.day, monthrange(year, month)[1]))
 
-    分割日をまたぐ期は、中間配当と期末配当が別々の株数に対して支払われる。
-    東計電算(4746)なら中間86.5円は分割前の1株に、期末97.5円は分割後の1株に
-    対して払われるので、単純に足した184円はどの株数の話でもない。
-    株価は分割日に市場が1/4にするので、配当も同じ日に基準を切り替えれば
-    利回りが連続する。
 
-      分割日より前: 中間 + 期末×係数 = 86.5 + 97.5×4 = 476.5円（分割前の1株）
-      分割日以降  : 中間÷係数 + 期末 = 86.5÷4 + 97.5 = 119.125円（分割後の1株）
+def forecast_period_window(
+    record: dict[str, Any], *, fiscal_month: int | None = None,
+    fiscal_record: dict[str, Any] | None = None,
+) -> tuple[date, date, date, bool] | None:
+    """予想の期首・期末・中間末と、12か月として扱えるかを返す。
 
-    どちらも株価と組み合わせると利回りは8.46%で一致する。API側の
-    adjusted_forecast_dividend_per_share は常に分割後基準なので、分割前の
-    株価と組み合わせると利回りが1/4になってしまう。分割日を過ぎてからなら
-    基準が合うのでそのまま使える。
+    通常の「年月期」は12か月とする。対象期の短期決算情報があれば除外する。
+    forecastSource.fiscalYearEnd は短信側の期（翌期予想とは限らない）なので使わない。
+    """
+    from calendar import monthrange
+    end = None
+    for key in ("forecastFiscalYearEnd", "forecastPeriodEnd"):
+        raw = record.get(key)
+        if isinstance(raw, str):
+            try:
+                end = date.fromisoformat(raw[:10])
+                break
+            except ValueError:
+                pass
+    if end is None:
+        if fiscal_month is None and fiscal_record:
+            fiscal_month = fiscal_record.get("fiscalMonth")
+        year = forecast_fiscal_year(record)
+        match = re.search(r"(\d{4})\s*年\s*(\d{1,2})\s*月期",
+                          str(record.get("forecastPeriod", "")))
+        month = int(match.group(2)) if match else fiscal_month
+        if year is None or not 1 < year < 9999 or type(month) is not int or not 1 <= month <= 12:
+            return None
+        end = date(year, month, monthrange(year, month)[1])
+    if not 1 < end.year < 9999:
+        return None
+    start = _forecast_shift_months(end, -12) + timedelta(days=1)
+    interim_end = _forecast_shift_months(start, 6) - timedelta(days=1)
+    regular = True
+    months = record.get("forecastPeriodMonths")
+    if months is not None and finite_number(months) != 12:
+        regular = False
+    explicit_start = record.get("forecastPeriodStart")
+    if explicit_start is not None:
+        try:
+            regular = regular and date.fromisoformat(str(explicit_start)[:10]) == start
+        except ValueError:
+            regular = False
+    for item in (fiscal_record or {}).get("shortPeriodDividends") or []:
+        # 短い期の終端が月までしか分からない旧データも、同じ年月なら対象とする。
+        item_end = str(item.get("periodEnd", ""))
+        if item_end[:7] == end.isoformat()[:7] and item.get("months") != 12:
+            regular = False
+    return start, end, interim_end, regular
 
-    ただし、分割日をまたぐ期でも会社が予想を一つの基準に揃えて出している
-    ことがある。組み立てるかどうかは中間＋期末が年間値と一致するかで決める
-    （legs_match_annual 参照）。合っているなら組み立て直さない。
 
-    返す辞書:
-      value   … 表示・利回り計算に使う年間予想
-      basis   … どの経路で決めたか
-                  single_basis_as_reported … 内訳の合計が年間値と一致した
-                                              ので、会社発表の年間値のまま
-                  pre_split_composed  … 分割日前。中間 + 期末×係数
-                  pre_split_reported  … 内訳が無く、申告が pre_split
-                  post_split_adjusted … 分割日以降。API側の分割後年間値
-                  post_split_composed … 分割日以降。中間÷係数 + 期末
-                  raw                 … 分割の予定なし、または判断材料なし
-      interim … value と同じ株数基準に揃えた中間（取れなければNone）
-      final   … 同じく期末
+def forecast_ledger_events(
+    record: dict[str, Any], adjustment: dict[str, Any] | None, *,
+    fiscal_month: int | None = None, fiscal_record: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """会社別台帳から S < 効力日 < E の confirmed だけを選ぶ（E当日は除外）。"""
+    window = forecast_period_window(
+        record, fiscal_month=fiscal_month, fiscal_record=fiscal_record)
+    if window is None:
+        return []
+    start, end, _, _ = window
+    result = []
+    for event in (adjustment or {}).get("events", []):
+        if event.get("status") != "confirmed":
+            continue
+        try:
+            effective = date.fromisoformat(str(event.get("effectiveDate", "")))
+        except ValueError:
+            continue
+        if start < effective < end:
+            result.append(event)
+    return result
+
+
+def forecast_ratio_warning(
+    record: Any, value: float | int | None, annual: dict, *,
+    adjustment: dict[str, Any] | None = None, fiscal_month: int | None = None,
+    fiscal_record: dict[str, Any] | None = None,
+) -> str | None:
+    """分割・併合に近い前年比を通知する。値の採否には使わない。"""
+    if not isinstance(record, dict) or value is None:
+        return None
+    year = forecast_fiscal_year(record)
+    previous = finite_number(annual.get(str(year - 1), annual.get(year - 1))) if year else None
+    if previous is None or previous <= 0:
+        return None
+    ratio = float(value) / previous
+    candidates = [(1 / n, "分割", n) for n in (2, 3, 4, 5, 10)]
+    candidates += [(float(n), "併合", n) for n in (2, 5, 10)]
+    matches = [item for item in candidates if item[0] * 0.75 <= ratio <= item[0] * 1.25]
+    if not matches:
+        return None
+    target, kind, n = min(matches, key=lambda item: abs(ratio / item[0] - 1))
+    present = bool(forecast_ledger_events(
+        record, adjustment, fiscal_month=fiscal_month, fiscal_record=fiscal_record))
+    return f"比={ratio:.6g} / {kind} N={n} / 期中台帳={'ある' if present else 'なし'}"
+
+
+def forecast_on_price_basis(
+    record: Any, *, today: date, adjustment: dict[str, Any] | None = None,
+    fiscal_month: int | None = None, fiscal_record: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """予想配当を実行日の株価と同じ株数基準にそろえる。
+
+    basis:
+      raw: 分割情報なし。従来の値を維持。
+      single_basis_as_reported: 内訳合計が年間欄と一致。年間欄をそのまま採用。
+      pre_split_composed: 効力日前。中間 + 期末×係数。
+      pre_split_reported: 内訳なし、pre_split 申告の年間欄。
+      post_split_composed: 効力日以降。中間÷係数 + 期末（adjustedより優先）。
+      post_split_adjusted: 内訳なし。APIのadjustedを採用。
+      上記に _ledger: 記録の付帯項目が空なので確定台帳で補完。
+      post_split_single_basis_ledger: 効力日が中間末以前。中間 + 期末。
+      split_unresolved: 複数イベント、変則決算、または組み立て材料なし。
+
+    value/interim/final は同じ株数基準。warnings は adjusted との不一致のみ。
+    付帯項目のある記録は台帳で上書きしない。不正な付帯項目も従来どおりraw。
     """
     if not isinstance(record, dict):
         return {"value": None, "basis": "raw", "interim": None, "final": None}
@@ -2048,84 +2140,76 @@ def forecast_on_price_basis(record: Any, *, today: date) -> dict[str, Any]:
     raw_value = bounded(record.get("forecastDividend"), 0, 1_000_000)
     interim = bounded(record.get("forecastInterimDividend"), 0, 1_000_000)
     final = bounded(record.get("forecastFinalDividend"), 0, 1_000_000)
+    ledger = False
 
-    def as_raw() -> dict[str, Any]:
-        return {
-            "value": raw_value,
-            "basis": "raw",
-            "interim": interim,
-            "final": final,
-        }
+    def result(value, basis, first=interim, last=final):
+        return {"value": value, "basis": basis, "interim": first, "final": last}
+
+    def unresolved():
+        return result(None, "split_unresolved", None, None)
 
     effective = forecast_split_effective_date(record)
     factor = forecast_split_factor(record)
-    # 分割の予定が無い（大多数）、または係数が使えない値なら今までどおり。
+    # None/空文字は付帯項目なし。一部だけある・壊れた項目は台帳で上書きしない。
+    has_metadata = any(record.get(key) not in (None, "") for key in
+                       ("forecastSplitEffectiveDate", "forecastSplitFactor"))
+    window = None
+    if not has_metadata:
+        events = forecast_ledger_events(
+            record, adjustment, fiscal_month=fiscal_month, fiscal_record=fiscal_record)
+        if events:
+            window = forecast_period_window(
+                record, fiscal_month=fiscal_month, fiscal_record=fiscal_record)
+            if len(events) > 1 or not window[3]:
+                return unresolved()
+            event = events[0]
+            old = finite_number(event.get("oldShares"))
+            new = finite_number(event.get("newShares"))
+            if old is None or new is None or old <= 0 or new <= 0:
+                return unresolved()
+            factor = float(new) / float(old)
+            if not math.isfinite(factor) or factor <= 0:
+                return unresolved()
+            effective = date.fromisoformat(event["effectiveDate"])
+            ledger = True
     if effective is None or factor is None:
-        return as_raw()
+        return result(raw_value, "raw")
+
+    suffix = "_ledger" if ledger else ""
+    # 効力日前後のどちらでも、この検算を最初に行って二重調整を避ける。
+    if legs_match_annual(interim, final, raw_value):
+        return result(raw_value, "single_basis_as_reported" + suffix)
 
     if today < effective:
-        # まずデータ自身で確かめる。中間＋期末が年間値と一致するなら、その期の
-        # 予想は一つの株数基準で書かれているので、組み立て直すと係数が二重に
-        # 掛かる（東計電算のQ1開示なら 62.5+110.5×4 = 504.5円。正しくは173円で、
-        # API側の adjusted 43.25×4 = 173 とも合う）。
-        if legs_match_annual(interim, final, raw_value):
-            return {
-                "value": raw_value,
-                "basis": "single_basis_as_reported",
-                "interim": interim,
-                "final": final,
-            }
-        # 合計が合わないのは、中間と期末が別々の株数に対する金額だから。
-        # forecast_share_basis が何と申告していても（post_split でも）、
-        # ここはデータ自身の検算を優先して組み立てる。混在期は会社も年間値と
-        # して意味のある一つの数字を出せていない（東計電算のQ2開示なら
-        # forecast_dividend_per_share=97.5 は期末だけの額）ので、内訳から
-        # 組み立てるほうが根拠がはっきりする。
         if interim is None or final is None:
-            # 内訳が無いと検算できない。申告が pre_split なら、生の年間値が
-            # 分割前の株価と同じ基準だと分かるので、そのまま使ってよい。
-            if reported_share_basis(record) == "pre_split":
-                return {
-                    "value": raw_value,
-                    "basis": "pre_split_reported",
-                    "interim": interim,
-                    "final": final,
-                }
-            return as_raw()
+            if reported_share_basis(record) == "pre_split" and raw_value is not None:
+                return result(raw_value, "pre_split_reported" + suffix)
+            return unresolved() if ledger else result(raw_value, "raw")
         composed_final = float(final) * factor
         total = bounded(round(float(interim) + composed_final, 4), 0, 1_000_000)
         if total is None:
-            return as_raw()
-        return {
-            "value": total,
-            "basis": "pre_split_composed",
-            "interim": interim,
-            "final": round(composed_final, 4),
-        }
+            return unresolved()
+        return result(total, "pre_split_composed" + suffix, interim, round(composed_final, 4))
 
     adjusted = bounded(record.get("forecastDividendAdjusted"), 0, 1_000_000)
+    if interim is not None and final is not None:
+        single = ledger and effective <= window[2]
+        composed_interim = float(interim) if single else float(interim) / factor
+        total = bounded(round(composed_interim + float(final), 4), 0, 1_000_000)
+        if total is None:
+            return unresolved()
+        basis = "post_split_single_basis_ledger" if single else "post_split_composed" + suffix
+        resolved = result(total, basis, round(composed_interim, 4), final)
+        if adjusted is not None and not legs_match_annual(total, 0, adjusted):
+            resolved["warnings"] = [
+                f"内訳合成={total:g} / adjusted={float(adjusted):g} / 内訳を採用"]
+        return resolved
     if adjusted is not None:
-        composed_interim = (
-            round(float(interim) / factor, 4) if interim is not None else None
-        )
-        return {
-            "value": adjusted,
-            "basis": "post_split_adjusted",
-            "interim": composed_interim,
-            "final": final,
-        }
-    if interim is None or final is None:
-        return as_raw()
-    composed_interim = float(interim) / factor
-    total = bounded(round(composed_interim + float(final), 4), 0, 1_000_000)
-    if total is None:
-        return as_raw()
-    return {
-        "value": total,
-        "basis": "post_split_composed",
-        "interim": round(composed_interim, 4),
-        "final": final,
-    }
+        first = (round(float(interim) / factor, 4) if interim is not None else None)
+        if ledger and effective <= window[2]:
+            first = interim
+        return result(adjusted, "post_split_adjusted" + suffix, first, final)
+    return unresolved()
 
 
 def pending_dividends(
@@ -2135,6 +2219,8 @@ def pending_dividends(
     today: date,
     adjustment: dict[str, Any] | None = None,
     fiscal_month: int | None = None,
+    fiscal_record: dict[str, Any] | None = None,
+    forecast_adjustment: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """まだ配当系列に載っていない事業年度を、会社発表の値で組み立てる。
 
@@ -2213,7 +2299,10 @@ def pending_dividends(
 
     # 分割日をまたぐ期は、中間と期末が別の株数に対する金額なので、
     # 株価と同じ基準に揃えてから棒にする。
-    resolved = forecast_on_price_basis(forecast_record, today=today)
+    resolved = forecast_on_price_basis(
+        forecast_record, today=today,
+        adjustment=forecast_adjustment if forecast_adjustment is not None else adjustment,
+        fiscal_month=fiscal_month, fiscal_record=fiscal_record)
     forecast = resolved["value"]
     forecast_year = forecast_fiscal_year(forecast_record)
     if (
@@ -2223,6 +2312,14 @@ def pending_dividends(
         and str(forecast_year) not in result
     ):
         forecast_factor = factor_for(forecast_year)
+        if resolved["basis"].endswith("_ledger") and adjustment is not None:
+            window = forecast_period_window(
+                forecast_record, fiscal_month=fiscal_month, fiscal_record=fiscal_record)
+            # 期末が判明した補完経路では、決算月不明時の年単位フォールバックを
+            # 使わない。期中イベントを棒にもう一度掛けるのを防ぐ。
+            forecast_factor = adjustment_factor_for_period(
+                adjustment, forecast_year, fiscal_month=window[1].month,
+                field="dividend", period_end=window[1])
         entry: dict[str, Any] = {
             "value": round(float(forecast) * forecast_factor, 4),
             "kind": "forecast",
@@ -2403,7 +2500,9 @@ def load_price_session_meta(url: str) -> dict[str, Any] | None:
 
 
 def forecast_values(
-    record: Any, price: float | int | None, *, today: date
+    record: Any, price: float | int | None, *, today: date,
+    adjustment: dict[str, Any] | None = None, fiscal_month: int | None = None,
+    fiscal_record: dict[str, Any] | None = None,
 ) -> tuple[float | int | None, float | None, str | None, str | None, str | None]:
     """表示用の予想配当・予想利回りと、その値をどう決めたかの根拠を返す。
 
@@ -2412,7 +2511,9 @@ def forecast_values(
     """
     if not isinstance(record, dict):
         return None, None, None, None, None
-    resolved = forecast_on_price_basis(record, today=today)
+    resolved = forecast_on_price_basis(
+        record, today=today, adjustment=adjustment, fiscal_month=fiscal_month,
+        fiscal_record=fiscal_record)
     dividend = resolved["value"]
     forecast_yield = None
     if dividend is not None and price is not None and price > 0:
@@ -2449,6 +2550,7 @@ def create_database(
     forecast_overrides: dict[str, Any] | None = None,
     yield_guard_report_path: Path | None = None,
     public_events_path: Path | None = None,
+    forecast_stock_actions_by_code: dict[str, list[dict[str, Any]]] | None = None,
 ) -> tuple[int, int, int]:
     today = today or datetime.now(JST).date()
     try:
@@ -2462,6 +2564,8 @@ def create_database(
     previous_payloads = yield_safety.previous_payloads(database_path)
     yield_drops = []
     forecast_holds = forecast_unknown_holds = 0
+    split_unresolved_codes: list[str] = []
+    forecast_split_warnings: list[str] = []
     # Validate the input before projection/calculation can discard corrupt cells.
     validate_financial_records(financials)
     financial_by_code, skipped_financials = index_by_code(
@@ -2591,6 +2695,10 @@ def create_database(
                 if adjustment is not None:
                     adjusted_stocks += 1
                     applied_events += len(adjustment["events"])
+                forecast_adjustment = (
+                    split_adjustment(forecast_stock_actions_by_code.get(code, []))
+                    if forecast_stock_actions_by_code is not None else adjustment)
+                forecast_month = fiscal_record.get("fiscalMonth") if fiscal_record else None
                 effective_price = daily_price
                 forecast_record = apply_forecast_override(
                     code, forecasts.get(code), forecast_overrides or {}
@@ -2602,8 +2710,17 @@ def create_database(
                     forecast_fetched_at,
                     forecast_basis,
                 ) = forecast_values(
-                    forecast_record, effective_price, today=today
+                    forecast_record, effective_price, today=today,
+                    adjustment=forecast_adjustment, fiscal_month=forecast_month,
+                    fiscal_record=fiscal_record,
                 )
+                if forecast_basis == "split_unresolved":
+                    split_unresolved_codes.append(code)
+                resolved_forecast = forecast_on_price_basis(
+                    forecast_record, today=today, adjustment=forecast_adjustment,
+                    fiscal_month=forecast_month, fiscal_record=fiscal_record)
+                forecast_split_warnings.extend(
+                    f"{code}: {warning}" for warning in resolved_forecast.get("warnings", []))
                 forecast_hold = yield_safety.forecast_hold_reason(
                     forecast_record, public_events.get(code, []), today,
                     forecast_basis=forecast_basis,
@@ -2833,6 +2950,13 @@ def create_database(
                     payload["streakUnreliable"] = None
                     payload["dividendSeries"] = period_metadata({}, series)
 
+                ratio_warning = forecast_ratio_warning(
+                    forecast_record, forecast_dividend, payload.get("annual") or {},
+                    adjustment=forecast_adjustment, fiscal_month=forecast_month,
+                    fiscal_record=fiscal_record)
+                if ratio_warning:
+                    forecast_split_warnings.append(f"{code}: {ratio_warning}")
+
                 # 利回りは完成したグラフのannualを直接読む。予想・短信の
                 # annualPending/annualPartialを足す前に選び、二重補正を防ぐ。
                 daily_yield = None
@@ -2892,9 +3016,9 @@ def create_database(
                     series_years,
                     today=today,
                     adjustment=adjustment,
-                    fiscal_month=(
-                        fiscal_record.get("fiscalMonth") if fiscal_record else None
-                    ),
+                    forecast_adjustment=forecast_adjustment,
+                    fiscal_month=forecast_month,
+                    fiscal_record=fiscal_record,
                 )
                 payload["annualPending"] = pending
                 # 既存の表示コードが読む形。値だけの {年: 円}。
@@ -3151,6 +3275,11 @@ def create_database(
         raise
 
     yield_safety.summary(f"予想利回りの空欄化: {forecast_holds}社 / 基準日不明: {forecast_unknown_holds}社")
+    yield_safety.summary(
+        f"予想分割保留: {len(split_unresolved_codes)}社 / コード: "
+        + (", ".join(sorted(split_unresolved_codes)) or "なし"))
+    for warning in forecast_split_warnings:
+        yield_safety.summary("予想分割警告: " + warning, warning=True)
     if yield_guard_report_path is not None:
         # ビルドで実際に使った記録を渡す。再取得で検出日・比率がずれないようにする。
         from audit_yield_numerator import audit_fiscal_payloads
@@ -3172,9 +3301,15 @@ def main() -> None:
     calendar_dividends = load_calendar_dividends(args.calendar_dividends)
     stock_action_fallbacks: list[dict[str, Any]] = []
     stock_action_paths = [args.stock_actions, args.stock_actions_extracted]
-    stock_actions = load_stock_actions(
-        stock_action_paths, fallback_events=stock_action_fallbacks
-    )
+    build_today = datetime.now(JST).date()
+    # 予想は将来の確定イベントも必要。実績の補正には実行日までのイベントのみ渡す。
+    forecast_stock_actions = load_stock_actions(
+        stock_action_paths, as_of=date.max, fallback_events=stock_action_fallbacks)
+    stock_actions = {
+        code: [event for event in events
+               if date.fromisoformat(event["effectiveDate"]) <= build_today]
+        for code, events in forecast_stock_actions.items()
+    }
     forecasts = load_forecasts(args.forecasts)
     forecast_overrides = load_forecast_overrides(args.forecast_overrides)
     count, matched, frozen = create_database(
@@ -3196,7 +3331,9 @@ def main() -> None:
         args.fiscal_dividends,
         calendar_dividends,
         args.calendar_dividends,
+        today=build_today,
         stock_action_fallbacks=stock_action_fallbacks,
+        forecast_stock_actions_by_code=forecast_stock_actions,
         forecast_overrides=forecast_overrides,
         yield_guard_report_path=args.yield_guard_report,
         public_events_path=REPOSITORY_ROOT / "data/public_stock_events.json",

@@ -2294,7 +2294,7 @@ class ForecastSplitBasisTest(unittest.TestCase):
         self.assertEqual(resolved["interim"], 86.5)
         self.assertEqual(resolved["final"], 390.0)
 
-    def test_after_the_split_the_adjusted_value_is_used(self) -> None:
+    def test_after_the_split_the_legs_are_used(self) -> None:
         for today in (self.ON_DAY, self.AFTER):
             with self.subTest(today=today):
                 resolved = build_store.forecast_on_price_basis(
@@ -2302,7 +2302,7 @@ class ForecastSplitBasisTest(unittest.TestCase):
                 )
                 # 86.5÷4 + 97.5
                 self.assertEqual(resolved["value"], 119.125)
-                self.assertEqual(resolved["basis"], "post_split_adjusted")
+                self.assertEqual(resolved["basis"], "post_split_composed")
                 self.assertEqual(resolved["interim"], 21.625)
                 self.assertEqual(resolved["final"], 97.5)
 
@@ -2319,7 +2319,7 @@ class ForecastSplitBasisTest(unittest.TestCase):
         self.assertEqual(before[1], 8.46)
         self.assertEqual(after[1], 8.46)
         self.assertEqual(before[4], "pre_split_composed")
-        self.assertEqual(after[4], "post_split_adjusted")
+        self.assertEqual(after[4], "post_split_composed")
 
     def test_api_adjusted_value_alone_would_quarter_the_yield(self) -> None:
         """直したかった症状そのもの。分割前の株価に分割後の配当を当てると1/4。"""
@@ -2341,7 +2341,7 @@ class ForecastSplitBasisTest(unittest.TestCase):
         self.assertEqual(resolved["interim"], 10.0)
         self.assertEqual(resolved["final"], 12.0)
 
-    def test_a_reverse_split_switches_to_adjusted_after_the_effective_date(
+    def test_a_reverse_split_composes_after_the_effective_date(
         self,
     ) -> None:
         for today in (self.ON_DAY, self.AFTER):
@@ -2351,7 +2351,7 @@ class ForecastSplitBasisTest(unittest.TestCase):
                 )
                 # 10÷0.2 + 60 = 110.0（併合後の1株基準）
                 self.assertEqual(resolved["value"], 110.0)
-                self.assertEqual(resolved["basis"], "post_split_adjusted")
+                self.assertEqual(resolved["basis"], "post_split_composed")
                 self.assertEqual(resolved["interim"], 50.0)
                 self.assertEqual(resolved["final"], 60.0)
 
@@ -2378,13 +2378,9 @@ class ForecastSplitBasisTest(unittest.TestCase):
         after = build_store.forecast_values(
             TOUKEI_Q1, TOUKEI_PRICE_AFTER, today=self.AFTER
         )
-        self.assertEqual(after[0], 43.25)
-        self.assertEqual(
-            build_store.forecast_values(
-                TOUKEI_Q1, TOUKEI_PRICE_BEFORE, today=self.BEFORE
-            )[1],
-            after[1],
-        )
+        # 新仕様: 効力日以降も、年間欄と内訳が一致すれば年間欄を優先する。
+        self.assertEqual(after[0], 173)
+        self.assertEqual(after[4], "single_basis_as_reported")
 
 
 
@@ -2395,7 +2391,7 @@ class ForecastSplitBasisTest(unittest.TestCase):
         self.assertEqual(resolved["value"], 119.125)
         self.assertEqual(resolved["basis"], "post_split_composed")
 
-    def test_falls_back_to_the_raw_value_when_a_leg_is_missing(self) -> None:
+    def test_missing_legs_are_raw_before_and_unresolved_after(self) -> None:
         for missing in ("forecastInterimDividend", "forecastFinalDividend"):
             with self.subTest(missing=missing):
                 record = dict(TOUKEI_Q2)
@@ -2405,8 +2401,12 @@ class ForecastSplitBasisTest(unittest.TestCase):
                     resolved = build_store.forecast_on_price_basis(
                         record, today=today
                     )
-                    self.assertEqual(resolved["value"], 97.5)
-                    self.assertEqual(resolved["basis"], "raw")
+                    if today < self.ON_DAY:
+                        self.assertEqual(resolved["value"], 97.5)
+                        self.assertEqual(resolved["basis"], "raw")
+                    else:
+                        self.assertIsNone(resolved["value"])
+                        self.assertEqual(resolved["basis"], "split_unresolved")
 
     def test_unusable_factors_never_multiply_or_divide(self) -> None:
         for factor in (0, -4, None, "4", float("nan")):
@@ -2474,7 +2474,7 @@ class ForecastSplitBasisTest(unittest.TestCase):
         self.assertEqual(before["2026"]["interim"], 86.5)
         self.assertEqual(before["2026"]["final"], 390.0)
         self.assertEqual(after["2026"]["value"], 119.125)
-        self.assertEqual(after["2026"]["basis"], "post_split_adjusted")
+        self.assertEqual(after["2026"]["basis"], "post_split_composed")
         # 内訳の合計が表示値と合う
         self.assertAlmostEqual(
             after["2026"]["interim"] + after["2026"]["final"],
@@ -2732,7 +2732,7 @@ class ForecastSplitBasisInStoreTest(unittest.TestCase):
 
         self.assertEqual(after["forecastDividend"], 119.125)
         self.assertEqual(after["forecastYield"], 8.46)
-        self.assertEqual(after["forecastBasis"], "post_split_adjusted")
+        self.assertEqual(after["forecastBasis"], "post_split_composed")
         self.assertEqual(after["forecastYieldColumn"], 8.46)
         self.assertEqual(after["annualPending"]["2026"]["value"], 119.125)
         # 系列に入っている実績年は今までどおり

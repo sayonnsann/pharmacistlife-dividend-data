@@ -70,3 +70,38 @@ jobs:
           python3 scripts/audit_forecast_state.py \
             --state "$STATE_FILE" \
             --codes "$TARGET_CODES"
+
+      - name: 予想配当の分割補正をmainと比較
+        shell: bash
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -euo pipefail
+          git fetch --quiet --depth 1 origin main
+          mkdir -p "$RUNNER_TEMP/before"
+          # 補助モジュールも同じ版を使う。main取り込み後に差がゼロでも正常。
+          git archive FETCH_HEAD scripts | tar -x -C "$RUNNER_TEMP/before"
+          git show FETCH_HEAD:scripts/build_store.py > "$RUNNER_TEMP/before/scripts/build_store.py"
+          # 前年実績と変則決算の情報も、既存ビルドと同じ非公開系列を読む。
+          # エラーのFTP応答・ホスト名をログに出さず、読み取りだけ行う。
+          python3 - <<'PY'
+          import ftplib
+          import os
+          import ssl
+          from pathlib import Path
+          try:
+              with ftplib.FTP_TLS(context=ssl.create_default_context(), timeout=60) as ftp:
+                  ftp.connect(os.environ["FTP_HOST"])
+                  ftp.login(os.environ["FTP_USER"], os.environ["FTP_PASS"])
+                  ftp.prot_p()
+                  ftp.cwd(os.environ["FTP_REMOTE_DIR"])
+                  target = Path(os.environ["RUNNER_TEMP"]) / "fiscal_dividends.json"
+                  with target.open("wb") as out:
+                      ftp.retrbinary("RETR fiscal_dividends.json", out.write)
+          except Exception:
+              raise SystemExit("比較用の配当系列を取得できませんでした。")
+          PY
+          python3 scripts/compare_forecast_resolution.py \
+            --state "$STATE_FILE" \
+            --before-module "$RUNNER_TEMP/before/scripts/build_store.py" \
+            --fiscal-dividends "$RUNNER_TEMP/fiscal_dividends.json"

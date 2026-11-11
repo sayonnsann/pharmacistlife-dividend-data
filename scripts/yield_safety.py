@@ -127,7 +127,11 @@ def forecast_hold_reason(record, events, today, *, forecast_basis=None, price_as
     # the new basis). Before that, keep holding: the price may still be old.
     # With two or more events in the window we cannot tell which one the
     # conversion covered, so the exemption is not applied.
-    exempt = (forecast_basis == "post_split_adjusted" and price_as_of is not None
+    exempt = (forecast_basis in {
+                  "post_split_adjusted", "post_split_composed",
+                  "post_split_adjusted_ledger", "post_split_composed_ledger",
+                  "post_split_single_basis_ledger",
+              } and price_as_of is not None
               and len(in_window) == 1)
     for effective in in_window:
         if exempt and effective <= price_as_of:

@@ -1,5 +1,5 @@
 {
- "asOfDate": "2026-11-12",
+ "asOfDate": "2026-11-13",
  "events": [
   {
    "code": "1301",
@@ -28632,15 +28632,6 @@
   },
   {
    "code": "7846",
-   "effectiveDate": "2026-02-13",
-   "kind": "split",
-   "newShares": 3.0,
-   "oldShares": 1.0,
-   "recordDate": null,
-   "sourceDocId": "S100XU5I"
-  },
-  {
-   "code": "7846",
    "effectiveDate": "2026-07-01",
    "kind": "split",
    "newShares": 3.0,
@@ -32879,15 +32870,6 @@
    "sourceDocId": "S100W18E"
   },
   {
-   "code": "9305",
-   "effectiveDate": "2026-06-01",
-   "kind": "split",
-   "newShares": 2.0,
-   "oldShares": 1.0,
-   "recordDate": null,
-   "sourceDocId": "S100YEYD"
-  },
-  {
    "code": "9306",
    "effectiveDate": "2023-10-01",
    "kind": "consolidation",
@@ -35139,5 +35121,5 @@
   }
  ],
  "schemaVersion": 1,
- "sourceSha256": "1112120aad4531b9e39b08f851fcac35bc3e89ace8055c9d393c3a1206031cfe"
+ "sourceSha256": "3aa196a3f5f3c3d35f60e3aabe582a7c1e135cae5527a17320e161e101b061f2"
 }

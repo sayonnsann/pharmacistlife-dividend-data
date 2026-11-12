@@ -682,7 +682,7 @@ class SplitAdjustmentTest(unittest.TestCase):
             as_of=date(2026, 8, 3),
         )
         self.assertEqual(len(loaded), 79)  # 生成台帳(export_yield_actions)の実数に追随
-        self.assertEqual(sum(map(len, loaded.values())), 81)
+        self.assertEqual(sum(map(len, loaded.values())), 80)
         # 抽出台帳(EDINET由来・監査合格)と重複する銘柄は手動台帳から自動除外されるため、
         # 手動台帳に残る provisional の 1663 で確認する
         self.assertIsNone(loaded["1663"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)

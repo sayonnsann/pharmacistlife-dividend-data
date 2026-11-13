@@ -2371,6 +2371,30 @@
       },
       "detectedAt": "2026-11-07",
       "status": "pending"
+    },
+    {
+      "code": "9987",
+      "name": "スズケン",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "faa89d0af8dbe2dd0333bccada531f7b2cf584f9c181c32a5c8b22c58ff9771f",
+        "eventType": "stock_split",
+        "eventDate": "2026-11-12"
+      },
+      "detectedAt": "2026-11-13",
+      "status": "pending"
+    },
+    {
+      "code": "4420",
+      "name": "イーソル",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "e2d4dcc5fbbf371169422d637a1bbcebc577429b4a131b61ac8f24b630288eec",
+        "eventType": "reverse_split",
+        "eventDate": "2026-11-12"
+      },
+      "detectedAt": "2026-11-13",
+      "status": "pending"
     }
   ]
 }

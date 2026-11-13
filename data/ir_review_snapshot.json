@@ -1,5 +1,24 @@
 {
-  "pendingSplitEvents": {},
+  "pendingSplitEvents": {
+    "e2d4dcc5fbbf371169422d637a1bbcebc577429b4a131b61ac8f24b630288eec": {
+      "attempts": 0,
+      "code": "4420",
+      "edinetCode": "E34321",
+      "eventDate": "2026-11-12",
+      "eventType": "reverse_split",
+      "firstSeenAt": "2026-11-13",
+      "secCode": "4420"
+    },
+    "faa89d0af8dbe2dd0333bccada531f7b2cf584f9c181c32a5c8b22c58ff9771f": {
+      "attempts": 0,
+      "code": "9987",
+      "edinetCode": "E02780",
+      "eventDate": "2026-11-12",
+      "eventType": "stock_split",
+      "firstSeenAt": "2026-11-13",
+      "secCode": "9987"
+    }
+  },
   "suspectYears": {
     "2991": [
       "2021",
@@ -50,5 +69,5 @@
       "2026"
     ]
   },
-  "updatedAt": "2026-11-12"
+  "updatedAt": "2026-11-13"
 }

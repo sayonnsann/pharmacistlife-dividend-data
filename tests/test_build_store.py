@@ -682,6 +682,8 @@ class SplitAdjustmentTest(unittest.TestCase):
             as_of=date(2026, 8, 3),
         )
         self.assertEqual(len(loaded), 79)  # 生成台帳(export_yield_actions)の実数に追随
+        # 2026-11-12: 9305 の実在しない 2026-06-01 分割(原本の誤確定)を外して 81→80
+        # (main 側も 2026-11-12 の利回り用台帳の自動更新で同じ1件が外れ、80 に追随済み)
         self.assertEqual(sum(map(len, loaded.values())), 80)
         # 抽出台帳(EDINET由来・監査合格)と重複する銘柄は手動台帳から自動除外されるため、
         # 手動台帳に残る provisional の 1663 で確認する
@@ -835,11 +837,11 @@ class StockActionIntegrationTest(unittest.TestCase):
             "6227", "6264", "6368", "6454", "6549", "6592", "6676", "6745",
             "6850", "7012", "7050", "7173", "7181", "7236", "7242", "7282",
             "7305", "7320", "7322", "7380", "7462", "7466", "7578", "7608",
-            "7609", "7678", "7818", "7846", "7875", "7901", "7988", "8012",
+            "7609", "7678", "7818", "7875", "7901", "7988", "8012",
             "8035", "8046", "8053", "8060", "8179", "8219", "8273", "8309",
             "8316", "8336", "8341", "8345", "8367", "8370", "8392", "8393",
             "8818", "8923", "9008", "9065", "9235", "9533", "9562", "9602",
-            "9658", "9722", "9757", "9763", "9987",
+            "9658", "9722", "9757", "9987",
         }
     )
     # 初期値は事故復旧コミット001c7b3aの109件版
@@ -847,6 +849,9 @@ class StockActionIntegrationTest(unittest.TestCase):
     # 基準集合の更新手順: 安全と確認済みのstock_actions_extracted.jsonを一時パスに置き、
     # _applied_dividend_codes(path)のsorted結果で上記を置換する。欠落理由を確認し、
     # 意図的な安全床変更としてレビューされた場合に限り、集合を縮小してよい。
+    # 2026-11-12: 7846(2026-02-13は決議日の誤読)と9763(2026-04-21は子会社取得日の誤読)の
+    # 誤抽出を外したため、意図して縮小した。2社とも stock_actions_manual.json の正しい
+    # 効力日(7846は2026-07-01、9763は2026-04-01)のイベントで引き続き補正される。
 
     @staticmethod
     def _applied_dividend_codes(path: Path) -> set[str]:
@@ -927,7 +932,7 @@ class StockActionIntegrationTest(unittest.TestCase):
                 self.assertIn("applyDividendAdjustment", event)
 
     def test_applied_dividend_code_set_does_not_regress(self) -> None:
-        self.assertEqual(len(self.BASELINE_APPLIED_DIVIDEND_CODES), 109)
+        self.assertEqual(len(self.BASELINE_APPLIED_DIVIDEND_CODES), 107)  # 2026-11-12: 7846・9763 を意図して外した
         applied = self._applied_dividend_codes(self.EXTRACTED)
         missing = self.BASELINE_APPLIED_DIVIDEND_CODES - applied
         self.assertFalse(

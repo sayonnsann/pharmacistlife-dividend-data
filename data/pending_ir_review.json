@@ -2395,6 +2395,30 @@
       },
       "detectedAt": "2026-11-13",
       "status": "pending"
+    },
+    {
+      "code": "6856",
+      "name": "堀場製作所",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "c01d663f4c22eecc21bd5675992f911225c774b1c560e6c3457668d2fa3c381c",
+        "eventType": "stock_split",
+        "eventDate": "2026-11-13"
+      },
+      "detectedAt": "2026-11-14",
+      "status": "pending"
+    },
+    {
+      "code": "4320",
+      "name": "CEホールディングス",
+      "trigger": "edinetdb_event",
+      "detail": {
+        "eventId": "b0b1ccb55a68bfdc5d0bdea67d8ae3f275fbe13f22dca1a8fc880726cc7ee10e",
+        "eventType": "reverse_split",
+        "eventDate": "2026-11-13"
+      },
+      "detectedAt": "2026-11-14",
+      "status": "pending"
     }
   ]
 }

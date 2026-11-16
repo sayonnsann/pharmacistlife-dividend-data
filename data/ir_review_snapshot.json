@@ -1,42 +1,5 @@
 {
-  "pendingSplitEvents": {
-    "b0b1ccb55a68bfdc5d0bdea67d8ae3f275fbe13f22dca1a8fc880726cc7ee10e": {
-      "attempts": 0,
-      "code": "4320",
-      "edinetCode": "E05233",
-      "eventDate": "2026-11-13",
-      "eventType": "reverse_split",
-      "firstSeenAt": "2026-11-14",
-      "secCode": "4320"
-    },
-    "c01d663f4c22eecc21bd5675992f911225c774b1c560e6c3457668d2fa3c381c": {
-      "attempts": 0,
-      "code": "6856",
-      "edinetCode": "E01901",
-      "eventDate": "2026-11-13",
-      "eventType": "stock_split",
-      "firstSeenAt": "2026-11-14",
-      "secCode": "6856"
-    },
-    "e2d4dcc5fbbf371169422d637a1bbcebc577429b4a131b61ac8f24b630288eec": {
-      "attempts": 0,
-      "code": "4420",
-      "edinetCode": "E34321",
-      "eventDate": "2026-11-12",
-      "eventType": "reverse_split",
-      "firstSeenAt": "2026-11-13",
-      "secCode": "4420"
-    },
-    "faa89d0af8dbe2dd0333bccada531f7b2cf584f9c181c32a5c8b22c58ff9771f": {
-      "attempts": 0,
-      "code": "9987",
-      "edinetCode": "E02780",
-      "eventDate": "2026-11-12",
-      "eventType": "stock_split",
-      "firstSeenAt": "2026-11-13",
-      "secCode": "9987"
-    }
-  },
+  "pendingSplitEvents": {},
   "suspectYears": {
     "2991": [
       "2021",
@@ -87,5 +50,5 @@
       "2026"
     ]
   },
-  "updatedAt": "2026-11-15"
+  "updatedAt": "2026-11-16"
 }

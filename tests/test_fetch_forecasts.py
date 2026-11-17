@@ -20,6 +20,9 @@ fetch_forecasts = importlib.util.module_from_spec(SPEC)
 # dataclass はモジュールが sys.modules にいる前提で型を解決する
 sys.modules["fetch_forecasts"] = fetch_forecasts
 SPEC.loader.exec_module(fetch_forecasts)
+# リポジトリにある本物の取り直し名簿（data/forecast_recovery_seed.json）を
+# テストが読まないようにする。種を使うテストは、自分で一時ファイルを差し替える。
+fetch_forecasts.DEFAULT_RECOVERY_SEED = ROOT / "tests" / "_no_recovery_seed_.json"
 
 
 # 東計電算(4746 / E05066 / 12月決算)のGET /v1/companies/E05066/earnings の実応答。

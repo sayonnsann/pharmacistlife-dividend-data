@@ -366,7 +366,7 @@ class FetchLoopResilienceTest(unittest.TestCase):
                     "version": 1,
                     "queuePosition": 0,
                     "stocks": {
-                        code: {"lastFetchedAt": "2026-08-06"}
+                        code: {"lastFetchedAt": "2026-08-05"}
                         for code in self.CODES
                     },
                 }
@@ -666,6 +666,7 @@ def disclosure(
     dividend_signal: bool = False,
     edinet_code: str = "",
     event_id: str | None = None,
+    title: str = "決算短信",
 ) -> "fetch_forecasts.DisclosureEvent":
     return fetch_forecasts.DisclosureEvent(
         event_id=event_id or f"{event_type}:{code}:{day}",
@@ -675,6 +676,7 @@ def disclosure(
         edinet_code=edinet_code,
         is_earnings=is_earnings,
         has_dividend_signal=dividend_signal,
+        title=title,
     )
 
 
@@ -1048,7 +1050,7 @@ class CollectEventsTest(unittest.TestCase):
         events, requests_used, truncated, _ = self.run_collect(
             lambda url: events_payload([self.record("4746", "dividend_revision")], 1, None)
         )
-        self.assertEqual(requests_used, len(fetch_forecasts.EVENT_SOURCES))
+        # 各種別の先頭1ページずつ、合計4回。
         self.assertEqual(requests_used, 4)
         self.assertEqual(truncated, 0)
         self.assertEqual(len(events), 4)
@@ -1072,26 +1074,26 @@ class CollectEventsTest(unittest.TestCase):
             self.assertIn("until=2026-08-06", url)
             self.assertIn("limit=100", url)
 
-    def test_a_busy_day_is_truncated_and_says_so(self) -> None:
-        """繁忙期の決算短信は1日780件。全部は追えないので打ち切る。"""
+    def test_earnings_are_capped_at_ten_pages(self) -> None:
+        """A段に空きがあっても、短信は10ページで打ち切る。"""
 
         def responder(url: str) -> dict:
             if "event_type=earnings_summary" in url:
                 offset = int(url.split("offset=")[1].split("&")[0])
                 return events_payload(
                     [self.record(f"{4000 + i}", "earnings_summary") for i in range(100)],
-                    780,
+                    1607,
                     offset + 100,
                 )
             return events_payload([], 0, None)
 
         events, requests_used, truncated, log = self.run_collect(responder)
-        # 決算短信は2ページ(200件)で打ち切り、残り580件はログに出す。
-        self.assertEqual(truncated, 780 - 200)
-        self.assertEqual(len(events), 200)
-        self.assertEqual(requests_used, 5)
-        self.assertIn("580件は上限2ページで打ち切り", log)
-        self.assertIn("全780件", log)
+        # 他3種別が各1回、短信10ページで合計13回。
+        self.assertEqual(truncated, 1607 - 1000)
+        self.assertEqual(len(events), 1000)
+        self.assertEqual(requests_used, 13)
+        self.assertIn("607件は上限10ページで打ち切り", log)
+        self.assertIn("全1607件", log)
 
     def test_pagination_stops_when_the_server_says_there_is_no_more(self) -> None:
         def responder(url: str) -> dict:
@@ -1349,6 +1351,11 @@ class EventDrivenQueueTest(unittest.TestCase):
     PRIMED = "2026-07-28"
 
     def setUp(self) -> None:
+        # 小さな予算で確認・保存だけを試す既存テスト。
+        # 実際の最低10件と予算の組み合わせは EventBusySeasonTest で固定する。
+        rotation_patch = mock.patch.object(fetch_forecasts, "EVENT_MIN_ROTATION", 0)
+        rotation_patch.start()
+        self.addCleanup(rotation_patch.stop)
         self.directory = tempfile.TemporaryDirectory()
         base = Path(self.directory.name)
         self.state_path = base / "forecasts_state.json"
@@ -1984,6 +1991,11 @@ class EndToEndEventTest(unittest.TestCase):
     """
 
     def setUp(self) -> None:
+        # 小さな予算で確認・保存だけを試す既存テスト。
+        # 実際の最低10件と予算の組み合わせは EventBusySeasonTest で固定する。
+        rotation_patch = mock.patch.object(fetch_forecasts, "EVENT_MIN_ROTATION", 0)
+        rotation_patch.start()
+        self.addCleanup(rotation_patch.stop)
         self.directory = tempfile.TemporaryDirectory()
         base = Path(self.directory.name)
         self.feed_path = base / "split_event_feed.json"
@@ -2237,6 +2249,474 @@ class FeedHttpErrorTests(unittest.TestCase):
     def test_feed_network_is_off_by_default(self) -> None:
         with mock.patch.object(sys, "argv", ["fetch_forecasts.py"]):
             self.assertFalse(fetch_forecasts.parse_args().feed_from_network)
+
+
+class EventBusySeasonTest(unittest.TestCase):
+    """実際の最低巡回10件を使い、APIと保存の境界だけを差し替える。"""
+
+    TODAY = fetch_forecasts.date(2026, 11, 14)
+
+    def candidates(self, count=3400):
+        return [
+            fetch_forecasts.Candidate(
+                code=str(1000 + i), fiscal_month=3, edinet_code=f"E{i:05d}",
+                dividend_yield=0, priority_rank=None, event=None,
+                last_fetched=fetch_forecasts.date(2026, 10, 28),
+            )
+            for i in range(count)
+        ]
+
+    def state(self, candidates):
+        state = fetch_forecasts.empty_state()
+        state["stocks"] = {
+            c.code: {"lastFetchedAt": "2026-10-28", "forecastDividend": 74}
+            for c in candidates
+        }
+        return state
+
+    def event(self, code, tier="A", *, event_id=None, day="2026-11-12"):
+        return disclosure(
+            code, "dividend_revision" if tier == "A" else "earnings_summary",
+            day, event_id=event_id, title="" if tier == "A" else "第２四半期（中間期）決算短信",
+        )
+
+    def add_pending(self, state, event, *, attempts=0, old=False):
+        raw = fetch_forecasts.pending_record(
+            event, self.TODAY - fetch_forecasts.timedelta(days=15 if old else 1),
+            attempts=attempts,
+        )
+        state["events"]["pending"][event.event_id] = raw
+        return raw
+
+    def run_main(self, candidates, state, *, records=None, earnings_total=0,
+                 slots=90, daily=95, fetch=None, today=None, dry_run=False):
+        records = records or {}
+        pages = []
+
+        def page(kind, since, until, offset, api_key):
+            pages.append((kind, offset))
+            if kind == "earnings_summary":
+                data = [{
+                    "event_id": f"earnings-{i}",
+                    "event_type": kind, "event_date": "2026-11-13",
+                    "sec_code": candidates[(1600 + i) % len(candidates)].code,
+                    "title": "第２四半期（中間期）決算短信",
+                    "metadata": {"is_earnings": True, "dividend_direction": None},
+                } for i in range(offset, min(offset + 100, earnings_total))]
+                total = earnings_total
+            else:
+                total = len(records.get(kind, []))
+                data = records.get(kind, [])[offset:offset + 100]
+            next_offset = offset + 100 if offset + 100 < total else None
+            return data, total, next_offset
+
+        args = fetch_forecasts.argparse.Namespace(
+            list_unconfirmed=False, dry_run=dry_run, today=today or self.TODAY,
+            fiscal_dividends=Path("unused-fiscal"), calendar_dividends=Path("unused-calendar"),
+            prices_url="unused", state=Path("unused-state"), edinet_dir=Path("unused-edinet"),
+            feed_from_network=False, print_limit=0,
+        )
+        fetch = fetch or mock.Mock(side_effect=lambda *_: ({"forecastDividend": 97.5}, None))
+        seed = mock.Mock()
+        seed.open.side_effect = FileNotFoundError
+        output = io.StringIO()
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(mock.patch.dict(os.environ, {
+                "EDINETDB_API_KEY": "test-key", "DVC_FORECAST_DAILY": str(daily),
+                "DVC_EVENT_SLOTS": str(slots), "PRIORITY_CODES": "",
+            }))
+            for name, value in {
+                "parse_args": args, "load_dividend_codes": [c.code for c in candidates],
+                "load_dividend_yields": {}, "load_state": state,
+                "read_priority_codes": {}, "build_candidates": (candidates, 0),
+            }.items():
+                stack.enter_context(mock.patch.object(fetch_forecasts, name, return_value=value))
+            for name in ("write_state", "save_split_event_feed"):
+                stack.enter_context(mock.patch.object(fetch_forecasts, name))
+            stack.enter_context(mock.patch.object(fetch_forecasts, "DEFAULT_RECOVERY_SEED", seed))
+            page_mock = stack.enter_context(mock.patch.object(
+                fetch_forecasts, "fetch_event_page", side_effect=page))
+            stack.enter_context(mock.patch.object(fetch_forecasts, "fetch_one", fetch))
+            stack.enter_context(contextlib.redirect_stdout(output))
+            stack.enter_context(contextlib.redirect_stderr(output))
+            fetch_forecasts.main()
+        return fetch, pages, output.getvalue(), seed, page_mock
+
+    def record(self, code, kind):
+        return {"sec_code": code, "event_type": kind, "event_date": "2026-11-13",
+                "metadata": {"is_earnings": True}}
+
+    def test_title_and_fiscal_month_classification_and_old_state(self):
+        c = candidate("1234")  # 12月決算
+        for title, day, expected in (
+            ("中間決算短信", "2026-02-01", "B"),
+            ("第２四半期決算短信", "2026-02-01", "B"),
+            ("決算短信", "2026-08-01", "A"),
+            ("", "2026-01-01", "A"),
+            ("", "2026-02-01", "A"),
+            ("", "2026-03-01", "A"),
+            ("", "2026-04-01", "B"),
+            ("", "2026-11-01", "B"),
+        ):
+            with self.subTest(title=title, day=day):
+                e = disclosure(c.code, "earnings_summary", day, title=title)
+                self.assertEqual(fetch_forecasts.event_tier(e, c), expected)
+                raw = fetch_forecasts.pending_record(e, self.TODAY)
+                self.assertEqual(raw["title"], title)
+                if not title:
+                    raw.pop("title")
+                restored = fetch_forecasts.parse_pending_event(e.event_id, raw)
+                self.assertIsNotNone(restored)
+                self.assertEqual(fetch_forecasts.event_tier(restored.event, c), expected)
+        e = disclosure("1234", "earnings_summary", "2026-11-01", title="")
+        self.assertEqual(fetch_forecasts.event_tier(e), "A")
+        unknown = fetch_forecasts.Candidate("1234", 0, "E00001", 0, None, None, None)
+        self.assertEqual(fetch_forecasts.event_tier(e, unknown), "A")
+        for kind in ("dividend_revision", "stock_split", "reverse_split"):
+            self.assertEqual(fetch_forecasts.event_tier(
+                disclosure("1234", kind, "2026-11-01", title="中間")), "A")
+
+    def test_company_uses_highest_tier_and_keeps_all_event_ids(self):
+        candidates = self.candidates(3)
+        a = self.event(candidates[0].code, event_id="new-a")
+        b = self.event(candidates[0].code, "B", event_id="old-b")
+        other = self.event(candidates[1].code, "B")
+        tiers = {}
+        picks, ids, _ = fetch_forecasts.plan_event_slots(
+            [b, other, a], candidates, {}, 1, {b.event_id},
+            recovery={candidates[0].code: {"since": "2026-10-28", "attempts": 0}},
+            tiers_by_code=tiers,
+        )
+        self.assertEqual([c.code for c in picks], [candidates[0].code])
+        self.assertEqual(tiers, {candidates[0].code: "A"})
+        self.assertEqual(set(ids[candidates[0].code]), {a.event_id, b.event_id})
+
+    def test_november_14_busy_day_reserves_rotation_and_stops_at_one_page(self):
+        candidates = self.candidates()
+        state = self.state(candidates)
+        for i in range(1332):
+            e = self.event(candidates[i].code, "A" if i < 300 else "B",
+                           event_id=f"pending-{i}")
+            raw = self.add_pending(state, e)
+            if i % 2 == 0:
+                raw.pop("title")  # 古い中間短信も3月決算・11月開示でB段になる。
+        records = {
+            kind: [self.record(c.code, kind) for c in candidates[start:start + count]]
+            for kind, start, count in (
+                ("dividend_revision", 1332, 80),
+                ("stock_split", 1412, 5), ("reverse_split", 1417, 2),
+            )
+        }
+        fetch, pages, log, _, _ = self.run_main(
+            candidates, state, records=records, earnings_total=1607)
+        self.assertEqual([p for kind, p in pages if kind == "earnings_summary"], [0])
+        self.assertEqual(len(pages), 4)
+        self.assertEqual(fetch.call_count, 91)
+        self.assertIn("A段=81 取り直し=0 B段=0 巡回=10", log)
+        self.assertIn("問い合わせ=4 上限=81 予想取得=91 合計=95", log)
+        self.assertIn("1507件は上限1ページで打ち切り", log)
+        self.assertIn("取り直し待ち: A段=387 B段=", log)
+        codes = [call.args[0].code for call in fetch.call_args_list]
+        self.assertEqual(len(codes), len(set(codes)))
+        self.assertNotIn("中間期", log)
+
+    def test_quiet_day_caps_b_at_twenty_and_uses_rotation(self):
+        candidates = self.candidates()
+        state = self.state(candidates)
+        for i in range(100):
+            self.add_pending(state, self.event(candidates[i].code, "B"))
+        records = {"dividend_revision": [self.record(candidates[500].code, "dividend_revision")]}
+        fetch, pages, log, _, _ = self.run_main(
+            candidates, state, records=records, earnings_total=150)
+        self.assertEqual(len(pages), 5)  # 他3種別 + 短信2ページ（続きなし）。
+        self.assertIn("A段=1 取り直し=0 B段=20 巡回=69", log)
+        self.assertEqual(fetch.call_count + len(pages), 95)
+
+    def test_budget_matrix_and_daily_company_uniqueness(self):
+        candidates = self.candidates()
+        for a in (0, 30, 200):
+            for b in (0, 50, 1000):
+                for recovery_count in (0, 100):
+                    for total in (0, 150, 1607):
+                        with self.subTest(a=a, b=b, recovery=recovery_count, total=total):
+                            state = self.state(candidates)
+                            for i in range(a + b):
+                                self.add_pending(state, self.event(
+                                    candidates[i].code, "A" if i < a else "B"))
+                            state["events"]["recovery"] = {
+                                c.code: {"since": "2026-10-28", "attempts": 0}
+                                for c in candidates[1200:1200 + recovery_count]
+                            }
+                            fetch, pages, log, _, _ = self.run_main(
+                                candidates, state, earnings_total=total)
+                            codes = [call.args[0].code for call in fetch.call_args_list]
+                            self.assertLessEqual(len(pages) + len(codes), 95)
+                            self.assertEqual(len(codes), len(set(codes)))
+                            line = next(line for line in log.splitlines()
+                                        if line.startswith("イベント枠の内訳:"))
+                            self.assertGreaterEqual(int(line.split("巡回=")[1].split()[0]), 10)
+                            self.assertLessEqual(int(line.split("取り直し=")[1].split()[0]), 40)
+                            self.assertLessEqual(int(line.split("B段=")[1].split()[0]), 20)
+
+    def test_unattempted_expiration_maps_codes_and_keeps_earliest_since(self):
+        candidates = self.candidates(4)
+        state = self.state(candidates)
+        e = disclosure(candidates[0].code + "0", "dividend_revision", "2026-11-01",
+                       event_id="a", title="")
+        b = disclosure("", "earnings_summary", "2026-10-30",
+                       event_id="b", edinet_code=candidates[0].edinet_code, title="中間")
+        for event in (e, b, self.event(candidates[1].code, "B"),
+                      self.event(candidates[2].code, "A"), self.event("9999")):
+            self.add_pending(state, event, old=True,
+                             attempts=int(event.sec_code == candidates[2].code))
+        counts = {"A": 0, "B": 0, "zero": 0, "b_zero": 0}
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            pending = fetch_forecasts.load_pending_events(
+                state["events"], self.TODAY, candidates, counts)
+        self.assertFalse(pending)
+        self.assertEqual(counts, {"A": 3, "B": 2, "zero": 4, "b_zero": 2})
+        self.assertEqual(state["events"]["recovery"], {
+            candidates[0].code: {"since": "2026-10-30", "attempts": 0},
+            candidates[1].code: {"since": "2026-11-12", "attempts": 0},
+        })
+        self.assertIn("・B段", output.getvalue())
+        state["events"]["recovery"]["9999"] = {"since": "2026-10-28", "attempts": 0}
+        fetch_forecasts.prune_recovery(state["events"], candidates, {
+            candidates[0].code: fetch_forecasts.date(2026, 10, 31),
+            candidates[1].code: fetch_forecasts.date(2026, 11, 12),
+        })
+        self.assertEqual(set(state["events"]["recovery"]), {candidates[1].code})
+
+    def test_seed_is_idempotent_and_validates_without_disclosing_contents(self):
+        candidates = self.candidates(3)
+        candidates[2] = candidate(candidates[2].code, last_fetched="2026-10-29")
+        block = fetch_forecasts.empty_event_state()
+        path = mock.Mock()
+        def seed(value):
+            path.open.side_effect = lambda **_: io.StringIO(value)
+            fetch_forecasts.load_recovery_seed(block, candidates, path)
+        good = json.dumps({"schemaVersion": 1, "baseDate": "2026-10-28",
+                           "codes": [c.code for c in candidates] + ["9999", 123]})
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            seed(good)
+            before = json.loads(json.dumps(block))
+            seed(good)
+            self.assertEqual(block, before)
+            self.assertEqual(set(block["recovery"]), {c.code for c in candidates[:2]})
+            for value in ("{private-url", "[]", '{"schemaVersion": 2}',
+                          '{"schemaVersion": 1, "baseDate": "2026-02-30", "codes": []}',
+                          '{"schemaVersion": 1, "baseDate": "20261028", "codes": []}',
+                          '{"schemaVersion": 1, "baseDate": "2026-10-28", "codes": {}}'):
+                seed(value)
+                self.assertEqual(block, before)
+        self.assertNotIn("private-url", output.getvalue())
+        path.open.side_effect = FileNotFoundError
+        fetch_forecasts.load_recovery_seed(block, candidates, path)
+
+    def test_recovery_priority_failure_limit_and_success_cleanup(self):
+        candidates = self.candidates(200)
+        state = self.state(candidates)
+        for i in range(80):
+            self.add_pending(state, self.event(candidates[i].code, "B"))
+        state["events"]["recovery"] = {
+            c.code: {"since": "2026-10-28", "attempts": 0} for c in candidates[:100]
+        }
+        fetch, _, log, _, _ = self.run_main(candidates, state)
+        self.assertIn("A段=0 取り直し=40 B段=0", log)
+        self.assertEqual(fetch.call_count, len({c.args[0].code for c in fetch.call_args_list}))
+        fetched = {call.args[0].code for call in fetch.call_args_list}
+        self.assertFalse(fetched & state["events"]["recovery"].keys())
+
+        for attempts in (0, 2):
+            state = self.state(candidates)
+            state["events"]["recovery"][candidates[0].code] = {
+                "since": "2026-10-28", "attempts": attempts}
+            failed = mock.Mock(side_effect=fetch_forecasts.FetchError("failed", kind="network"))
+            # 失敗1件だけで止め、実際に呼んだ社数のログも点検。
+            fetch, _, log, _, _ = self.run_main(
+                candidates, state, fetch=failed, daily=5)
+            # 予算5では巡回最低10を残せないので、イベント枠には入らない。
+            self.assertEqual(state["events"]["recovery"][candidates[0].code]["attempts"], attempts)
+            state = self.state(candidates)
+            state["events"]["recovery"][candidates[0].code] = {
+                "since": "2026-10-28", "attempts": attempts}
+            calls = 0
+            def fail_first(c, key):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise fetch_forecasts.FetchError("failed", kind="http", status=429, remaining=0)
+                return {"forecastDividend": 97.5}, None
+            _, _, log, _, _ = self.run_main(
+                candidates, state, fetch=mock.Mock(side_effect=fail_first))
+            if attempts == 2:
+                # 消さずに印を残す（消すと種のファイルから毎回また足されるため）。
+                self.assertTrue(state["events"]["recovery"][candidates[0].code]["gaveUp"])
+                self.assertIn("取り直しを諦めました: " + candidates[0].code, log)
+                with tempfile.TemporaryDirectory() as tmp:
+                    seed = Path(tmp) / "seed.json"
+                    seed.write_text(json.dumps({"schemaVersion": 1, "baseDate": "2026-10-28",
+                                                "codes": [candidates[0].code]}), encoding="utf-8")
+                    fetch_forecasts.load_recovery_seed(state["events"], candidates, seed)
+                self.assertTrue(state["events"]["recovery"][candidates[0].code]["gaveUp"])
+                picks, _, _ = fetch_forecasts.plan_event_slots(
+                    [], candidates, {}, 50, set(), recovery=state["events"]["recovery"])
+                self.assertNotIn(candidates[0].code, [c.code for c in picks])
+            else:
+                self.assertEqual(state["events"]["recovery"][candidates[0].code]["attempts"], 1)
+                # 同日再実行ではイベント枠からも巡回からも外れる。
+                repeated, _, _, _, _ = self.run_main(candidates, state)
+                self.assertNotIn(candidates[0].code,
+                                 [call.args[0].code for call in repeated.call_args_list])
+            self.assertIn("予想取得=1 合計=5", log)
+
+    def test_rotation_clears_only_unconfirmed_b_pending(self):
+        candidates = self.candidates(100)
+        state = self.state(candidates)
+        b = self.event(candidates[0].code, "B")
+        confirming = self.event(candidates[1].code, "B")
+        future = self.event(candidates[2].code, "B", day="2026-11-15")
+        a = self.event(candidates[3].code)
+        for event in (b, confirming, future, a):
+            raw = self.add_pending(state, event)
+            if event == confirming:
+                raw["confirmationStartedAt"] = self.TODAY.isoformat()
+        excluded = fetch_forecasts.pending_candidate_codes(state["events"], candidates, self.TODAY)
+        self.assertEqual(excluded, {candidates[3].code})
+        # 問い合わせ4・予算14でイベント上限0、巡回10件。
+        fetch, _, _, _, _ = self.run_main(candidates, state, daily=14)
+        self.assertNotIn(b.event_id, state["events"]["pending"])
+        self.assertIn(b.event_id, state["events"]["seen"])
+        for event in (confirming, future, a):
+            self.assertIn(event.event_id, state["events"]["pending"])
+        self.assertNotIn(candidates[3].code, [call.args[0].code for call in fetch.call_args_list])
+
+    def test_b_waits_one_business_day_then_finishes_in_one_fetch(self):
+        candidates = self.candidates(100)
+        friday = fetch_forecasts.date(2026, 11, 13)
+        monday = fetch_forecasts.date(2026, 11, 16)
+        b = self.event(candidates[1].code, "B", day=friday.isoformat())
+        # 当日（金）と、土日をはさんだ土曜は、B段に取らない。
+        for today in (friday, fetch_forecasts.date(2026, 11, 14)):
+            self.assertFalse(fetch_forecasts.b_tier_ready(b, today))
+            picks, _, _ = fetch_forecasts.plan_event_slots(
+                [b], candidates, {}, 50, {b.event_id}, today=today)
+            self.assertNotIn(candidates[1].code, [c.code for c in picks])
+        # 巡回で当日に取れても、反映前の値かもしれないので片づけない。
+        block = fetch_forecasts.empty_event_state()
+        block["pending"][b.event_id] = fetch_forecasts.pending_record(b, friday)
+        fetch_forecasts.clear_rotated_b_pending(block, candidates[1], friday)
+        self.assertIn(b.event_id, block["pending"])
+        # 翌営業日（月）なら枠に入り、予想が変わらなくても1回で片づく。
+        self.assertTrue(fetch_forecasts.b_tier_ready(b, monday))
+        state = self.state(candidates)
+        state["events"]["pending"][b.event_id] = fetch_forecasts.pending_record(b, friday)
+        unchanged = mock.Mock(side_effect=lambda *_: ({"forecastDividend": 74}, None))
+        fetch, _, _, _, _ = self.run_main(candidates, state, fetch=unchanged, today=monday)
+        self.assertEqual([call.args[0].code for call in fetch.call_args_list].count(candidates[1].code), 1)
+        self.assertIn(b.event_id, state["events"]["seen"])
+        self.assertNotIn(b.event_id, state["events"]["pending"])
+
+    def test_b_unchanged_finishes_but_a_still_confirms_and_no_same_day_refetch(self):
+        candidates = self.candidates(100)
+        state = self.state(candidates)
+        a = self.event(candidates[0].code)
+        b = self.event(candidates[1].code, "B")
+        for e in (a, b):
+            self.add_pending(state, e)
+        unchanged = mock.Mock(side_effect=lambda *_: ({"forecastDividend": 74}, None))
+        fetch, _, _, _, _ = self.run_main(candidates, state, fetch=unchanged)
+        self.assertEqual(state["stocks"][candidates[1].code]["eventConfirmation"]
+                         ["events"][b.event_id]["status"], "unchanged")
+        self.assertIn(b.event_id, state["events"]["seen"])
+        self.assertNotIn(b.event_id, state["events"]["pending"])
+        self.assertIn("confirmationStartedAt", state["events"]["pending"][a.event_id])
+        self.assertEqual([call.args[0].code for call in fetch.call_args_list].count(candidates[1].code), 1)
+        # 実際の次回起動と同じくlast_fetchedをstateから組み直す。
+        refreshed = [
+            fetch_forecasts.Candidate(c.code, c.fiscal_month, c.edinet_code, 0, None, None,
+                fetch_forecasts.parse_fetched_date(state["stocks"][c.code]))
+            for c in candidates
+        ]
+        fetch, _, _, _, _ = self.run_main(refreshed, state)
+        self.assertFalse({candidates[0].code, candidates[1].code}
+                         & {call.args[0].code for call in fetch.call_args_list})
+
+    def test_query_exception_counts_sent_requests_and_preserves_prior_events(self):
+        candidates = self.candidates(200)
+        state = self.state(candidates)
+        records = [self.record(candidates[0].code, "dividend_revision")]
+        calls = 0
+        def page(*args):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return records, 1, None
+            raise OSError("private-url test-key private-title")
+        output = io.StringIO()
+        with mock.patch.dict(os.environ, {"DVC_FORECAST_DAILY": "95", "DVC_EVENT_SLOTS": "90"}), \
+                mock.patch.object(fetch_forecasts, "fetch_event_page", side_effect=page), \
+                contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            picks, _, used = fetch_forecasts.run_event_stage(state, candidates, self.TODAY, "key")
+        self.assertEqual(used, calls)
+        self.assertEqual(used, 4)
+        self.assertEqual([c.code for c in picks], [candidates[0].code])
+        self.assertNotIn("private-", output.getvalue())
+        self.assertNotIn("test-key", output.getvalue())
+
+        # collect_events自体が途中で落ちた場合にも、共有カウンターは残る。
+        def broken_collect(*args, request_counter, **kwargs):
+            request_counter[0] = 7
+            raise OSError("private-url")
+        with mock.patch.object(fetch_forecasts, "collect_events", side_effect=broken_collect), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            _, _, used = fetch_forecasts.run_event_stage(state, candidates, self.TODAY, "key")
+        self.assertEqual(used, 7)
+
+    def test_extra_page_requires_ten_free_a_slots_after_its_request(self):
+        candidates = self.candidates()
+        for a, expected_pages in ((70, 2), (71, 1)):
+            state = self.state(candidates)
+            for c in candidates[:a]:
+                self.add_pending(state, self.event(c.code))
+            _, pages, _, _, _ = self.run_main(candidates, state, earnings_total=1607)
+            self.assertEqual(sum(kind == "earnings_summary" for kind, _ in pages), expected_pages)
+
+    def test_new_title_updates_legacy_pending_and_final_expirations_are_logged(self):
+        candidates = self.candidates(100)
+        state = self.state(candidates)
+        old = disclosure(candidates[0].code, "earnings_summary", "2026-11-13", title="")
+        raw = self.add_pending(state, old)
+        raw.pop("title")
+        fresh = disclosure(candidates[0].code, "earnings_summary", "2026-11-13", title="決算短信")
+        fetch_forecasts.add_pending_events(state["events"], [fresh], candidates, self.TODAY)
+        self.assertEqual(state["events"]["pending"][old.event_id]["title"], "決算短信")
+        self.assertEqual(fetch_forecasts.pending_candidate_codes(
+            state["events"], candidates, self.TODAY), {candidates[0].code})
+
+        # 確認3回目の失敗で、終了時の保存処理が外した件数も集計する。
+        raw["confirmationStartedAt"] = "2026-11-13"
+        raw["confirmationAttempts"] = 2
+        raw["attempts"] = 2
+        failed = mock.Mock(side_effect=fetch_forecasts.FetchError(
+            "failed", kind="http", status=429, remaining=0))
+        _, _, log, _, _ = self.run_main(candidates, state, fetch=failed)
+        self.assertIn("期限で脱落: A段=1 B段=0（うち試行0回 0、B段の試行0回 0）", log)
+        self.assertNotIn(old.event_id, state["events"]["pending"])
+        self.assertFalse(state["events"]["recovery"])
+
+    def test_dry_run_and_zero_slots_do_not_read_seed_or_call_event_api(self):
+        candidates = self.candidates(100)
+        state = self.state(candidates)
+        before = json.loads(json.dumps(state))
+        fetch, pages, _, seed, _ = self.run_main(candidates, state, dry_run=True)
+        self.assertFalse(pages)
+        fetch.assert_not_called()
+        seed.open.assert_not_called()
+        self.assertEqual(state, before)
+        _, pages, _, seed, _ = self.run_main(candidates, state, slots=0)
+        self.assertFalse(pages)
+        seed.open.assert_not_called()
 
 
 if __name__ == "__main__":

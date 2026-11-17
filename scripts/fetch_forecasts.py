@@ -71,14 +71,20 @@ EVENT_PAGE_SIZE = 100
 # 呼ばず、従来どおりの巡回だけになる（不具合時の緊急停止スイッチ。
 # DVC_EVENT_SLOTS で上書きできる）。
 EVENT_SLOT_DEFAULT = 20
+EVENT_MIN_ROTATION = 10
+EVENT_B_DAILY = 20
+EVENT_RECOVERY_DAILY = 40
+EARNINGS_MIN_PAGES = 1
+EARNINGS_MAX_PAGES = 10
+DEFAULT_RECOVERY_SEED = REPOSITORY_ROOT / "data" / "forecast_recovery_seed.json"
 # 取りに行く種別と、1日に許すページ数（＝リクエスト数）の上限。
 # 配当修正は繁忙期でも1日31件、分割・併合は年168件しかないので取り切れる。
-# 決算短信は繁忙期に1日780件あり、必ず打ち切られる（打ち切り件数はログに出す）。
+# 決算短信はA段の空きに応じて1ページずつ追加する。
 EVENT_SOURCES: tuple[tuple[str, int], ...] = (
     ("dividend_revision", 2),
     ("stock_split", 1),
     ("reverse_split", 1),
-    ("earnings_summary", 2),
+    ("earnings_summary", EARNINGS_MAX_PAGES),
 )
 # イベント枠の中の並び順。小さいほど先に取る。
 EVENT_TYPE_RANK = {
@@ -154,6 +160,8 @@ class DisclosureEvent:
     raw: dict[str, Any] | None = field(
         default=None, compare=False, hash=False, repr=False
     )
+
+    title: str = ""
 
     @property
     def type_rank(self) -> int:
@@ -250,6 +258,7 @@ def empty_event_state() -> dict[str, Any]:
         "lastEventDate": None,
         "seen": {},
         "pending": {},
+        "recovery": {},
     }
 
 
@@ -282,6 +291,8 @@ def event_state(state: dict[str, Any]) -> dict[str, Any]:
         block["seen"] = {}
     if not isinstance(block.get("pending"), dict):
         block["pending"] = {}
+    if not isinstance(block.get("recovery"), dict):
+        block["recovery"] = {}
     return block
 
 
@@ -870,6 +881,7 @@ def parse_event_record(record: Any) -> DisclosureEvent | None:
         is_earnings=bool(metadata.get("is_earnings")),
         has_dividend_signal=direction not in EVENT_NO_DIVIDEND_SIGNAL,
         raw=record,
+        title=record.get("title") if isinstance(record.get("title"), str) else "",
     )
 
 
@@ -930,62 +942,72 @@ def fetch_event_page(
     return data, total, next_offset
 
 
+def event_capacity(requests_used: int, slots: int | None = None) -> int:
+    """問い合わせを差し引き、巡回の最低件数を残す。"""
+    return max(0, min(
+        event_slot_size() if slots is None else slots,
+        env_daily_limit() - requests_used - EVENT_MIN_ROTATION,
+    ))
+
+
 def collect_events(
-    since: date, until: date, api_key: str
+    since: date, until: date, api_key: str, *,
+    candidates: list[Candidate] | None = None,
+    pending_events: list[DisclosureEvent] | None = None,
+    seen: dict[str, Any] | None = None,
+    pending_ids: set[str] | None = None,
+    request_counter: list[int] | None = None,
 ) -> tuple[list[DisclosureEvent], int, int, int]:
-    """全種別のイベントを集める。
-
-    返り値は (events, 送ったリクエスト数, 打ち切り件数, 成功したページ数)。
-    リクエスト数と成功数を分けているのは、用途が違うため:
-      - リクエスト数 … 1日100件の枠から引く（失敗した分も枠は減っている）
-      - 成功数       … 「この期間は確かに見た」と言えるかの判断に使う
-
-    種別ごとに独立して取る。1種別が失敗しても他は使える（配当修正だけ
-    取れれば、東計電算のようなケース以外はだいたい拾える）。
-    """
+    """A段の空きがある間だけ短信のページを追加する。送信前に回数を残す。"""
     collected: list[DisclosureEvent] = []
-    requests_used = 0
+    counter = request_counter if request_counter is not None else [0]
     ok_pages = 0
     truncated_total = 0
-    for event_type, max_pages in EVENT_SOURCES:
+    for event_type, source_max in EVENT_SOURCES:
+        max_pages = EARNINGS_MAX_PAGES if event_type == "earnings_summary" else source_max
         offset = 0
         fetched = 0
+        pages = 0
         reported_total: int | None = None
-        try:
-            for _ in range(max_pages):
-                # 送った時点で数える。応答が壊れていてもサーバー側の枠は
-                # 減っているので、成功した分だけ数えると1日100件を超える。
-                requests_used += 1
+        while pages < max_pages and counter[0] < env_daily_limit():
+            if event_type == "earnings_summary" and pages >= EARNINGS_MIN_PAGES:
+                # 枠に入りうるA段を会社単位で数える。pendingも同じ判定に通す。
+                _, _, estimate = plan_event_slots(
+                    (pending_events or []) + collected, candidates or [],
+                    seen or {}, 0, pending_ids,
+                )
+                if event_capacity(counter[0] + 1) - estimate["a_companies"] < 10:
+                    break
+            counter[0] += 1
+            pages += 1
+            try:
                 data, total, next_offset = fetch_event_page(
                     event_type, since, until, offset, api_key
                 )
-                ok_pages += 1
-                fetched += len(data)
-                if total is not None:
-                    reported_total = total
-                for record in data:
-                    parsed = parse_event_record(record)
-                    if parsed is not None:
-                        collected.append(parsed)
-                if not data or next_offset is None or next_offset <= offset:
-                    break
-                offset = next_offset
-        except FetchError as error:
-            # イベントが取れないのは「今日は近似日方式に戻る」だけの話で、
-            # 予想取得そのものは止めない。
-            print(f"イベント取得失敗（続行）: {error}", file=sys.stderr)
-            continue
-
+            except (OSError, ValueError, RuntimeError):
+                # 例外の本文にはURLや題名が含まれうるので公開ログへ出さない。
+                print("イベント取得失敗（続行）: 1件", file=sys.stderr)
+                break
+            ok_pages += 1
+            fetched += len(data)
+            if total is not None:
+                reported_total = total
+            for record in data:
+                parsed = parse_event_record(record)
+                if parsed is not None:
+                    collected.append(parsed)
+            if not data or next_offset is None or next_offset <= offset:
+                break
+            offset = next_offset
         left = 0 if reported_total is None else max(reported_total - fetched, 0)
         truncated_total += left
         summary = f"イベント取得: {event_type} {fetched}件"
         if reported_total is not None:
             summary += f" / 全{reported_total}件"
         if left:
-            # 黙って切り捨てない。繁忙期の決算短信はここで必ず削れる。
-            summary += f"（{left}件は上限{max_pages}ページで打ち切り）"
+            summary += f"（{left}件は上限{pages}ページで打ち切り）"
         print(summary)
-    return collected, requests_used, truncated_total, ok_pages
+    return collected, counter[0], truncated_total, ok_pages
 
 
 def index_candidates(
@@ -1027,6 +1049,7 @@ def pending_record(
         "edinetCode": event.edinet_code,
         "isEarnings": event.is_earnings,
         "hasDividendSignal": event.has_dividend_signal,
+        "title": event.title,
         "firstSeenAt": today.isoformat(),
         "attempts": attempts,
     }
@@ -1063,6 +1086,7 @@ def parse_pending_event(event_id: str, raw: Any) -> PendingEvent | None:
             edinet_code=edinet_code,
             is_earnings=bool(raw.get("isEarnings")),
             has_dividend_signal=bool(raw.get("hasDividendSignal")),
+            title=raw.get("title") if isinstance(raw.get("title"), str) else "",
         ),
         first_seen_at=first_seen_at,
         attempts=attempts,
@@ -1082,6 +1106,7 @@ def confirmation_expired(raw: dict[str, Any], today: date) -> bool:
 def record_event_result(
     state: dict[str, Any], code: str, parsed: dict[str, Any],
     triggers: dict[str, str], today: date,
+    tiers: dict[str, str] | None = None,
 ) -> None:
     """値の変化は更新の代理指標。開示内容との一致を保証するものではない。"""
     previous = state["stocks"].get(code, {})
@@ -1095,10 +1120,12 @@ def record_event_result(
     statuses = {}
     for event_id, day in triggers.items():
         raw = block["pending"][event_id]
-        if not changed:
+        tier = (tiers or {}).get(event_id, "A")
+        if not changed and tier == "A":
             raw.setdefault("confirmationStartedAt", today.isoformat())
             raw.setdefault("confirmationAttempts", 1)
         status = "changed" if changed else (
+            "unchanged" if tier == "B" else
             "expired" if confirmation_expired(raw, today) else "pending"
         )
         statuses[event_id] = {"eventDate": day, "status": status}
@@ -1129,39 +1156,146 @@ def list_unconfirmed(state: dict[str, Any]) -> None:
     print(",".join(sorted(set(codes))))
 
 
+def b_tier_ready(event: DisclosureEvent, today: date) -> bool:
+    """B段は開示日の翌営業日（土日だけを除く）以降に取る。
+
+    edinetdb は平日の日次更新で前営業日分を反映するため、開示当日に取ると
+    反映前の古い予想で片づけてしまう。B段は確認の再取得をしないので、
+    1営業日待ってから1回で片づける。祝日は数えていない（必要なら後で足す）。
+    """
+    ready = event.event_date + timedelta(days=1)
+    while ready.weekday() >= 5:
+        ready += timedelta(days=1)
+    return ready <= today
+
+
+def event_tier(event: DisclosureEvent, candidate: Candidate | None = None) -> str:
+    """題名を優先し、古いpendingだけ決算月で補う。決められなければA段。"""
+    if event.event_type != "earnings_summary":
+        return "A"
+    if event.title.strip():
+        return "B" if "四半期" in event.title or "中間" in event.title else "A"
+    if candidate is not None and candidate.fiscal_month in range(1, 13):
+        return "A" if (event.event_date.month - candidate.fiscal_month) % 12 in (1, 2, 3) else "B"
+    return "A"
+
+
+def prune_recovery(
+    block: dict[str, Any], candidates: list[Candidate],
+    fetched_dates: dict[str, date | None] | None = None,
+) -> None:
+    recovery = block.setdefault("recovery", {})
+    by_code, _ = index_candidates(candidates)
+    for code, raw in list(recovery.items()):
+        candidate = by_code.get(code)
+        since = iso_date_text(raw.get("since")) if isinstance(raw, dict) else None
+        attempts = raw.get("attempts", 0) if isinstance(raw, dict) else 0
+        last = (fetched_dates or {}).get(code, candidate.last_fetched if candidate else None)
+        if (candidate is None or since is None
+                or isinstance(attempts, bool) or not isinstance(attempts, int)
+                or attempts < 0
+                or last is not None and last > date.fromisoformat(since)):
+            del recovery[code]
+
+
+def load_recovery_seed(
+    block: dict[str, Any], candidates: list[Candidate], path: Path | None = None,
+) -> None:
+    path = DEFAULT_RECOVERY_SEED if path is None else path
+    try:
+        with path.open(encoding="utf-8") as source:
+            seed = json.load(source)
+    except FileNotFoundError:
+        return
+    except (OSError, ValueError, UnicodeError):
+        print("取り直し種を無視しました: 1件")
+        return
+    if (not isinstance(seed, dict) or type(seed.get("schemaVersion")) is not int
+            or seed["schemaVersion"] != 1
+            or not isinstance(seed.get("baseDate"), str)
+            or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", seed["baseDate"])
+            or iso_date_text(seed["baseDate"]) != seed["baseDate"]
+            or not isinstance(seed.get("codes"), list)):
+        print("取り直し種を無視しました: 1件")
+        return
+    since = date.fromisoformat(seed["baseDate"])
+    by_code, _ = index_candidates(candidates)
+    recovery = block.setdefault("recovery", {})
+    invalid = 0
+    for code in seed["codes"]:
+        if not isinstance(code, str):
+            invalid += 1
+            continue
+        candidate = by_code.get(code)
+        if (candidate is not None and code not in recovery
+                and (candidate.last_fetched is None or candidate.last_fetched <= since)):
+            recovery[code] = {"since": since.isoformat(), "attempts": 0}
+    if invalid:
+        print(f"取り直し種を無視しました: {invalid}件")
+
+
 def load_pending_events(
-    block: dict[str, Any], today: date
+    block: dict[str, Any], today: date, candidates: list[Candidate] | None = None,
+    expired_counts: dict[str, int] | None = None,
 ) -> dict[str, PendingEvent]:
-    """期限切れの持ち越しをstateから外し、外した理由をログに出す。"""
+    """期限切れを外し、未試行の会社を取り直し名簿へ移す。"""
     pending = block["pending"]
     seen = block["seen"]
+    recovery = block.setdefault("recovery", {})
+    by_code, by_edinet = index_candidates(candidates or [])
     result: dict[str, PendingEvent] = {}
     for event_id, raw in list(pending.items()):
         parsed = parse_pending_event(event_id, raw)
         if parsed is None:
-            print(f"イベント持ち越しを破棄しました（状態が不正: {event_id}）")
+            print("イベント持ち越しを破棄しました: 1件")
             del pending[event_id]
             continue
         if event_id in seen:
-            # 成功記録が残っている方を正とする。古いstateの重複を掃除する。
             del pending[event_id]
             continue
+        candidate = match_candidate(parsed.event, by_code, by_edinet)
+        tier = event_tier(parsed.event, candidate)
         age = (today - parsed.first_seen_at).days
-        if (
-            parsed.attempts >= EVENT_PENDING_MAX_ATTEMPTS
-            or age > EVENT_PENDING_MAX_DAYS
-            or confirmation_expired(raw, today)
-        ):
+        if (parsed.attempts >= EVENT_PENDING_MAX_ATTEMPTS
+                or age > EVENT_PENDING_MAX_DAYS
+                or confirmation_expired(raw, today)):
             print(
                 "イベント持ち越しを諦めました: "
-                f"{parsed.event.sec_code or parsed.event.edinet_code} "
-                f"（試行{parsed.attempts}回・{max(age, 0)}日経過）"
+                f"{candidate.code if candidate else normalize_code(parsed.event.sec_code)} "
+                f"（試行{parsed.attempts}回・{max(age, 0)}日経過）・{tier}段"
             )
+            if expired_counts is not None:
+                expired_counts[tier] += 1
+                if parsed.attempts == 0:
+                    expired_counts["zero"] += 1
+                    expired_counts["b_zero"] += int(tier == "B")
+            if parsed.attempts == 0 and candidate is not None:
+                since = parsed.event.event_date.isoformat()
+                previous = recovery.get(candidate.code)
+                if previous is None:
+                    recovery[candidate.code] = {"since": since, "attempts": 0}
+                elif since < previous["since"]:
+                    previous["since"] = since
             seen[event_id] = parsed.event.event_date.isoformat()
             del pending[event_id]
             continue
         result[event_id] = parsed
     return result
+
+
+def clear_rotated_b_pending(
+    block: dict[str, Any], candidate: Candidate, today: date,
+) -> None:
+    """巡回成功で、確認中でないB段の開示だけを片づける。"""
+    by_code, by_edinet = index_candidates([candidate])
+    for event_id, raw in list(block["pending"].items()):
+        item = parse_pending_event(event_id, raw)
+        if (item is not None and not raw.get("confirmationStartedAt")
+                and b_tier_ready(item.event, today)
+                and match_candidate(item.event, by_code, by_edinet) is not None
+                and event_tier(item.event, candidate) == "B"):
+            block["seen"][event_id] = item.event.event_date.isoformat()
+            del block["pending"][event_id]
 
 
 def add_pending_events(
@@ -1175,7 +1309,12 @@ def add_pending_events(
     seen = block["seen"]
     by_code, by_edinet = index_candidates(candidates)
     for event in events:
-        if event.event_id in seen or event.event_id in pending:
+        if event.event_id in pending:
+            # 新しいAPI応答の題名で、旧stateの欠落だけでなく訂正も補う。
+            if event.title:
+                pending[event.event_id]["title"] = event.title
+            continue
+        if event.event_id in seen:
             continue
         if event.event_type == "earnings_summary" and not event.is_earnings:
             continue
@@ -1217,15 +1356,14 @@ def mark_pending_attempts(
 def pending_candidate_codes(
     block: dict[str, Any], candidates: list[Candidate], today: date
 ) -> set[str]:
-    """持ち越し中の銘柄を通常巡回から外す（同日に二度叩かないため）。"""
-    pending = load_pending_events(block, today)
+    """A段の持ち越しだけ巡回から外す。B段は巡回でも取得できる。"""
+    pending = load_pending_events(block, today, candidates)
     by_code, by_edinet = index_candidates(candidates)
     codes: set[str] = set()
     for item in pending.values():
         candidate = match_candidate(item.event, by_code, by_edinet)
-        if candidate is None:
-            continue
-        codes.add(candidate.code)
+        if candidate is not None and event_tier(item.event, candidate) == "A":
+            codes.add(candidate.code)
     return codes
 
 
@@ -1240,7 +1378,7 @@ def event_sort_key(
         # より先に処理する。新規発表は数日間はAPIの検索窓に残る。
         0 if event.event_id in pending_ids else 1,
         event.type_rank,
-        # 決算短信の中で配当に触れているものを、触れていないものより先に。
+        # dividend_directionは配当修正向け。決算短信では実質常にFalse。
         0 if event.has_dividend_signal else 1,
         -event.event_date.toordinal(),
         candidate.priority_rank is None,
@@ -1256,6 +1394,9 @@ def plan_event_slots(
     seen: dict[str, Any],
     slots: int,
     pending_ids: set[str] | frozenset[str] | None = None,
+    recovery: dict[str, Any] | None = None,
+    tiers_by_code: dict[str, str] | None = None,
+    today: date | None = None,
 ) -> tuple[list[Candidate], dict[str, dict[str, str]], dict[str, int]]:
     """イベント枠に入れる銘柄を決める。
 
@@ -1301,20 +1442,45 @@ def plan_event_slots(
             event.event_date.isoformat()
         )
         current = best.get(candidate.code)
-        if current is None or event_sort_key(
-            (candidate, event), pending_ids
-        ) < event_sort_key(current, pending_ids):
+        if current is None or (
+            event_tier(event, candidate), event_sort_key((candidate, event), pending_ids)
+        ) < (event_tier(current[1], candidate), event_sort_key(current, pending_ids)):
             best[candidate.code] = (candidate, event)
 
-    ordered = sorted(
-        best.values(), key=lambda item: event_sort_key(item, pending_ids)
-    )
-    picks = [candidate for candidate, _ in ordered[: max(slots, 0)]]
+    ordered = sorted(best.values(), key=lambda item: event_sort_key(item, pending_ids))
+    a_items = [item for item in ordered if event_tier(item[1], item[0]) == "A"]
+    a_codes = {item[0].code for item in a_items}
+    recovery_codes = {
+        code for code, raw in (recovery or {}).items()
+        if not (isinstance(raw, dict) and raw.get("gaveUp"))
+    } & by_code.keys() - a_codes
+    recovery_items = sorted(
+        (by_code[code] for code in recovery_codes),
+        key=lambda candidate: event_sort_key(best[candidate.code], pending_ids)
+        if candidate.code in best else (
+            1, len(EVENT_TYPE_RANK), 1,
+            -date.fromisoformat(recovery[candidate.code]["since"]).toordinal(),
+            candidate.priority_rank is None,
+            candidate.priority_rank if candidate.priority_rank is not None else 0,
+            -candidate.dividend_yield, candidate.code,
+        ),
+    )[:EVENT_RECOVERY_DAILY]
+    b_items = [item for item in ordered
+               if item[0].code not in a_codes and item[0].code not in recovery_codes
+               and (today is None or b_tier_ready(item[1], today))]
+    ranked = ([(item[0], "A") for item in a_items]
+              + [(candidate, "recovery") for candidate in recovery_items]
+              + [(item[0], "B") for item in b_items[:EVENT_B_DAILY]])
+    ranked = ranked[:max(slots, 0)]
+    picks = [candidate for candidate, _ in ranked]
+    if tiers_by_code is not None:
+        tiers_by_code.update({candidate.code: tier for candidate, tier in ranked})
+    stats["a_companies"] = len(a_codes)
     picked_codes = {candidate.code for candidate in picks}
     ids_by_code = {
         code: ids for code, ids in ids_by_code.items() if code in picked_codes
     }
-    stats["companies"] = len(best)
+    stats["companies"] = len(set(best) | recovery_codes)
     stats["picked"] = len(picks)
     return picks, ids_by_code, stats
 
@@ -1342,29 +1508,56 @@ def run_event_stage(
     api_key: str,
     *,
     feed_events: list[DisclosureEvent] | None = None,
+    plan_info: dict[str, Any] | None = None,
 ) -> tuple[list[Candidate], dict[str, dict[str, str]], int]:
     """イベントを見て優先枠を組む。失敗しても従来の待ち行列は動かす。"""
     block = event_state(state)
+    expired = {"A": 0, "B": 0, "zero": 0, "b_zero": 0}
+    if plan_info is not None:
+        plan_info["expired"] = expired
     slots = event_slot_size()
     if slots <= 0:
         print("イベント枠: 無効（DVC_EVENT_SLOTS=0）")
         return [], {}, 0
 
-    pending = load_pending_events(block, today)
+    prune_recovery(block, candidates)
+    pending = load_pending_events(block, today, candidates, expired)
+    prune_recovery(block, candidates)
+    load_recovery_seed(block, candidates)
+    by_code, by_edinet = index_candidates(candidates)
+    attempted_codes = {
+        candidate.code
+        for event_id, raw in block["pending"].items()
+        if raw.get("lastAttemptAt") == today.isoformat()
+        and (item := parse_pending_event(event_id, raw)) is not None
+        and (candidate := match_candidate(item.event, by_code, by_edinet)) is not None
+    }
+    eligible = [
+        candidate for candidate in candidates
+        if candidate.code not in attempted_codes
+        and candidate.last_fetched != today
+        and state["stocks"].get(candidate.code, {}).get("lastEventAttemptAt")
+        != today.isoformat()
+    ]
     since, until = event_window(block, today)
     events: list[DisclosureEvent] = []
     requests_used = 0
+    request_counter = [0]
     truncated = 0
     ok_pages = 0
     try:
         events, requests_used, truncated, ok_pages = collect_events(
-            since, until, api_key
+            since, until, api_key, candidates=eligible,
+            pending_events=[item.event for item in pending.values()],
+            seen=block["seen"], pending_ids=set(pending),
+            request_counter=request_counter,
         )
-    except (OSError, ValueError, RuntimeError) as error:
+    except (OSError, ValueError, RuntimeError):
         # イベントAPIが落ちても、既にstateへ積んだ持ち越しは処理する。
         # イベントは「あれば早く気づける」ための仕組みで、日次更新の前提ではない。
-        print(f"イベント取得を中止しました（続行）: {error}", file=sys.stderr)
-        block["lastError"] = str(error)[:200]
+        requests_used = request_counter[0]
+        print("イベント取得を中止しました（続行）: 1件", file=sys.stderr)
+        block["lastError"] = "イベント取得失敗"
         block["lastErrorAt"] = today.isoformat()
 
     # 保存はmainの予想取得後に行う。検索窓から消えた持ち越しも渡すが、
@@ -1395,7 +1588,7 @@ def run_event_stage(
     add_pending_events(block, events, candidates, today)
     # 新規イベントと持ち越しを同じ枠で比較する。既知の持ち越しを先に
     # 並べるのは、検索窓から消えた後に救える経路が他にないため。
-    pending = load_pending_events(block, today)
+    pending = load_pending_events(block, today, candidates)
     pending_ids = set(pending)
     combined_events: list[DisclosureEvent] = [
         item.event for item in pending.values()
@@ -1404,30 +1597,27 @@ def run_event_stage(
     combined_events.extend(
         event for event in events if event.event_id not in pending_event_ids
     )
-    # 同日再実行・同一銘柄の別イベントもまとめて抑止する。
-    by_code, by_edinet = index_candidates(candidates)
-    attempted_codes = {
-        candidate.code
-        for raw in block["pending"].values()
-        if raw.get("lastAttemptAt") == today.isoformat()
-        and (event := parse_pending_event("pending", raw)) is not None
-        and (candidate := match_candidate(event.event, by_code, by_edinet)) is not None
-    }
+    # 段は会社にまとめてから並べる。B段pendingが新規A段を押しのけない。
+    pending_tiers: dict[str, str] = {}
+    for item in pending.values():
+        candidate = match_candidate(item.event, by_code, by_edinet)
+        if candidate is not None:
+            tier = event_tier(item.event, candidate)
+            pending_tiers[candidate.code] = min(pending_tiers.get(candidate.code, tier), tier)
+    print(f"取り直し待ち: A段={sum(t == 'A' for t in pending_tiers.values())} "
+          f"B段={sum(t == 'B' for t in pending_tiers.values())} "
+          f"取り直し名簿={sum(not (isinstance(raw, dict) and raw.get('gaveUp')) for raw in block['recovery'].values())}")
+    slots = event_capacity(requests_used, slots)
+    tiers_by_code: dict[str, str] = {}
     picks, ids_by_code, stats = plan_event_slots(
-        combined_events,
-        [candidate for candidate in candidates
-         if candidate.code not in attempted_codes
-         and candidate.last_fetched != today
-         and state["stocks"].get(candidate.code, {}).get("lastEventAttemptAt")
-         != today.isoformat()],
-        block["seen"],
-        slots,
-        pending_ids,
+        combined_events, eligible, block["seen"], slots, pending_ids,
+        recovery=block["recovery"], tiers_by_code=tiers_by_code, today=today,
     )
+    if plan_info is not None:
+        plan_info.update({"tiers": tiers_by_code, "capacity": slots})
     print(
         f"イベント枠: {stats['picked']}件/{slots}枠 "
-        f"（対象社数={stats['companies']} 期間={since.isoformat()}〜"
-        f"{until.isoformat()} リクエスト={requests_used}）"
+        f"（対象社数={stats['companies']} リクエスト={requests_used}）"
     )
     # noEarnings が急に events と同じ数になったら、metadata.is_earnings の
     # 意味か有無が変わった合図（決算短信経由の検知が黙って死ぬ形）。
@@ -1957,8 +2147,10 @@ def main() -> None:
     # おく（同じ銘柄を1日に2回叩かないため、かつ巡回位置の数え方を
     # 壊さないため）。
     feed_events: list[DisclosureEvent] = []
+    plan_info: dict[str, Any] = {}
     event_picks, event_ids_by_code, event_requests = run_event_stage(
-        state, candidates, args.today, api_key, feed_events=feed_events
+        state, candidates, args.today, api_key, feed_events=feed_events,
+        plan_info=plan_info,
     )
     # イベント枠で選ばれなかったイベントも含め、銘柄と結び付ける。
     # 同じ銘柄の発表・訂正は同一応答をそれぞれのeventIdへ添える。
@@ -1981,6 +2173,7 @@ def main() -> None:
         for candidate in candidates
         if candidate.code not in picked_codes
         and candidate.code not in pending_codes
+        and candidate.last_fetched != args.today
         and state["stocks"].get(candidate.code, {}).get("lastEventAttemptAt")
         != args.today.isoformat()
     ]
@@ -2002,6 +2195,7 @@ def main() -> None:
     consecutive_rate_limit_failures = 0
     rate_limit_stopped = False
     fatal: FetchError | None = None
+    actual_counts = {"A": 0, "recovery": 0, "B": 0, "rotation": 0}
 
     def save_progress() -> None:
         if normal_count:
@@ -2009,7 +2203,12 @@ def main() -> None:
                 normal_position + normal_processed
             ) % normal_count
         prune_seen(event_state(state)["seen"], args.today)
-        load_pending_events(event_state(state), args.today)
+        load_pending_events(
+            event_state(state), args.today, candidates, plan_info.get("expired")
+        )
+        prune_recovery(event_state(state), candidates, {
+            code: parse_fetched_date(record) for code, record in state["stocks"].items()
+        })
         write_state(args.state, state)
 
     for index, candidate in enumerate(selected, start=1):
@@ -2021,7 +2220,9 @@ def main() -> None:
         mark_pending_attempts(
             event_state(state), event_ids_by_code, {candidate.code}, args.today
         )
-        if candidate.code in event_ids_by_code:
+        tier = plan_info.get("tiers", {}).get(candidate.code, "rotation")
+        actual_counts[tier] += 1
+        if candidate.code in picked_codes:
             state["stocks"].setdefault(candidate.code, {})["lastEventAttemptAt"] = fetched_at
         attempted_at = jst_now().isoformat(timespec="seconds")
         try:
@@ -2034,6 +2235,16 @@ def main() -> None:
                 }
             # 1銘柄の失敗でその日の取得を全部捨てない。既存の保存値は
             # そのまま残し、失敗の記録だけ足して次の銘柄へ進む。
+            if tier == "recovery":
+                recovery = event_state(state)["recovery"]
+                raw = recovery.get(candidate.code)
+                if raw is not None:
+                    raw["attempts"] = raw.get("attempts", 0) + 1
+                    if raw["attempts"] >= 3:
+                        # 消すと種のファイルから毎回また足されるので、印を残して
+                        # 枠からだけ外す。取得日が基準日より後になれば prune で消える。
+                        raw["gaveUp"] = True
+                        print(f"取り直しを諦めました: {candidate.code}")
             failed += 1
             consecutive_failures += 1
             if error.is_rate_limited:
@@ -2096,9 +2307,17 @@ def main() -> None:
             parsed["lastFetchedAt"] = fetched_at
             triggers = event_ids_by_code.get(candidate.code)
             if triggers:
-                record_event_result(state, candidate.code, parsed, triggers, args.today)
+                tiers = {
+                    event_id: event_tier(item.event, candidate)
+                    for event_id in triggers
+                    if (item := parse_pending_event(
+                        event_id, event_state(state)["pending"].get(event_id)
+                    )) is not None
+                }
+                record_event_result(state, candidate.code, parsed, triggers, args.today, tiers)
             else:
-                # 巡回取得で点検履歴を消さない。確認の解除はイベント取得時のみ。
+                clear_rotated_b_pending(event_state(state), candidate, args.today)
+                # 巡回取得で既存の点検履歴を消さない。
                 previous = state["stocks"].get(candidate.code, {})
                 for key in ("lastEventAt", "eventConfirmation"):
                     if key in previous:
@@ -2119,10 +2338,19 @@ def main() -> None:
         if last_remaining is not None and last_remaining <= 5:
             break
 
+    forecast_requests = sum(actual_counts.values())
+    print(f"イベント枠の内訳: A段={actual_counts['A']} "
+          f"取り直し={actual_counts['recovery']} B段={actual_counts['B']} "
+          f"巡回={actual_counts['rotation']} 問い合わせ={event_requests} "
+          f"上限={plan_info.get('capacity', 0)} 予想取得={forecast_requests} "
+          f"合計={event_requests + forecast_requests}")
     rate_limit_days = update_rate_limit_streak(
         state, args.today, rate_limit_stopped
     )
     save_progress()
+    expired = plan_info["expired"]
+    print(f"期限で脱落: A段={expired['A']} B段={expired['B']}"
+          f"（うち試行0回 {expired['zero']}、B段の試行0回 {expired['b_zero']}）")
     if feed_events:
         try:
             save_split_event_feed(

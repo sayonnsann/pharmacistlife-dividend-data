@@ -942,6 +942,18 @@ def fetch_event_page(
     return data, total, next_offset
 
 
+def error_kind(error: BaseException) -> str:
+    """公開ログ用に、例外を種別だけにする（本文・URL・題名は出さない）。"""
+    if isinstance(error, FetchError):
+        status = f" {error.status}" if getattr(error, "status", None) else ""
+        return f"{error.kind}{status}"
+    if isinstance(error, OSError):
+        return "network"
+    if isinstance(error, ValueError):
+        return "parse"
+    return "other"
+
+
 def event_capacity(requests_used: int, slots: int | None = None) -> int:
     """問い合わせを差し引き、巡回の最低件数を残す。"""
     return max(0, min(
@@ -984,9 +996,10 @@ def collect_events(
                 data, total, next_offset = fetch_event_page(
                     event_type, since, until, offset, api_key
                 )
-            except (OSError, ValueError, RuntimeError):
-                # 例外の本文にはURLや題名が含まれうるので公開ログへ出さない。
-                print("イベント取得失敗（続行）: 1件", file=sys.stderr)
+            except (OSError, ValueError, RuntimeError) as error:
+                # 例外の本文にはURLや題名が含まれうるので、種別だけを出す。
+                print(f"イベント取得失敗（続行）: {event_type} {error_kind(error)}",
+                      file=sys.stderr)
                 break
             ok_pages += 1
             fetched += len(data)
@@ -1552,12 +1565,12 @@ def run_event_stage(
             seen=block["seen"], pending_ids=set(pending),
             request_counter=request_counter,
         )
-    except (OSError, ValueError, RuntimeError):
+    except (OSError, ValueError, RuntimeError) as error:
         # イベントAPIが落ちても、既にstateへ積んだ持ち越しは処理する。
         # イベントは「あれば早く気づける」ための仕組みで、日次更新の前提ではない。
         requests_used = request_counter[0]
-        print("イベント取得を中止しました（続行）: 1件", file=sys.stderr)
-        block["lastError"] = "イベント取得失敗"
+        print(f"イベント取得を中止しました（続行）: {error_kind(error)}", file=sys.stderr)
+        block["lastError"] = f"イベント取得失敗: {error_kind(error)}"
         block["lastErrorAt"] = today.isoformat()
 
     # 保存はmainの予想取得後に行う。検索窓から消えた持ち越しも渡すが、
@@ -1617,7 +1630,8 @@ def run_event_stage(
         plan_info.update({"tiers": tiers_by_code, "capacity": slots})
     print(
         f"イベント枠: {stats['picked']}件/{slots}枠 "
-        f"（対象社数={stats['companies']} リクエスト={requests_used}）"
+        f"（対象社数={stats['companies']} 期間={since.isoformat()}〜"
+        f"{until.isoformat()} リクエスト={requests_used}）"
     )
     # noEarnings が急に events と同じ数になったら、metadata.is_earnings の
     # 意味か有無が変わった合図（決算短信経由の検知が黙って死ぬ形）。

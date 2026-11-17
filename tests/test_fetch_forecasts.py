@@ -2666,6 +2666,12 @@ class EventBusySeasonTest(unittest.TestCase):
         self.assertEqual([c.code for c in picks], [candidates[0].code])
         self.assertNotIn("private-", output.getvalue())
         self.assertNotIn("test-key", output.getvalue())
+        # 本文は出さず、種別だけを出す。期間はイベント枠の行に残す。
+        self.assertIn("イベント取得失敗（続行）: stock_split network", output.getvalue())
+        self.assertIn("期間=", output.getvalue())
+        self.assertEqual(fetch_forecasts.error_kind(ValueError("x")), "parse")
+        self.assertEqual(fetch_forecasts.error_kind(
+            fetch_forecasts.FetchError("private", kind="http", status=503)), "http 503")
 
         # collect_events自体が途中で落ちた場合にも、共有カウンターは残る。
         def broken_collect(*args, request_counter, **kwargs):

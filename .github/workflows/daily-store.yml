@@ -28,7 +28,10 @@ jobs:
       # イベント取得に使ったリクエストの分だけ、上のDVC_FORECAST_DAILYから
       # 自動的に差し引かれる。0にするとイベントAPIを一切呼ばず、
       # 決算月からの近似日だけで動く従来の挙動に戻る。
-      DVC_EVENT_SLOTS: "20"
+      # 2026-11-17: 決算の繁忙期の応急の手当てで 20→75。配当修正が1日40〜80件出て、
+      # 20枠では取り直し待ちが14日で脱落していたため。枠を広げた分だけ巡回が減り、
+      # 合計はDVC_FORECAST_DAILY（95）を超えない。件数で枠を決める本実装が入ったら戻す。
+      DVC_EVENT_SLOTS: "75"
       FTP_HOST: ${{ secrets.FTP_HOST }}
       FTP_USER: ${{ secrets.FTP_USER }}
       FTP_PASS: ${{ secrets.FTP_PASS }}

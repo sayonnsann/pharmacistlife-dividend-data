@@ -2458,8 +2458,82 @@ class EventBusySeasonTest(unittest.TestCase):
                             line = next(line for line in log.splitlines()
                                         if line.startswith("イベント枠の内訳:"))
                             self.assertGreaterEqual(int(line.split("巡回=")[1].split()[0]), 10)
-                            self.assertLessEqual(int(line.split("取り直し=")[1].split()[0]), 40)
+                            # 取り直しは先行40社に、A段・B段のあとの空き枠分を足す。
+                            actual_a = int(line.split("A段=")[1].split()[0])
+                            actual_b = int(line.split("B段=")[1].split()[0])
+                            remaining = max(0, 95 - len(pages) - 10 - actual_a - actual_b)
+                            self.assertEqual(int(line.split("取り直し=")[1].split()[0]),
+                                             min(recovery_count, remaining))
                             self.assertLessEqual(int(line.split("B段=")[1].split()[0]), 20)
+
+    def test_recovery_fills_only_slots_left_after_a_and_b(self):
+        # 11/20、11/19、名簿なし、名簿が途中で尽きる日、A段だけで枠を超える日。
+        for a_count, recovery_count, expected_recovery, expected_b, expected_total in (
+            (3, 330, 58, 20, 81),
+            (54, 298, 27, 0, 81),
+            (3, 0, 0, 20, 23),
+            (3, 50, 50, 20, 73),
+            (90, 330, 0, 0, 81),
+        ):
+            with self.subTest(a=a_count, recovery=recovery_count):
+                candidates = self.candidates(a_count + 25 + recovery_count)
+                a_candidates = candidates[:a_count]
+                b_candidates = candidates[a_count:a_count + 25]
+                recovery_candidates = candidates[a_count + 25:]
+                events = ([self.event(c.code) for c in a_candidates]
+                          + [self.event(c.code, "B") for c in b_candidates])
+                # 挿入順に頼らず、既存のsortedの順に40社と追加分を取る。
+                recovery = {
+                    c.code: {"since": "2026-10-28", "attempts": 0}
+                    for c in reversed(recovery_candidates)
+                }
+                tiers = {}
+                picks, ids, stats = fetch_forecasts.plan_event_slots(
+                    events, candidates, {}, 81, recovery=recovery,
+                    tiers_by_code=tiers, today=fetch_forecasts.date(2026, 11, 20),
+                )
+                expected = (a_candidates[:81]
+                            + recovery_candidates[:min(40, expected_recovery)]
+                            + b_candidates[:expected_b]
+                            + recovery_candidates[40:expected_recovery])
+                codes = [c.code for c in picks]
+                self.assertEqual(codes, [c.code for c in expected])
+                self.assertEqual(len(codes), len(set(codes)))
+                self.assertEqual(len(codes), expected_total)
+                self.assertEqual(
+                    {tier: list(tiers.values()).count(tier) for tier in ("A", "recovery", "B")},
+                    {"A": min(a_count, 81), "recovery": expected_recovery, "B": expected_b},
+                )
+                self.assertEqual(stats["picked"], expected_total)
+                self.assertEqual(set(ids), {c.code for c in expected
+                                           if c in a_candidates or c in b_candidates})
+
+    def test_recovery_fill_excludes_a_and_gave_up_and_keeps_event_order(self):
+        candidates = self.candidates(70)
+        a = self.event(candidates[0].code)
+        # pendingのB段を最優先にし、残りはsinceの新しい順、同日ならコード順。
+        pending_b = self.event(candidates[60].code, "B")
+        gave_up = candidates[69]
+        recovery = {
+            c.code: {"since": "2026-10-29" if i >= 50 else "2026-10-28",
+                     "attempts": 0}
+            for i, c in enumerate(candidates)
+        }
+        recovery[gave_up.code]["gaveUp"] = True
+        tiers = {}
+        picks, ids, _ = fetch_forecasts.plan_event_slots(
+            [a, pending_b], candidates, {}, 65, {pending_b.event_id},
+            recovery=recovery, tiers_by_code=tiers, today=self.TODAY,
+        )
+        ordered_recovery = ([candidates[60]] + candidates[50:60]
+                            + candidates[61:69] + candidates[1:50])
+        self.assertEqual([c.code for c in picks],
+                         [candidates[0].code] + [c.code for c in ordered_recovery[:64]])
+        self.assertEqual(len(picks), len({c.code for c in picks}))
+        self.assertNotIn(gave_up.code, tiers)
+        self.assertEqual(tiers[candidates[0].code], "A")
+        self.assertEqual(list(tiers.values()).count("recovery"), 64)
+        self.assertEqual(ids[pending_b.sec_code], {pending_b.event_id: "2026-11-12"})
 
     def test_unattempted_expiration_maps_codes_and_keeps_earliest_since(self):
         candidates = self.candidates(4)
@@ -2525,7 +2599,9 @@ class EventBusySeasonTest(unittest.TestCase):
             c.code: {"since": "2026-10-28", "attempts": 0} for c in candidates[:100]
         }
         fetch, _, log, _, _ = self.run_main(candidates, state)
-        self.assertIn("A段=0 取り直し=40 B段=0", log)
+        # 問い合わせ4件分・最低巡回10社分を95から引くと81枠。
+        # A段0・B段0なので、取り直しは40 + 余り41 = 81社になる。
+        self.assertIn("A段=0 取り直し=81 B段=0 巡回=10", log)
         self.assertEqual(fetch.call_count, len({c.args[0].code for c in fetch.call_args_list}))
         fetched = {call.args[0].code for call in fetch.call_args_list}
         self.assertFalse(fetched & state["events"]["recovery"].keys())

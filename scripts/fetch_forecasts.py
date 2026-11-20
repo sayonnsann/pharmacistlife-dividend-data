@@ -1477,14 +1477,21 @@ def plan_event_slots(
             candidate.priority_rank if candidate.priority_rank is not None else 0,
             -candidate.dividend_yield, candidate.code,
         ),
-    )[:EVENT_RECOVERY_DAILY]
+    )
     b_items = [item for item in ordered
                if item[0].code not in a_codes and item[0].code not in recovery_codes
                and (today is None or b_tier_ready(item[1], today))]
     ranked = ([(item[0], "A") for item in a_items]
-              + [(candidate, "recovery") for candidate in recovery_items]
+              + [(candidate, "recovery") for candidate in recovery_items[:EVENT_RECOVERY_DAILY]]
               + [(item[0], "B") for item in b_items[:EVENT_B_DAILY]])
     ranked = ranked[:max(slots, 0)]
+    # A段・取り直し40社・B段20社のあとに空きがあれば、取り直しの続きを入れる。
+    # 1〜3段が枠を超えた日は空きが0なので、途中で切られた候補は追加されない。
+    remaining = max(slots - len(ranked), 0)
+    ranked.extend(
+        (candidate, "recovery")
+        for candidate in recovery_items[EVENT_RECOVERY_DAILY:EVENT_RECOVERY_DAILY + remaining]
+    )
     picks = [candidate for candidate, _ in ranked]
     if tiers_by_code is not None:
         tiers_by_code.update({candidate.code: tier for candidate, tier in ranked})

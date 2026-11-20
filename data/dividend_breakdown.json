@@ -530,7 +530,8 @@
       "kind": "記念",
       "evidence": {
         "docID": "S100XY30",
-        "quote": "１株当たり配当額には創業110周年記念配当40円を含んでおります"
+        "quote": "１株当たり配当額には創業110周年記念配当40円を含んでおります",
+        "reviewMethod": "manual_primary_source"
       },
       "fiscalYear": "2025-08"
     }
@@ -829,7 +830,8 @@
       "kind": "特別",
       "evidence": {
         "docID": "S100ZII1",
-        "quote": "第69期の１株当たり配当額には、特別配当10円が含まれております"
+        "quote": "第69期の１株当たり配当額には、特別配当10円が含まれております",
+        "reviewMethod": "manual_primary_source"
       },
       "fiscalYear": "2022-08"
     },
@@ -839,7 +841,8 @@
       "kind": "記念",
       "evidence": {
         "docID": "S100ZII1",
-        "quote": "第70期の１株当たり配当額には、記念配当10円が含まれております"
+        "quote": "第70期の１株当たり配当額には、記念配当10円が含まれております",
+        "reviewMethod": "manual_primary_source"
       },
       "fiscalYear": "2023-08"
     },
@@ -849,7 +852,8 @@
       "kind": "特別",
       "evidence": {
         "docID": "S100ZII1",
-        "quote": "第71期の１株当たり配当額には、特別配当25円が含まれております"
+        "quote": "第71期の１株当たり配当額には、特別配当25円が含まれております",
+        "reviewMethod": "manual_primary_source"
       },
       "fiscalYear": "2024-08"
     },
@@ -859,7 +863,8 @@
       "kind": "特別",
       "evidence": {
         "docID": "S100ZII1",
-        "quote": "第72期の１株当たり配当額には、特別配当45円が含まれております"
+        "quote": "第72期の１株当たり配当額には、特別配当45円が含まれております",
+        "reviewMethod": "manual_primary_source"
       },
       "fiscalYear": "2025-08"
     },
@@ -870,7 +875,8 @@
       "evidence": {
         "docID": "S100ZII1",
         "quote": "第73期の１株当たり配当額には、特別配当60円が含まれており",
-        "status": "総会決議予定（有報記載の議案）"
+        "status": "総会決議予定（有報記載の議案）",
+        "reviewMethod": "manual_primary_source"
       },
       "fiscalYear": "2026-08",
       "notes": "2026年11月20日開催予定の定時株主総会の決議事項（有報S100ZII1の注記）。決議後に変更があれば直す。"
@@ -883,7 +889,8 @@
       "kind": "記念・特別",
       "evidence": {
         "docID": "S100ZIF8",
-        "quote": "普通配当20円に…記念配当10円を加え、さらに特別配当10円を加えて"
+        "quote": "普通配当20円に…記念配当10円を加え、さらに特別配当10円を加えて",
+        "reviewMethod": "manual_primary_source"
       },
       "fiscalYear": "2026-08",
       "notes": "創業40周年記念配当10円は中間（20円）に、特別配当10円は期末（20円）に含まれる。"

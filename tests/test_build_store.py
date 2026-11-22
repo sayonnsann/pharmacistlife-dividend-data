@@ -681,10 +681,10 @@ class SplitAdjustmentTest(unittest.TestCase):
             ROOT / "data" / "stock_actions_manual.json",
             as_of=date(2026, 8, 3),
         )
-        self.assertEqual(len(loaded), 79)  # 生成台帳(export_yield_actions)の実数に追随
+        self.assertEqual(len(loaded), 78)  # 生成台帳(export_yield_actions)の実数に追随
         # 2026-11-12: 9305 の実在しない 2026-06-01 分割(原本の誤確定)を外して 81→80
         # (main 側も 2026-11-12 の利回り用台帳の自動更新で同じ1件が外れ、80 に追随済み)
-        self.assertEqual(sum(map(len, loaded.values())), 80)
+        self.assertEqual(sum(map(len, loaded.values())), 79)
         # 抽出台帳(EDINET由来・監査合格)と重複する銘柄は手動台帳から自動除外されるため、
         # 手動台帳に残る provisional の 1663 で確認する
         self.assertIsNone(loaded["1663"][0]["epsAdjustedByIssuer"])  # 一本化でprovisional(書類確認まで保留)

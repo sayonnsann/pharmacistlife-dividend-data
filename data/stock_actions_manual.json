@@ -150,24 +150,6 @@
       "checkedAt": "2026-08-15"
     },
     {
-      "eventId": "7453-2025-09-01-split-1-to-2",
-      "securityCode": "7453",
-      "name": "良品計画",
-      "action": "split",
-      "oldShares": 1,
-      "newShares": 2,
-      "effectiveDate": "2025-09-01",
-      "status": "confirmed",
-      "applyDividendAdjustment": true,
-      "epsAdjustedByIssuer": true,
-      "source": {
-        "url": "https://disclosure2dl.edinet-fsa.go.jp/searchdocument/pdf/S100X5NI.pdf",
-        "type": "edinet"
-      },
-      "note": "edinet-direct側マスター(7453-2025-09-01-split-1-to-2)から自動生成",
-      "checkedAt": "2026-09-03"
-    },
-    {
       "eventId": "3496-2025-10-01-split-1-to-2",
       "securityCode": "3496",
       "name": "アズーム",

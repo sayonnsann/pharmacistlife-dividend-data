@@ -1,5 +1,5 @@
 {
- "asOfDate": "2026-11-22",
+ "asOfDate": "2026-11-23",
  "events": [
   {
    "code": "1301",
@@ -35121,5 +35121,5 @@
   }
  ],
  "schemaVersion": 1,
- "sourceSha256": "50e892473efd9b29025ac67be0f57b88437b829dd3ac1fb8d4a6ce057101d7b5"
+ "sourceSha256": "535a8a9733a46a5dafb67c2d3251981b91e04c823facaca58abe68382058dca4"
 }

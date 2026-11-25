@@ -1834,6 +1834,63 @@ class EventDrivenQueueTest(unittest.TestCase):
         self.assertIn("集計(取り直し) 合計: 成功=2 変化=1", stdout)
         self.assertFalse(any(line.startswith(prefixes) for line in quiet_stdout.splitlines()))
 
+    def test_summary_failures_do_not_change_files_or_existing_logs(self) -> None:
+        initial = self.state()
+        initial["events"] = fetch_forecasts.empty_event_state()
+        initial["events"]["recovery"] = {
+            code: {"since": self.PRIMED, "attempts": 0}
+            for code in self.CODES[:3]
+        }
+        pending = disclosure("8058", "dividend_revision", "2026-08-05")
+        initial["events"]["pending"][pending.event_id] = fetch_forecasts.pending_record(
+            pending, fetch_forecasts.date(2026, 8, 5),
+        )
+        split = self.split_event(sec_code="9433", edinet_code="E00004")
+        fixed_now = fetch_forecasts.datetime(2026, 8, 6, 9, tzinfo=fetch_forecasts.JST)
+
+        def fetch_one(c, _key):
+            return {"forecastDividend": 83.25 if c.code == "2914" else 74.0}, None
+
+        def run(break_summaries):
+            self.write_state(initial)
+            self.feed_path.unlink(missing_ok=True)
+            output, errors = io.StringIO(), io.StringIO()
+            fetch = mock.Mock(side_effect=fetch_one)
+            with contextlib.ExitStack() as stack:
+                for name in ("log_pending_summary", "log_recovery_summary",
+                             "collect_revision_codes"):
+                    if break_summaries:
+                        stack.enter_context(mock.patch.object(
+                            fetch_forecasts, name, side_effect=ValueError("secret 83.25"),
+                        ))
+                    elif name != "collect_revision_codes":
+                        stack.enter_context(mock.patch.object(fetch_forecasts, name))
+                stack.enter_context(mock.patch.object(
+                    fetch_forecasts, "jst_now", return_value=fixed_now,
+                ))
+                stack.enter_context(contextlib.redirect_stderr(errors))
+                self.run_main([split], daily_limit=9, fetch=fetch, output=output)
+            files = {path.name: path.read_bytes() for path in (
+                self.state_path, self.feed_path,
+            )}
+            return files, output.getvalue(), errors.getvalue()
+
+        broken_files, broken_stdout, broken_stderr = run(True)
+        quiet_files, quiet_stdout, quiet_stderr = run(False)
+        self.assertEqual(broken_files, quiet_files)
+        self.assertEqual(broken_stdout, quiet_stdout)
+        self.assertIn("予想取得完了:", broken_stdout)
+        self.assertIn("summary ", broken_stdout)
+        failures = [line for line in broken_stderr.splitlines()
+                    if line.startswith("集計失敗（続行）")]
+        self.assertEqual(failures, ["集計失敗（続行）: ValueError"] * 3)
+        self.assertNotIn("83.25", broken_stderr)
+        self.assertEqual(
+            [line for line in broken_stderr.splitlines()
+             if not line.startswith("集計失敗（続行）")],
+            quiet_stderr.splitlines(),
+        )
+
     def test_a_split_event_is_not_saved_when_no_event_page_succeeded(self) -> None:
         record = dict(
             TOUKEI_EVENT_RECORD,

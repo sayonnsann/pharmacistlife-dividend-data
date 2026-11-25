@@ -1587,6 +1587,19 @@ def log_recovery_summary(
           f"消滅={counts['消滅']} うちdividend_revision有={with_revision}")
 
 
+def collect_revision_codes(
+    events: list[DisclosureEvent], by_code: dict[str, Candidate],
+    by_edinet: dict[str, Candidate],
+) -> set[str]:
+    """配当修正イベントがある会社コードの集合。集計の材料で、取得には使わない。"""
+    return {
+        candidate.code
+        for event in events
+        if event.event_type == "dividend_revision"
+        and (candidate := match_candidate(event, by_code, by_edinet)) is not None
+    }
+
+
 def run_event_stage(
     state: dict[str, Any],
     candidates: list[Candidate],
@@ -1649,12 +1662,14 @@ def run_event_stage(
 
     if plan_info is not None:
         # 取得枠への採否にかかわらず、今回受信分と持ち越しの配当修正を照合する。
-        plan_info["revision_codes"] = {
-            candidate.code
-            for event in events + [item.event for item in pending.values()]
-            if event.event_type == "dividend_revision"
-            and (candidate := match_candidate(event, by_code, by_edinet)) is not None
-        }
+        # 読むだけの集計の材料なので、失敗しても空集合にして取得は続ける。
+        try:
+            plan_info["revision_codes"] = collect_revision_codes(
+                events + [item.event for item in pending.values()], by_code, by_edinet,
+            )
+        except Exception as error:
+            plan_info["revision_codes"] = set()
+            print(f"集計失敗（続行）: {type(error).__name__}", file=sys.stderr)
 
     # 保存はmainの予想取得後に行う。検索窓から消えた持ち越しも渡すが、
     # 同じIDの生レコードが今回あればそちらを優先する。
@@ -2455,8 +2470,16 @@ def main() -> None:
     expired = plan_info["expired"]
     print(f"期限で脱落: A段={expired['A']} B段={expired['B']}"
           f"（うち試行0回 {expired['zero']}、B段の試行0回 {expired['b_zero']}）")
-    log_pending_summary(state["events"]["pending"], candidates, args.today)
-    log_recovery_summary(recovery_results, plan_info.get("revision_codes", set()))
+    # 読むだけの集計。想定外の例外でも、フィード保存と summary 行は止めない。
+    # 例外の中身には値が混じりうるので、型名だけを出す。
+    try:
+        log_pending_summary(state["events"]["pending"], candidates, args.today)
+    except Exception as error:
+        print(f"集計失敗（続行）: {type(error).__name__}", file=sys.stderr)
+    try:
+        log_recovery_summary(recovery_results, plan_info.get("revision_codes", set()))
+    except Exception as error:
+        print(f"集計失敗（続行）: {type(error).__name__}", file=sys.stderr)
     if feed_events:
         try:
             save_split_event_feed(

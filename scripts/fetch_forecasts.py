@@ -1477,14 +1477,21 @@ def plan_event_slots(
             candidate.priority_rank if candidate.priority_rank is not None else 0,
             -candidate.dividend_yield, candidate.code,
         ),
-    )[:EVENT_RECOVERY_DAILY]
+    )
     b_items = [item for item in ordered
                if item[0].code not in a_codes and item[0].code not in recovery_codes
                and (today is None or b_tier_ready(item[1], today))]
     ranked = ([(item[0], "A") for item in a_items]
-              + [(candidate, "recovery") for candidate in recovery_items]
+              + [(candidate, "recovery") for candidate in recovery_items[:EVENT_RECOVERY_DAILY]]
               + [(item[0], "B") for item in b_items[:EVENT_B_DAILY]])
     ranked = ranked[:max(slots, 0)]
+    # A段・取り直し40社・B段20社のあとに空きがあれば、取り直しの続きを入れる。
+    # 1〜3段が枠を超えた日は空きが0なので、途中で切られた候補は追加されない。
+    remaining = max(slots - len(ranked), 0)
+    ranked.extend(
+        (candidate, "recovery")
+        for candidate in recovery_items[EVENT_RECOVERY_DAILY:EVENT_RECOVERY_DAILY + remaining]
+    )
     picks = [candidate for candidate, _ in ranked]
     if tiers_by_code is not None:
         tiers_by_code.update({candidate.code: tier for candidate, tier in ranked})
@@ -1514,6 +1521,85 @@ def prune_seen(seen: dict[str, Any], today: date) -> None:
         seen.update(newest[:EVENT_SEEN_LIMIT])
 
 
+def log_pending_summary(
+    pending: dict[str, Any], candidates: list[Candidate], today: date,
+) -> None:
+    """保存後の持ち越しをイベント単位で数える。入力は変更しない。"""
+    by_code, by_edinet = index_candidates(candidates)
+    by_event_date: dict[date, dict[str, int]] = {}
+    by_expiry_date: dict[date, dict[str, int]] = {}
+    totals = {"A": 0, "B": 0}
+    expiring = {"A": 0, "B": 0}
+    unreadable = 0
+    for event_id, raw in pending.items():
+        item = parse_pending_event(event_id, raw)
+        if item is None:
+            unreadable += 1
+            continue
+        event = item.event
+        candidate = match_candidate(event, by_code, by_edinet)
+        tier = event_tier(event, candidate)
+        counts = by_event_date.setdefault(event.event_date, {"A": 0, "B": 0})
+        counts[tier] += 1
+        totals[tier] += 1
+        # 試行回数・confirmation_expiredによる脱落は期限の見込みに含めない。
+        # 日別・合計には、それらで翌日脱落しそうなイベントもすべて含める。
+        expires_on = item.first_seen_at + timedelta(days=EVENT_PENDING_MAX_DAYS + 1)
+        if today < expires_on <= today + timedelta(days=7):
+            counts = by_expiry_date.setdefault(expires_on, {"A": 0, "B": 0})
+            counts[tier] += 1
+            expiring[tier] += 1
+
+    for day, counts in sorted(by_event_date.items()):
+        print(f"集計(持ち越し) イベント日別: {day.isoformat()} "
+              f"A段={counts['A']} B段={counts['B']}")
+    print(f"集計(持ち越し) 7日以内に期限: A段={expiring['A']} B段={expiring['B']}")
+    for day, counts in sorted(by_expiry_date.items()):
+        print(f"集計(持ち越し) 期限日別: {day.isoformat()} "
+              f"A段={counts['A']} B段={counts['B']}")
+    print(f"集計(持ち越し) 合計: A段={totals['A']} B段={totals['B']} "
+          f"全体={totals['A'] + totals['B']} 読めず={unreadable}")
+
+
+def log_recovery_summary(
+    results: list[tuple[str, float | None, float | None]],
+    revision_codes: set[str],
+) -> None:
+    """成功した取り直しの比較結果だけを出す。予想値はログに含めない。"""
+    counts = {"増": 0, "減": 0, "新規": 0, "消滅": 0}
+    with_revision = 0
+    for code, before, after in results:
+        if before == after:
+            continue
+        if before is None:
+            direction = "新規"
+        elif after is None:
+            direction = "消滅"
+        else:
+            direction = "増" if after > before else "減"
+        counts[direction] += 1
+        has_revision = code in revision_codes
+        with_revision += int(has_revision)
+        print(f"集計(取り直し) 予想が変化: {code} {direction} "
+              f"dividend_revision={'有' if has_revision else '無'}")
+    print(f"集計(取り直し) 合計: 成功={len(results)} 変化={sum(counts.values())} "
+          f"増={counts['増']} 減={counts['減']} 新規={counts['新規']} "
+          f"消滅={counts['消滅']} うちdividend_revision有={with_revision}")
+
+
+def collect_revision_codes(
+    events: list[DisclosureEvent], by_code: dict[str, Candidate],
+    by_edinet: dict[str, Candidate],
+) -> set[str]:
+    """配当修正イベントがある会社コードの集合。集計の材料で、取得には使わない。"""
+    return {
+        candidate.code
+        for event in events
+        if event.event_type == "dividend_revision"
+        and (candidate := match_candidate(event, by_code, by_edinet)) is not None
+    }
+
+
 def run_event_stage(
     state: dict[str, Any],
     candidates: list[Candidate],
@@ -1528,6 +1614,7 @@ def run_event_stage(
     expired = {"A": 0, "B": 0, "zero": 0, "b_zero": 0}
     if plan_info is not None:
         plan_info["expired"] = expired
+        plan_info["revision_codes"] = set()
     slots = event_slot_size()
     if slots <= 0:
         print("イベント枠: 無効（DVC_EVENT_SLOTS=0）")
@@ -1572,6 +1659,17 @@ def run_event_stage(
         print(f"イベント取得を中止しました（続行）: {error_kind(error)}", file=sys.stderr)
         block["lastError"] = f"イベント取得失敗: {error_kind(error)}"
         block["lastErrorAt"] = today.isoformat()
+
+    if plan_info is not None:
+        # 取得枠への採否にかかわらず、今回受信分と持ち越しの配当修正を照合する。
+        # 読むだけの集計の材料なので、失敗しても空集合にして取得は続ける。
+        try:
+            plan_info["revision_codes"] = collect_revision_codes(
+                events + [item.event for item in pending.values()], by_code, by_edinet,
+            )
+        except Exception as error:
+            plan_info["revision_codes"] = set()
+            print(f"集計失敗（続行）: {type(error).__name__}", file=sys.stderr)
 
     # 保存はmainの予想取得後に行う。検索窓から消えた持ち越しも渡すが、
     # 同じIDの生レコードが今回あればそちらを優先する。
@@ -2210,6 +2308,7 @@ def main() -> None:
     rate_limit_stopped = False
     fatal: FetchError | None = None
     actual_counts = {"A": 0, "recovery": 0, "B": 0, "rotation": 0}
+    recovery_results: list[tuple[str, float | None, float | None]] = []
 
     def save_progress() -> None:
         if normal_count:
@@ -2305,6 +2404,12 @@ def main() -> None:
                 )
                 break
         else:
+            if tier == "recovery":
+                recovery_results.append((
+                    candidate.code,
+                    finite_number(state["stocks"].get(candidate.code, {}).get("forecastDividend")),
+                    finite_number(parsed.get("forecastDividend")),
+                ))
             retrieved_at = jst_now().isoformat(timespec="seconds")
             for event_id in feed_ids_by_code.get(candidate.code, []):
                 material_a_by_event[event_id] = {
@@ -2365,6 +2470,16 @@ def main() -> None:
     expired = plan_info["expired"]
     print(f"期限で脱落: A段={expired['A']} B段={expired['B']}"
           f"（うち試行0回 {expired['zero']}、B段の試行0回 {expired['b_zero']}）")
+    # 読むだけの集計。想定外の例外でも、フィード保存と summary 行は止めない。
+    # 例外の中身には値が混じりうるので、型名だけを出す。
+    try:
+        log_pending_summary(state["events"]["pending"], candidates, args.today)
+    except Exception as error:
+        print(f"集計失敗（続行）: {type(error).__name__}", file=sys.stderr)
+    try:
+        log_recovery_summary(recovery_results, plan_info.get("revision_codes", set()))
+    except Exception as error:
+        print(f"集計失敗（続行）: {type(error).__name__}", file=sys.stderr)
     if feed_events:
         try:
             save_split_event_feed(

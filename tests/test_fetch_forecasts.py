@@ -1804,8 +1804,9 @@ class EventDrivenQueueTest(unittest.TestCase):
             fetch = mock.Mock(side_effect=fetch_one)
             with contextlib.ExitStack() as stack:
                 if disable_summaries:
-                    for name in ("log_pending_summary", "log_recovery_summary"):
-                        stack.enter_context(mock.patch.object(fetch_forecasts, name))
+                    stack.enter_context(mock.patch.object(
+                        fetch_forecasts, "log_recovery_roster_summary",
+                    ))
                 stack.enter_context(mock.patch.object(
                     fetch_forecasts, "jst_now", return_value=fixed_now,
                 ))
@@ -1816,23 +1817,36 @@ class EventDrivenQueueTest(unittest.TestCase):
             files = {path.name: path.read_bytes() for path in (
                 self.state_path, self.feed_path,
             )}
-            return files, output.getvalue(), errors.getvalue(), self.fetched_codes(fetch)
+            requests = (fetch.call_args_list, self.collect.call_args_list)
+            return files, output.getvalue(), errors.getvalue(), requests
 
-        with_logs, stdout, stderr, codes = run(False)
-        without_logs, quiet_stdout, quiet_stderr, quiet_codes = run(True)
+        with_logs, stdout, stderr, requests = run(False)
+        without_logs, quiet_stdout, quiet_stderr, quiet_requests = run(True)
         self.assertEqual(with_logs, without_logs)
-        prefixes = ("集計(持ち越し)", "集計(取り直し)")
+
+        def existing_lines(text):
+            return [line.split(" since=", 1)[0]
+                    if line.startswith("集計(取り直し) 予想が変化:") else line
+                    for line in text.splitlines() if not line.startswith("集計(名簿)")]
+
         self.assertEqual(
-            [line for line in stdout.splitlines() if not line.startswith(prefixes)],
-            quiet_stdout.splitlines(),
+            existing_lines(stdout), existing_lines(quiet_stdout),
         )
         self.assertEqual(stderr, quiet_stderr)
-        self.assertEqual(codes, quiet_codes)
-        self.assertEqual(set(codes), set(self.CODES))
+        self.assertEqual(requests, quiet_requests)
+        self.assertEqual({call.args[0].code for call in requests[0]}, set(self.CODES))
         self.assertIn("集計(持ち越し) 合計:", stdout)
-        self.assertIn("集計(取り直し) 予想が変化: 2914 増 dividend_revision=無", stdout)
+        self.assertIn("集計(取り直し) 予想が変化: 2914 増 dividend_revision=無 "
+                      f"since={self.PRIMED} 経過=9日", stdout)
         self.assertIn("集計(取り直し) 合計: 成功=2 変化=1", stdout)
-        self.assertFalse(any(line.startswith(prefixes) for line in quiet_stdout.splitlines()))
+        self.assertNotIn("2914", self.state()["events"]["recovery"])
+        lines = stdout.splitlines()
+        roster_line = next(line for line in lines if line.startswith("集計(名簿)"))
+        self.assertIn("gaveUp=0 合計=1 最古since=" + self.PRIMED, roster_line)
+        self.assertTrue(lines[lines.index(roster_line) - 1].startswith("集計(取り直し) 合計:"))
+        self.assertLess(lines.index(roster_line), next(
+            i for i, line in enumerate(lines) if line.startswith("summary ")))
+        self.assertNotIn("集計(名簿)", quiet_stdout)
 
     def test_summary_failures_do_not_change_files_or_existing_logs(self) -> None:
         initial = self.state()
@@ -1851,14 +1865,13 @@ class EventDrivenQueueTest(unittest.TestCase):
         def fetch_one(c, _key):
             return {"forecastDividend": 83.25 if c.code == "2914" else 74.0}, None
 
-        def run(break_summaries):
+        def run(break_summaries, names):
             self.write_state(initial)
             self.feed_path.unlink(missing_ok=True)
             output, errors = io.StringIO(), io.StringIO()
             fetch = mock.Mock(side_effect=fetch_one)
             with contextlib.ExitStack() as stack:
-                for name in ("log_pending_summary", "log_recovery_summary",
-                             "collect_revision_codes"):
+                for name in names:
                     if break_summaries:
                         stack.enter_context(mock.patch.object(
                             fetch_forecasts, name, side_effect=ValueError("secret 83.25"),
@@ -1875,21 +1888,65 @@ class EventDrivenQueueTest(unittest.TestCase):
             )}
             return files, output.getvalue(), errors.getvalue()
 
-        broken_files, broken_stdout, broken_stderr = run(True)
-        quiet_files, quiet_stdout, quiet_stderr = run(False)
-        self.assertEqual(broken_files, quiet_files)
-        self.assertEqual(broken_stdout, quiet_stdout)
-        self.assertIn("予想取得完了:", broken_stdout)
-        self.assertIn("summary ", broken_stdout)
-        failures = [line for line in broken_stderr.splitlines()
-                    if line.startswith("集計失敗（続行）")]
-        self.assertEqual(failures, ["集計失敗（続行）: ValueError"] * 3)
-        self.assertNotIn("83.25", broken_stderr)
-        self.assertEqual(
-            [line for line in broken_stderr.splitlines()
-             if not line.startswith("集計失敗（続行）")],
-            quiet_stderr.splitlines(),
-        )
+        for names in (
+            ("log_pending_summary", "log_recovery_summary", "collect_revision_codes"),
+            ("log_recovery_roster_summary",),
+        ):
+            with self.subTest(names=names):
+                broken_files, broken_stdout, broken_stderr = run(True, names)
+                quiet_files, quiet_stdout, quiet_stderr = run(False, names)
+                self.assertEqual(broken_files, quiet_files)
+                self.assertEqual(broken_stdout, quiet_stdout)
+                self.assertIn("予想取得完了:", broken_stdout)
+                self.assertIn("summary ", broken_stdout)
+                failures = [line for line in broken_stderr.splitlines()
+                            if line.startswith("集計失敗（続行）")]
+                self.assertEqual(failures, ["集計失敗（続行）: ValueError"] * len(names))
+                self.assertNotIn("83.25", broken_stdout + broken_stderr)
+                self.assertNotIn("secret", broken_stdout + broken_stderr)
+                self.assertEqual(
+                    [line for line in broken_stderr.splitlines()
+                     if not line.startswith("集計失敗（続行）")],
+                    quiet_stderr.splitlines(),
+                )
+
+    def test_recovery_since_survives_intermediate_pruning_and_read_errors(self) -> None:
+        initial = self.state()
+        initial["events"] = fetch_forecasts.empty_event_state()
+        initial["events"]["recovery"] = {
+            code: {"since": self.PRIMED, "attempts": 0}
+            for code in self.CODES[:3]
+        }
+        load_state = fetch_forecasts.load_state
+
+        class UnreadableRecovery(dict):
+            def get(self, *_args, **_kwargs):
+                raise ValueError("secret 83.25")
+
+        def load_with_read_error(path):
+            state = load_state(path)
+            state["events"]["recovery"] = UnreadableRecovery(state["events"]["recovery"])
+            return state
+
+        for broken in (False, True):
+            with self.subTest(broken=broken):
+                self.write_state(initial)
+                output, errors = io.StringIO(), io.StringIO()
+                with mock.patch.object(fetch_forecasts, "SAVE_INTERVAL", 1), \
+                        mock.patch.object(fetch_forecasts, "load_state", side_effect=(
+                            load_with_read_error if broken else load_state)), \
+                        contextlib.redirect_stderr(errors):
+                    fetch = self.run_main([], daily_limit=7, output=output)
+                self.assertEqual(len(self.fetched_codes(fetch)), 3)
+                self.assertFalse(self.state()["events"]["recovery"])
+                suffix = "since=不明 経過=不明" if broken else f"since={self.PRIMED} 経過=9日"
+                changes = [line for line in output.getvalue().splitlines()
+                           if line.startswith("集計(取り直し) 予想が変化:")]
+                self.assertEqual(len(changes), 3)
+                self.assertTrue(all(line.endswith(suffix) for line in changes))
+                self.assertEqual(errors.getvalue(), "")
+                self.assertNotIn("secret", output.getvalue())
+                self.assertNotIn("83.25", output.getvalue())
 
     def test_a_split_event_is_not_saved_when_no_event_page_succeeded(self) -> None:
         record = dict(
@@ -2968,6 +3025,93 @@ class EventBusySeasonTest(unittest.TestCase):
                     "集計(持ち越し) 合計: A段=4 B段=3 全体=7 読めず=2",
                 ])
 
+    def test_roster_summary_age_boundaries(self):
+        for age, expected in (
+            (0, [1, 0, 0, 0]), (7, [1, 0, 0, 0]),
+            (8, [0, 1, 0, 0]), (14, [0, 1, 0, 0]),
+            (15, [0, 0, 1, 0]), (30, [0, 0, 1, 0]),
+            (31, [0, 0, 0, 1]), (100, [0, 0, 0, 1]),
+        ):
+            with self.subTest(age=age):
+                since = (self.TODAY - fetch_forecasts.timedelta(days=age)).isoformat()
+                recovery = {"secret-code": {"since": since, "attempts": 2, "gaveUp": False}}
+                before = json.dumps(recovery, sort_keys=True)
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    fetch_forecasts.log_recovery_roster_summary(recovery, self.TODAY)
+                self.assertEqual(json.dumps(recovery, sort_keys=True), before)
+                self.assertEqual(output.getvalue(),
+                    f"集計(名簿) 経過日数別: 0〜7日={expected[0]} 8〜14日={expected[1]} "
+                    f"15〜30日={expected[2]} 31日〜={expected[3]} 読めず=0 "
+                    f"gaveUp=0 合計=1 最古since={since}\n")
+
+    def test_roster_summary_strict_dates_gave_up_and_oldest_without_mutation(self):
+        invalid = [
+            None, 20261101, "", "20261101", "2026-11-01T00:00:00+09:00",
+            "2026-11-01\n", " 2026-11-01", "2026-11-01 ", "2026-1-01",
+            "2026-02-30", "0000-01-01", "2026-11-15", "secret 83.25",
+        ]
+        recovery = {f"bad-{i}": {"since": value} for i, value in enumerate(invalid)}
+        recovery.update({
+            "not-a-dict": [], "null": None, "missing": {},
+            "gave-up-valid": {"since": "2000-01-01", "gaveUp": True},
+            "gave-up-invalid": {"since": "secret 83.25", "gaveUp": "yes"},
+            "oldest": {"since": "2026-09-01", "gaveUp": False},
+            "middle": {"since": "2026-10-01"},
+            "newest": {"since": "2026-11-14"},
+        })
+        before = json.dumps(recovery, sort_keys=True)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            fetch_forecasts.log_recovery_roster_summary(recovery, self.TODAY)
+        self.assertEqual(json.dumps(recovery, sort_keys=True), before)
+        self.assertEqual(output.getvalue(),
+            "集計(名簿) 経過日数別: 0〜7日=1 8〜14日=0 15〜30日=0 31日〜=2 "
+            "読めず=16 gaveUp=2 合計=21 最古since=2026-09-01\n")
+
+    def test_roster_summary_empty_or_without_readable_active_dates(self):
+        for recovery, unreadable, gave_up in (
+            ({}, 0, 0),
+            ({"a": {"since": "invalid"}, "b": {"since": "2000-01-01", "gaveUp": 1}}, 1, 1),
+        ):
+            with self.subTest(recovery=recovery):
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    fetch_forecasts.log_recovery_roster_summary(recovery, self.TODAY)
+                self.assertEqual(output.getvalue(),
+                    "集計(名簿) 経過日数別: 0〜7日=0 8〜14日=0 15〜30日=0 31日〜=0 "
+                    f"読めず={unreadable} gaveUp={gave_up} 合計={len(recovery)} 最古since=なし\n")
+
+    def test_recovery_since_unreadable_shapes_are_unknown(self):
+        for recovery in ({}, {"1234": None}, {"1234": []}, {"1234": {}},
+                         {"1234": {"since": "20261101"}},
+                         {"1234": {"since": "2026-02-30"}},
+                         {"1234": {"since": "2026-11-01T00:00:00"}}):
+            with self.subTest(recovery=recovery):
+                since = fetch_forecasts.read_recovery_since({"events": {"recovery": recovery}}, "1234")
+                self.assertIsNone(since)
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    fetch_forecasts.log_recovery_summary(
+                        [("1234", 74, 83.25, since)], set(), self.TODAY,
+                    )
+                self.assertEqual(output.getvalue().splitlines()[0],
+                    "集計(取り直し) 予想が変化: 1234 増 dividend_revision=無 since=不明 経過=不明")
+
+    def test_recovery_change_line_treats_future_since_as_unknown(self):
+        today_text = self.TODAY.isoformat()
+        tomorrow_text = (self.TODAY + fetch_forecasts.timedelta(days=1)).isoformat()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            fetch_forecasts.log_recovery_summary(
+                [("1234", 74, 83.25, tomorrow_text), ("5678", 10, 5, today_text)],
+                set(), self.TODAY,
+            )
+        self.assertEqual(output.getvalue().splitlines()[:2], [
+            "集計(取り直し) 予想が変化: 1234 増 dividend_revision=無 since=不明 経過=不明",
+            f"集計(取り直し) 予想が変化: 5678 減 dividend_revision=無 since={today_text} 経過=0日",
+        ])
+
     def test_recovery_summary_compares_only_successes_without_logging_values(self):
         candidates = self.candidates(9)
         state = self.state(candidates)
@@ -3001,11 +3145,11 @@ class EventBusySeasonTest(unittest.TestCase):
         self.assertEqual(
             [line for line in log.splitlines() if line.startswith("集計(取り直し)")],
             [
-                "集計(取り直し) 予想が変化: 1000 増 dividend_revision=有",
-                "集計(取り直し) 予想が変化: 1001 減 dividend_revision=無",
-                "集計(取り直し) 予想が変化: 1002 新規 dividend_revision=有",
-                "集計(取り直し) 予想が変化: 1003 消滅 dividend_revision=無",
-                "集計(取り直し) 予想が変化: 1006 新規 dividend_revision=無",
+                "集計(取り直し) 予想が変化: 1000 増 dividend_revision=有 since=不明 経過=不明",
+                "集計(取り直し) 予想が変化: 1001 減 dividend_revision=無 since=不明 経過=不明",
+                "集計(取り直し) 予想が変化: 1002 新規 dividend_revision=有 since=不明 経過=不明",
+                "集計(取り直し) 予想が変化: 1003 消滅 dividend_revision=無 since=不明 経過=不明",
+                "集計(取り直し) 予想が変化: 1006 新規 dividend_revision=無 since=不明 経過=不明",
                 "集計(取り直し) 合計: 成功=8 変化=5 増=1 減=1 新規=2 "
                 "消滅=1 うちdividend_revision有=2",
             ],
@@ -3018,9 +3162,10 @@ class EventBusySeasonTest(unittest.TestCase):
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             fetch_forecasts.log_pending_summary({}, [], self.TODAY)
-            fetch_forecasts.log_recovery_summary([], set())
+            fetch_forecasts.log_recovery_summary([], set(), self.TODAY)
             fetch_forecasts.log_recovery_summary(
-                [("1234", 10, 10.0), ("5678", None, None)], {"1234", "5678"},
+                [("1234", 10, 10.0, None), ("5678", None, None, None)],
+                {"1234", "5678"}, self.TODAY,
             )
         self.assertEqual(output.getvalue().splitlines(), [
             "集計(持ち越し) 7日以内に期限: A段=0 B段=0",

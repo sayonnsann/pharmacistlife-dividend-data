@@ -1561,14 +1561,34 @@ def log_pending_summary(
           f"全体={totals['A'] + totals['B']} 読めず={unreadable}")
 
 
+def parse_recovery_since(value: Any) -> date | None:
+    """集計用のsinceは、厳密なYYYY-MM-DDだけを読む。"""
+    if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def read_recovery_since(state: dict[str, Any], code: str) -> str | None:
+    """成功時点の名簿を読む。補助集計の読み取り失敗で取得を止めない。"""
+    try:
+        raw = state["events"]["recovery"].get(code)
+        since = parse_recovery_since(raw.get("since")) if isinstance(raw, dict) else None
+        return since.isoformat() if since is not None else None
+    except Exception:
+        return None
+
+
 def log_recovery_summary(
-    results: list[tuple[str, float | None, float | None]],
-    revision_codes: set[str],
+    results: list[tuple[str, float | None, float | None, str | None]],
+    revision_codes: set[str], today: date,
 ) -> None:
     """成功した取り直しの比較結果だけを出す。予想値はログに含めない。"""
     counts = {"増": 0, "減": 0, "新規": 0, "消滅": 0}
     with_revision = 0
-    for code, before, after in results:
+    for code, before, after, since_text in results:
         if before == after:
             continue
         if before is None:
@@ -1580,11 +1600,42 @@ def log_recovery_summary(
         counts[direction] += 1
         has_revision = code in revision_codes
         with_revision += int(has_revision)
+        since = parse_recovery_since(since_text)
+        if since is not None and since > today:
+            since = None  # 名簿の集計と同じく、未来の since は読めない扱い
+        age = f"{(today - since).days}日" if since is not None else "不明"
         print(f"集計(取り直し) 予想が変化: {code} {direction} "
-              f"dividend_revision={'有' if has_revision else '無'}")
+              f"dividend_revision={'有' if has_revision else '無'} "
+              f"since={since.isoformat() if since is not None else '不明'} 経過={age}")
     print(f"集計(取り直し) 合計: 成功={len(results)} 変化={sum(counts.values())} "
           f"増={counts['増']} 減={counts['減']} 新規={counts['新規']} "
           f"消滅={counts['消滅']} うちdividend_revision有={with_revision}")
+
+
+def log_recovery_roster_summary(recovery: dict[str, Any], today: date) -> None:
+    """保存後の名簿を経過日数別に数える。コード・予想値は出さない。"""
+    counts = [0, 0, 0, 0]
+    unreadable = gave_up = 0
+    oldest: date | None = None
+    for raw in recovery.values():
+        if not isinstance(raw, dict):
+            unreadable += 1
+            continue
+        if raw.get("gaveUp"):
+            gave_up += 1
+            continue
+        since = parse_recovery_since(raw.get("since"))
+        if since is None or since > today:
+            unreadable += 1
+            continue
+        age = (today - since).days
+        bucket = 0 if age <= 7 else 1 if age <= 14 else 2 if age <= 30 else 3
+        counts[bucket] += 1
+        oldest = since if oldest is None else min(oldest, since)
+    print(f"集計(名簿) 経過日数別: 0〜7日={counts[0]} 8〜14日={counts[1]} "
+          f"15〜30日={counts[2]} 31日〜={counts[3]} 読めず={unreadable} "
+          f"gaveUp={gave_up} 合計={sum(counts) + unreadable + gave_up} "
+          f"最古since={oldest.isoformat() if oldest is not None else 'なし'}")
 
 
 def collect_revision_codes(
@@ -2308,7 +2359,7 @@ def main() -> None:
     rate_limit_stopped = False
     fatal: FetchError | None = None
     actual_counts = {"A": 0, "recovery": 0, "B": 0, "rotation": 0}
-    recovery_results: list[tuple[str, float | None, float | None]] = []
+    recovery_results: list[tuple[str, float | None, float | None, str | None]] = []
 
     def save_progress() -> None:
         if normal_count:
@@ -2409,6 +2460,7 @@ def main() -> None:
                     candidate.code,
                     finite_number(state["stocks"].get(candidate.code, {}).get("forecastDividend")),
                     finite_number(parsed.get("forecastDividend")),
+                    read_recovery_since(state, candidate.code),
                 ))
             retrieved_at = jst_now().isoformat(timespec="seconds")
             for event_id in feed_ids_by_code.get(candidate.code, []):
@@ -2477,7 +2529,11 @@ def main() -> None:
     except Exception as error:
         print(f"集計失敗（続行）: {type(error).__name__}", file=sys.stderr)
     try:
-        log_recovery_summary(recovery_results, plan_info.get("revision_codes", set()))
+        log_recovery_summary(recovery_results, plan_info.get("revision_codes", set()), args.today)
+    except Exception as error:
+        print(f"集計失敗（続行）: {type(error).__name__}", file=sys.stderr)
+    try:
+        log_recovery_roster_summary(state["events"]["recovery"], args.today)
     except Exception as error:
         print(f"集計失敗（続行）: {type(error).__name__}", file=sys.stderr)
     if feed_events:
